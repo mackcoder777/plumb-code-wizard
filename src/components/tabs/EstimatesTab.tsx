@@ -43,10 +43,10 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
 
   // Filter options
   const filterOptions = useMemo(() => ({
-    systems: [...new Set(data.map(item => item.system))].filter(Boolean).sort(),
-    floors: [...new Set(data.map(item => item.floor))].filter(Boolean).sort(),
-    zones: [...new Set(data.map(item => item.zone))].filter(Boolean).sort(),
-    itemTypes: [...new Set(data.map(item => item.itemType))].filter(Boolean).sort(),
+    systems: [...new Set(data.map(item => item.system))].filter(item => item && item.trim()).sort(),
+    floors: [...new Set(data.map(item => item.floor))].filter(item => item && item.trim()).sort(),
+    zones: [...new Set(data.map(item => item.zone))].filter(item => item && item.trim()).sort(),
+    itemTypes: [...new Set(data.map(item => item.itemType))].filter(item => item && item.trim()).sort(),
   }), [data]);
 
   // Filtered and sorted data
@@ -189,8 +189,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">All Systems</SelectItem>
-              {filterOptions.systems.map(system => (
-                <SelectItem key={system} value={system}>{system}</SelectItem>
+              {filterOptions.systems.map((system, index) => (
+                <SelectItem key={`system-${index}-${system}`} value={system}>{system}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -201,8 +201,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">All Floors</SelectItem>
-              {filterOptions.floors.map(floor => (
-                <SelectItem key={floor} value={floor}>{floor}</SelectItem>
+              {filterOptions.floors.map((floor, index) => (
+                <SelectItem key={`floor-${index}-${floor}`} value={floor}>{floor}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -213,8 +213,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">All Zones</SelectItem>
-              {filterOptions.zones.map(zone => (
-                <SelectItem key={zone} value={zone}>{zone}</SelectItem>
+              {filterOptions.zones.map((zone, index) => (
+                <SelectItem key={`zone-${index}-${zone}`} value={zone}>{zone}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -225,8 +225,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">All Types</SelectItem>
-              {filterOptions.itemTypes.map(type => (
-                <SelectItem key={type} value={type}>{type}</SelectItem>
+              {filterOptions.itemTypes.map((type, index) => (
+                <SelectItem key={`type-${index}-${type}`} value={type}>{type}</SelectItem>
               ))}
             </SelectContent>
           </Select>
