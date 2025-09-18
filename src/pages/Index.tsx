@@ -1,147 +1,156 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-// Cost Codes Database
-const COST_CODES_DB = {
-  fieldLabor: [
-    { code: "2210", description: "ROUGH-IN PLUMBING", category: "L", keywords: ["rough", "rough-in", "roughing"] },
-    { code: "2211", description: "UNDERGROUND PLUMBING", category: "L", keywords: ["underground", "below grade", "ug"] },
-    { code: "2212", description: "ABOVE GROUND WASTE & VENT", category: "L", keywords: ["waste", "vent", "dwv", "drainage"] },
-    { code: "2213", description: "WATER PIPING", category: "L", keywords: ["water", "domestic", "potable"] },
-    { code: "2214", description: "STORM DRAINAGE", category: "L", keywords: ["storm", "rain", "drainage", "overflow"] },
-    { code: "2215", description: "GAS PIPING", category: "L", keywords: ["gas", "natural gas", "fuel"] },
-    { code: "2216", description: "FIXTURES INSTALLATION", category: "L", keywords: ["fixture", "toilet", "sink", "lavatory"] },
-    { code: "2217", description: "EQUIPMENT INSTALLATION", category: "L", keywords: ["equipment", "heater", "pump", "tank"] },
-    { code: "2218", description: "INSULATION", category: "L", keywords: ["insulation", "insulate", "wrap"] },
-    { code: "2219", description: "TESTING", category: "L", keywords: ["test", "testing", "inspection"] },
-    { code: "2220", description: "HANGERS & SUPPORTS", category: "L", keywords: ["hanger", "support", "brace", "seismic"] },
-  ],
-  material: [
-    { code: "MAT-PIPE-CI", description: "CAST IRON PIPE", category: "M", keywords: ["cast iron", "ci", "no-hub"] },
-    { code: "MAT-PIPE-CU", description: "COPPER PIPE", category: "M", keywords: ["copper", "cu", "type l", "type k"] },
-    { code: "MAT-PIPE-PVC", description: "PVC PIPE", category: "M", keywords: ["pvc", "plastic", "schedule"] },
-    { code: "MAT-FITT", description: "FITTINGS", category: "M", keywords: ["fitting", "elbow", "tee", "coupling", "bend"] },
-    { code: "MAT-VALV", description: "VALVES", category: "M", keywords: ["valve", "gate", "ball", "check"] },
-    { code: "MAT-FIXT", description: "FIXTURES", category: "M", keywords: ["fixture", "toilet", "sink", "faucet"] },
-    { code: "MAT-HANG", description: "HANGERS & SUPPORTS", category: "M", keywords: ["hanger", "clamp", "strap", "support"] },
-    { code: "MAT-INSL", description: "INSULATION", category: "M", keywords: ["insulation", "fiberglass", "foam"] },
-    { code: "MAT-DRAIN", description: "DRAINS", category: "M", keywords: ["drain", "floor drain", "roof drain"] },
-  ]
+// Cost Head Mapping Database
+const COST_HEAD_MAPPING = {
+  'SNWV': {
+    patterns: [/sanitary/i, /waste.*vent/i, /dwv/i, /soil/i, /^vent$/i],
+    description: 'SANITARY WASTE AND VENT'
+  },
+  'GRWV': {
+    patterns: [/grease/i, /interceptor/i],
+    description: 'GREASE WASTE AND VENT'
+  },
+  'DWTR': {
+    patterns: [/domestic.*water/i, /potable/i, /cold.*water/i, /hot.*water/i, /^water$/i],
+    description: 'DOMESTIC WATER'
+  },
+  'RCLM': {
+    patterns: [/reclaim/i, /recycled.*water/i],
+    description: 'RECLAIMED WATER'
+  },
+  'GRAY': {
+    patterns: [/gray.*water/i, /grey.*water/i],
+    description: 'GRAY WATER'
+  },
+  'STRM': {
+    patterns: [/storm/i, /rain/i, /overflow.*drain/i, /roof.*drain/i],
+    description: 'STORM DRAIN'
+  },
+  'DRNS': {
+    patterns: [/^drain/i, /floor.*drain/i, /area.*drain/i],
+    description: 'DRAINS'
+  },
+  'COND': {
+    patterns: [/condensate/i, /ac.*drain/i],
+    description: 'CONDENSATE'
+  },
+  'NGAS': {
+    patterns: [/natural.*gas/i, /fuel.*gas/i, /^gas$/i],
+    description: 'NATURAL GAS'
+  },
+  'FUEL': {
+    patterns: [/fuel.*oil/i, /diesel/i],
+    description: 'FUEL OIL'
+  },
+  'FNSH': {
+    patterns: [/fixture/i, /toilet/i, /urinal/i, /lavatory/i, /sink/i, /faucet/i],
+    description: 'FIXTURES'
+  },
+  'SEQP': {
+    patterns: [/equipment/i, /pump/i, /heater/i, /boiler/i, /tank/i],
+    description: 'EQUIPMENT SETTING'
+  },
+  'HNGS': {
+    patterns: [/hanger/i, /support/i, /brace/i, /seismic/i, /strap/i],
+    description: 'HANGERS AND SUPPORTS'
+  },
+  'IWTR': {
+    patterns: [/industrial.*water/i, /process.*water/i],
+    description: 'INDUSTRIAL WATER'
+  },
+  'PIDV': {
+    patterns: [/pipe.*id/i, /valve.*tag/i, /identification/i],
+    description: 'PIPE ID AND VALVE TAGS'
+  },
+  'SZMC': {
+    patterns: [/seismic/i, /earthquake/i],
+    description: 'SEISMIC'
+  },
+  'TRAP': {
+    patterns: [/trap.*primer/i, /^trap$/i],
+    description: 'TRAP PRIMERS'
+  }
 };
 
-// Automation Rules
-const AUTOMATION_RULES = [
-  { 
-    pattern: /storm|drain/i, 
-    field: "system", 
-    codes: { material: "MAT-PIPE-CI", labor: "2214" },
-    description: "Storm drainage systems"
-  },
-  {
-    pattern: /overflow/i,
-    field: "system",
-    codes: { material: "MAT-PIPE-CI", labor: "2214" },
-    description: "Overflow drainage"
-  },
-  {
-    pattern: /domestic|water/i,
-    field: "system",
-    codes: { material: "MAT-PIPE-CU", labor: "2213" },
-    description: "Domestic water systems"
-  },
-  {
-    pattern: /waste|vent|dwv/i,
-    field: "system",
-    codes: { material: "MAT-PIPE-CI", labor: "2212" },
-    description: "Waste and vent systems"
-  },
-  {
-    pattern: /cast iron|ci|no-hub/i,
-    field: "materialDesc",
-    codes: { material: "MAT-PIPE-CI" },
-    description: "Cast iron materials"
-  },
-  {
-    pattern: /fitting|elbow|tee|bend|coupling/i,
-    field: "itemName",
-    codes: { material: "MAT-FITT" },
-    description: "Pipe fittings"
-  },
-  {
-    pattern: /hanger|support|strap|clamp/i,
-    field: "itemType",
-    codes: { material: "MAT-HANG", labor: "2220" },
-    description: "Hangers and supports"
-  },
-];
+const FLOOR_MAPPING = {
+  '01': [/level.*0?1/i, /^l1$/i, /floor.*1/i, /first.*floor/i, /1st.*floor/i],
+  '02': [/level.*0?2/i, /^l2$/i, /floor.*2/i, /second.*floor/i, /2nd.*floor/i],
+  '03': [/level.*0?3/i, /^l3$/i, /floor.*3/i, /third.*floor/i, /3rd.*floor/i],
+  '04': [/level.*0?4/i, /^l4$/i, /floor.*4/i, /fourth.*floor/i, /4th.*floor/i],
+  '05': [/level.*0?5/i, /^l5$/i, /floor.*5/i, /fifth.*floor/i, /5th.*floor/i],
+  'P1': [/level.*p1/i, /^p1$/i, /parking.*1/i, /garage.*1/i, /basement.*1/i, /^b1$/i],
+  'P2': [/level.*p2/i, /^p2$/i, /parking.*2/i, /garage.*2/i, /basement.*2/i, /^b2$/i],
+  'P3': [/level.*p3/i, /^p3$/i, /parking.*3/i, /garage.*3/i, /basement.*3/i, /^b3$/i],
+  'RF': [/roof/i, /penthouse/i, /^ph$/i, /^r$/i],
+  'GR': [/ground/i, /grade/i, /^g$/i, /plaza/i],
+  'MZ': [/mezzanine/i, /^mz$/i, /^m$/i]
+};
 
 export default function Index() {
   const [estimateData, setEstimateData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
-  const [activeTab, setActiveTab] = useState('estimates');
+  const [activeTab, setActiveTab] = useState('upload');
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [filters, setFilters] = useState({
-    system: '',
-    floor: '',
-    zone: '',
-    itemType: '',
-    costCode: '',
+    floor: 'all',
+    system: 'all',
+    costCode: 'all',
     search: ''
   });
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Get suggested cost codes for an item
-  const getSuggestedCostCodes = useCallback((item) => {
-    const suggestions = [];
+  // Generate cost code based on SEC-ACT-COST HEAD structure
+  const generateCostCode = useCallback((item) => {
+    // Determine Section (SEC) from floor
+    let section = '01'; // Default
+    const floorText = (item.floor || '').toLowerCase();
     
-    AUTOMATION_RULES.forEach(rule => {
-      const fieldValue = item[rule.field] || '';
-      if (rule.pattern.test(fieldValue)) {
-        if (rule.codes.material) {
-          suggestions.push({
-            code: rule.codes.material,
-            type: 'material',
-            confidence: 0.9,
-            reason: rule.description
-          });
-        }
-        if (rule.codes.labor) {
-          suggestions.push({
-            code: rule.codes.labor,
-            type: 'labor',
-            confidence: 0.9,
-            reason: rule.description
-          });
-        }
+    for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
+      if (patterns.some(pattern => pattern.test(floorText))) {
+        section = code;
+        break;
       }
-    });
+    }
     
-    // Check keyword matches
-    const allCodes = [...COST_CODES_DB.fieldLabor, ...COST_CODES_DB.material];
-    allCodes.forEach(codeEntry => {
-      const itemText = `${item.system} ${item.materialDesc} ${item.itemName}`.toLowerCase();
-      const matchCount = codeEntry.keywords.filter(keyword => 
-        itemText.includes(keyword.toLowerCase())
-      ).length;
-      
-      if (matchCount > 0) {
-        const existing = suggestions.find(s => s.code === codeEntry.code);
-        if (!existing) {
-          suggestions.push({
-            code: codeEntry.code,
-            type: codeEntry.category === 'L' ? 'labor' : 'material',
-            confidence: Math.min(0.6 + (matchCount * 0.2), 1),
-            reason: `Matches: ${codeEntry.keywords.filter(k => itemText.includes(k.toLowerCase())).join(', ')}`
-          });
-        }
+    // Activity is always 0000
+    const activity = '0000';
+    
+    // Determine Cost Head from system
+    let costHead = 'SNWV'; // Default to sanitary waste and vent
+    let confidence = 0.5;
+    const systemText = (item.system || '').toLowerCase();
+    
+    for (const [code, config] of Object.entries(COST_HEAD_MAPPING)) {
+      if (config.patterns.some(pattern => pattern.test(systemText))) {
+        costHead = code;
+        confidence = 0.9;
+        break;
       }
-    });
+    }
     
-    return suggestions.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+    // Check material description for additional hints
+    const materialText = (item.materialDesc || '').toLowerCase();
+    for (const [code, config] of Object.entries(COST_HEAD_MAPPING)) {
+      if (config.patterns.some(pattern => pattern.test(materialText))) {
+        if (confidence < 0.9) {
+          costHead = code;
+          confidence = 0.8;
+        }
+        break;
+      }
+    }
+    
+    return {
+      code: `${section} ${activity} ${costHead}`,
+      section: section,
+      activity: activity,
+      costHead: costHead,
+      confidence: confidence,
+      description: COST_HEAD_MAPPING[costHead]?.description || 'Unknown'
+    };
   }, []);
 
   // Process uploaded file
@@ -165,35 +174,35 @@ export default function Index() {
         const sheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(sheet);
         
-        const processedData = jsonData.map((row, index) => ({
-          id: index,
-          drawing: row['D'] || row['Drawing'] || '',
-          system: row['D_1'] || row['System'] || '',
-          floor: row['D_2'] || row['Floor'] || '',
-          zone: row['D_3'] || row['Zone'] || '',
-          symbol: row['D_4'] || row['Symbol'] || '',
-          materialSpec: row['D_6'] || row['Material Spec'] || '',
-          itemType: row['D_7'] || row['Item Type'] || '',
-          materialDesc: row['A'] || row['Material Description'] || '',
-          itemName: row['A_1'] || row['Item Name'] || '',
-          size: row['A_2'] || row['Size'] || '',
-          quantity: parseFloat(row['T'] || row['Quantity'] || 0),
-          materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
-          hours: parseFloat(row['T_3'] || row['Hours'] || 0),
-          laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
-          costCode: '',
-          suggestedCodes: []
-        }));
-        
-        // Add suggestions
-        processedData.forEach(item => {
-          item.suggestedCodes = getSuggestedCostCodes(item);
+        const processedData = jsonData.map((row: any, index: number) => {
+          const item = {
+            id: index,
+            drawing: row['D'] || row['Drawing'] || '',
+            system: row['D_1'] || row['System'] || '',
+            floor: row['D_2'] || row['Floor'] || '',
+            zone: row['D_3'] || row['Zone'] || '',
+            materialDesc: row['A'] || row['Material Description'] || '',
+            itemName: row['A_1'] || row['Item Name'] || '',
+            size: row['A_2'] || row['Size'] || '',
+            quantity: parseFloat(row['T'] || row['Quantity'] || 0),
+            materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
+            hours: parseFloat(row['T_3'] || row['Hours'] || 0),
+            laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
+            costCode: '',
+            suggestedCode: null as any
+          };
+          
+          // Generate suggested cost code
+          item.suggestedCode = generateCostCode(item);
+          
+          return item;
         });
         
         setEstimateData(processedData);
         setFilteredData(processedData);
+        setActiveTab('estimates');
         showNotification(`Successfully loaded ${processedData.length} items`, 'success');
-      } catch (error) {
+      } catch (error: any) {
         showNotification('Error processing file: ' + error.message, 'error');
       } finally {
         setLoading(false);
@@ -201,38 +210,32 @@ export default function Index() {
     };
     
     reader.readAsArrayBuffer(file);
-  }, [getSuggestedCostCodes]);
+  }, [generateCostCode]);
 
   // Show notification
-  const showNotification = (message, type = 'success') => {
+  const showNotification = (message: string, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
 
   // Apply filters
-  const applyFilters = useCallback(() => {
+  useEffect(() => {
     let filtered = [...estimateData];
     
-    if (filters.system) {
-      filtered = filtered.filter(item => item.system === filters.system);
+    if (filters.floor !== 'all') {
+      filtered = filtered.filter((item: any) => item.floor === filters.floor);
     }
-    if (filters.floor) {
-      filtered = filtered.filter(item => item.floor === filters.floor);
-    }
-    if (filters.zone) {
-      filtered = filtered.filter(item => item.zone === filters.zone);
-    }
-    if (filters.itemType) {
-      filtered = filtered.filter(item => item.itemType === filters.itemType);
+    if (filters.system !== 'all') {
+      filtered = filtered.filter((item: any) => item.system === filters.system);
     }
     if (filters.costCode === 'unassigned') {
-      filtered = filtered.filter(item => !item.costCode);
-    } else if (filters.costCode) {
-      filtered = filtered.filter(item => item.costCode === filters.costCode);
+      filtered = filtered.filter((item: any) => !item.costCode);
+    } else if (filters.costCode !== 'all') {
+      filtered = filtered.filter((item: any) => item.costCode === filters.costCode);
     }
     if (filters.search) {
       const search = filters.search.toLowerCase();
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter((item: any) => 
         item.materialDesc.toLowerCase().includes(search) ||
         item.itemName.toLowerCase().includes(search) ||
         item.drawing.toLowerCase().includes(search)
@@ -245,46 +248,58 @@ export default function Index() {
   // Auto-assign cost codes
   const autoAssignCostCodes = () => {
     let assigned = 0;
-    const updated = estimateData.map(item => {
-      if (!item.costCode && item.suggestedCodes.length > 0) {
-        const best = item.suggestedCodes[0];
-        if (best.confidence >= 0.8) {
-          assigned++;
-          return { ...item, costCode: best.code };
-        }
+    const updated = estimateData.map((item: any) => {
+      if (!item.costCode && item.suggestedCode && item.suggestedCode.confidence >= 0.8) {
+        assigned++;
+        return { ...item, costCode: item.suggestedCode.code };
       }
       return item;
     });
     
     setEstimateData(updated);
-    setFilteredData(updated);
-    showNotification(`Auto-assigned ${assigned} cost codes`, 'success');
+    showNotification(`Auto-assigned ${assigned} cost codes with high confidence`, 'success');
+  };
+
+  // Assign single code
+  const assignCode = (itemId: number) => {
+    const updated = estimateData.map((item: any) => {
+      if (item.id === itemId && item.suggestedCode) {
+        return { ...item, costCode: item.suggestedCode.code };
+      }
+      return item;
+    });
+    
+    setEstimateData(updated);
+    showNotification('Cost code assigned', 'success');
   };
 
   // Export with cost codes
   const exportWithCostCodes = () => {
-    const exportData = filteredData.map(item => ({
+    const exportData = filteredData.map((item: any) => ({
+      'SEC': item.suggestedCode?.section || '',
+      'ACT': item.suggestedCode?.activity || '',
+      'COST HEAD': item.suggestedCode?.costHead || '',
+      'DESCRIPTION': item.suggestedCode?.description || '',
       'Drawing': item.drawing,
       'System': item.system,
       'Floor': item.floor,
-      'Zone': item.zone,
       'Material Description': item.materialDesc,
       'Item Name': item.itemName,
       'Size': item.size,
       'Quantity': item.quantity,
+      'Hours': item.hours,
       'Material $': item.materialDollars,
-      'Labor Hours': item.hours,
-      'Cost Code': item.costCode || '',
-      'Suggested Code': item.suggestedCodes[0]?.code || '',
-      'Confidence': item.suggestedCodes[0] ? Math.round(item.suggestedCodes[0].confidence * 100) + '%' : ''
+      'Assigned Code': item.costCode || '',
+      'Suggested Code': item.suggestedCode?.code || '',
+      'Confidence': item.suggestedCode ? Math.round(item.suggestedCode.confidence * 100) + '%' : ''
     }));
     
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Estimate with Cost Codes');
+    XLSX.utils.book_append_sheet(wb, ws, 'Labor Report');
     
     const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `estimate_cost_codes_${date}.xlsx`);
+    XLSX.writeFile(wb, `labor_report_${date}.xlsx`);
     
     showNotification('Export completed successfully', 'success');
   };
@@ -292,17 +307,17 @@ export default function Index() {
   // Calculate stats
   const stats = {
     totalItems: filteredData.length,
-    totalMaterial: filteredData.reduce((sum, item) => sum + item.materialDollars, 0),
-    totalHours: filteredData.reduce((sum, item) => sum + item.hours, 0),
-    itemsCoded: filteredData.filter(item => item.costCode).length,
+    codedItems: filteredData.filter((item: any) => item.costCode).length,
+    totalHours: filteredData.reduce((sum: number, item: any) => sum + item.hours, 0),
+    autoMatched: filteredData.filter((item: any) => item.suggestedCode && item.suggestedCode.confidence >= 0.8).length,
     codingPercentage: filteredData.length > 0 
-      ? Math.round((filteredData.filter(item => item.costCode).length / filteredData.length) * 100) 
+      ? Math.round((filteredData.filter((item: any) => item.costCode).length / filteredData.length) * 100) 
       : 0
   };
 
   // Get unique filter values
-  const getUniqueValues = (field) => {
-    return [...new Set(estimateData.map(item => item[field]))].filter(Boolean).sort();
+  const getUniqueValues = (field: string) => {
+    return [...new Set(estimateData.map((item: any) => item[field]))].filter(Boolean).sort();
   };
 
   return (
@@ -310,45 +325,46 @@ export default function Index() {
       <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6">
-          <div className="flex justify-between items-center flex-wrap gap-4">
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17 16.5c.3 0 .5.2.5.5s-.2.5-.5.5-.5-.2-.5-.5.2-.5.5-.5m0-2c-1.4 0-2.5 1.1-2.5 2.5s1.1 2.5 2.5 2.5 2.5-1.1 2.5-2.5-1.1-2.5-2.5-2.5M5.8 10A2 2 0 0 0 4 8.2c-.6.6-.6 1.5 0 2l1.8 1.8L4 13.8c-.6.5-.6 1.5 0 2 .3.3.6.4 1 .4s.7-.1 1-.4L7.8 14 9.6 15.8c.3.3.6.4 1 .4s.7-.1 1-.4c.6-.6.6-1.5 0-2L9.8 12l1.8-1.8c.6-.5.6-1.5 0-2-.6-.6-1.5-.6-2 0L7.8 10 6 8.2c-.3-.3-.6-.4-1-.4s-.8.1-1.2.4z"/>
-              </svg>
-              Plumbing Estimate Manager
-            </h1>
-            {fileName && (
-              <div className="bg-white/20 px-4 py-2 rounded-lg">
-                <span className="text-sm">Project: </span>
-                <span className="font-semibold">{fileName.replace(/\.[^/.]+$/, '')}</span>
-              </div>
-            )}
-            <div className="flex gap-6">
-              <div className="text-center">
-                <div className="text-sm opacity-90">Total Items</div>
-                <div className="text-2xl font-bold">{stats.totalItems.toLocaleString()}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm opacity-90">Material Cost</div>
-                <div className="text-2xl font-bold">
-                  ${stats.totalMaterial.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm opacity-90">Labor Hours</div>
-                <div className="text-2xl font-bold">
-                  {stats.totalHours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                </div>
-              </div>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            🔧 Plumbing Estimate Cost Code Manager
+          </h1>
+          <p className="mt-2 opacity-90">SEC-ACT-COST HEAD Automation System</p>
+          {fileName && (
+            <div className="mt-4 bg-white/20 px-4 py-2 rounded-lg inline-block">
+              <span className="text-sm opacity-90">Project: </span>
+              <span className="font-semibold">{fileName.replace(/\.[^/.]+$/, '')}</span>
+              <span className="ml-6 text-sm opacity-90">Items: </span>
+              <span className="font-semibold">{estimateData.length}</span>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Upload Section */}
-        {estimateData.length === 0 && (
-          <div className="p-8 bg-gray-50">
+        {/* Tabs */}
+        <div className="flex border-b bg-gray-50">
+          {['upload', 'estimates', 'automation', 'mapping'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-4 font-medium transition-all ${
+                activeTab === tab
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {tab === 'upload' && '📁 Upload'}
+              {tab === 'estimates' && '📊 Estimates'}
+              {tab === 'automation' && '🤖 Rules'}
+              {tab === 'mapping' && '🔗 Mapping'}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div className="p-6">
+          {/* Upload Tab */}
+          {activeTab === 'upload' && (
             <div
-              className="border-3 border-dashed border-blue-400 rounded-xl p-16 text-center cursor-pointer hover:bg-blue-50 transition"
+              className="border-3 border-dashed border-blue-400 rounded-xl p-16 text-center cursor-pointer hover:bg-blue-50 transition-all bg-gradient-to-br from-blue-50 to-indigo-50"
               onClick={() => fileInputRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -357,13 +373,11 @@ export default function Index() {
                 if (file) handleFileUpload(file);
               }}
             >
-              <svg className="w-16 h-16 mx-auto mb-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-              </svg>
-              <h2 className="text-2xl font-semibold mb-2">Upload Your Project Estimate File</h2>
+              <div className="text-6xl mb-4">📁</div>
+              <h2 className="text-2xl font-semibold mb-2 text-blue-900">Upload Your Estimate File</h2>
               <p className="text-gray-600">
                 Drag & drop your Excel file here or click to browse<br/>
-                <small>Supports .xlsx, .xlsm, and .xls files</small>
+                <small className="text-gray-500">Supports .xlsx, .xlsm, and .xls files</small>
               </p>
               <input
                 ref={fileInputRef}
@@ -373,299 +387,254 @@ export default function Index() {
                 className="hidden"
               />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Main Content */}
-        {estimateData.length > 0 && (
-          <>
-            {/* Tabs */}
-            <div className="flex border-b bg-gray-50">
-              {['estimates', 'costcodes', 'automation'].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-4 font-medium transition ${
-                    activeTab === tab
-                      ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+          {/* Estimates Tab */}
+          {activeTab === 'estimates' && estimateData.length > 0 && (
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg">
+                  <h3 className="text-sm text-blue-600 font-medium uppercase">Total Items</h3>
+                  <div className="text-3xl font-bold text-blue-900">{stats.totalItems}</div>
+                  <p className="text-xs text-blue-600 mt-1">Estimate line items</p>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg">
+                  <h3 className="text-sm text-green-600 font-medium uppercase">Coded Items</h3>
+                  <div className="text-3xl font-bold text-green-900">{stats.codedItems}</div>
+                  <p className="text-xs text-green-600 mt-1">{stats.codingPercentage}% complete</p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg">
+                  <h3 className="text-sm text-purple-600 font-medium uppercase">Total Hours</h3>
+                  <div className="text-3xl font-bold text-purple-900">{stats.totalHours.toFixed(1)}</div>
+                  <p className="text-xs text-purple-600 mt-1">Labor hours</p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-lg">
+                  <h3 className="text-sm text-amber-600 font-medium uppercase">Auto-Matched</h3>
+                  <div className="text-3xl font-bold text-amber-900">{stats.autoMatched}</div>
+                  <p className="text-xs text-amber-600 mt-1">Ready to assign</p>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                <select
+                  value={filters.floor}
+                  onChange={(e) => setFilters({...filters, floor: e.target.value})}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {tab === 'estimates' && '📊 Estimates'}
-                  {tab === 'costcodes' && '💰 Cost Codes'}
-                  {tab === 'automation' && '🤖 Automation'}
+                  <option value="all">All Floors</option>
+                  {getUniqueValues('floor').map(val => (
+                    <option key={val} value={val}>{val}</option>
+                  ))}
+                </select>
+                <select
+                  value={filters.system}
+                  onChange={(e) => setFilters({...filters, system: e.target.value})}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Systems</option>
+                  {getUniqueValues('system').map(val => (
+                    <option key={val} value={val}>{val}</option>
+                  ))}
+                </select>
+                <select
+                  value={filters.costCode}
+                  onChange={(e) => setFilters({...filters, costCode: e.target.value})}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Codes</option>
+                  <option value="unassigned">⚠️ Unassigned Only</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={filters.search}
+                  onChange={(e) => setFilters({...filters, search: e.target.value})}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mb-6 flex-wrap">
+                <button
+                  onClick={autoAssignCostCodes}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all flex items-center gap-2 font-medium"
+                >
+                  🤖 Auto-Assign All Codes
                 </button>
-              ))}
-            </div>
+                <button
+                  onClick={exportWithCostCodes}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 font-medium"
+                >
+                  💾 Export with Codes
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all flex items-center gap-2 font-medium"
+                >
+                  📁 New File
+                </button>
+              </div>
 
-            {/* Tab Content */}
-            <div className="p-6">
-              {activeTab === 'estimates' && (
-                <>
-                  {/* Filters */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-                    <select
-                      value={filters.system}
-                      onChange={(e) => setFilters({...filters, system: e.target.value})}
-                      className="px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">All Systems</option>
-                      {getUniqueValues('system').map(val => (
-                        <option key={val} value={val}>{val}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={filters.floor}
-                      onChange={(e) => setFilters({...filters, floor: e.target.value})}
-                      className="px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">All Floors</option>
-                      {getUniqueValues('floor').map(val => (
-                        <option key={val} value={val}>{val}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={filters.zone}
-                      onChange={(e) => setFilters({...filters, zone: e.target.value})}
-                      className="px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">All Zones</option>
-                      {getUniqueValues('zone').map(val => (
-                        <option key={val} value={val}>{val}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={filters.costCode}
-                      onChange={(e) => setFilters({...filters, costCode: e.target.value})}
-                      className="px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">All Cost Codes</option>
-                      <option value="unassigned">⚠️ Unassigned Only</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Search..."
-                      value={filters.search}
-                      onChange={(e) => setFilters({...filters, search: e.target.value})}
-                      className="px-3 py-2 border rounded-lg"
-                    />
-                    <button
-                      onClick={applyFilters}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      Apply Filters
-                    </button>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 mb-6 flex-wrap">
-                    <button
-                      onClick={autoAssignCostCodes}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                    >
-                      🤖 Auto-Assign Cost Codes
-                    </button>
-                    <button
-                      onClick={exportWithCostCodes}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      💾 Export with Cost Codes
-                    </button>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
-                    >
-                      📁 New File
-                    </button>
-                  </div>
-
-                  {/* Data Table */}
-                  <div className="overflow-x-auto rounded-lg shadow">
-                    <table className="w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Drawing</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">System</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Floor</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Material</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Item</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Qty</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Material $</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Hours</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Cost Code</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredData.slice(0, 100).map((item) => (
-                          <tr key={item.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{item.drawing}</td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                                {item.system}
+              {/* Data Table */}
+              <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Drawing</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">System</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Floor</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Item</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Hours</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cost Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredData.slice(0, 100).map((item: any) => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">{item.drawing}</td>
+                        <td className="px-4 py-3 text-sm">{item.system}</td>
+                        <td className="px-4 py-3 text-sm">{item.floor}</td>
+                        <td className="px-4 py-3 text-sm" title={item.materialDesc}>
+                          {item.materialDesc.substring(0, 40)}{item.materialDesc.length > 40 ? '...' : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm">{item.itemName}</td>
+                        <td className="px-4 py-3 text-sm font-semibold">{item.hours.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {item.costCode ? (
+                            <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-mono font-semibold">
+                              {item.costCode}
+                            </span>
+                          ) : item.suggestedCode ? (
+                            <span 
+                              className={`px-2 py-1 text-xs rounded font-mono cursor-pointer transition-all hover:scale-105 ${
+                                item.suggestedCode.confidence >= 0.8 
+                                  ? 'bg-green-100 text-green-800'
+                                  : item.suggestedCode.confidence >= 0.6
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                              onClick={() => assignCode(item.id)}
+                            >
+                              {item.suggestedCode.code}
+                              <span className="ml-1 text-xs opacity-75">
+                                ({Math.round(item.suggestedCode.confidence * 100)}%)
                               </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">{item.floor}</td>
-                            <td className="px-4 py-3 text-sm" title={item.materialDesc}>
-                              {item.materialDesc.substring(0, 30)}{item.materialDesc.length > 30 ? '...' : ''}
-                            </td>
-                            <td className="px-4 py-3 text-sm">{item.itemName}</td>
-                            <td className="px-4 py-3 text-sm font-mono">{item.quantity}</td>
-                            <td className="px-4 py-3 text-sm font-mono">${item.materialDollars.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-sm font-mono">{item.hours.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-sm">
-                              {item.costCode ? (
-                                <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-semibold">
-                                  {item.costCode}
-                                </span>
-                              ) : item.suggestedCodes.length > 0 ? (
-                                <button
-                                  onClick={() => {
-                                    const updated = estimateData.map(e => 
-                                      e.id === item.id ? {...e, costCode: item.suggestedCodes[0].code} : e
-                                    );
-                                    setEstimateData(updated);
-                                    setFilteredData(updated);
-                                  }}
-                                  className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
-                                >
-                                  {item.suggestedCodes[0].code} ({Math.round(item.suggestedCodes[0].confidence * 100)}%)
-                                </button>
-                              ) : (
-                                <span className="text-amber-600">None</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {filteredData.length > 100 && (
-                      <div className="p-4 bg-gray-50 text-center text-sm text-gray-600">
-                        Showing first 100 of {filteredData.length} items
-                      </div>
-                    )}
+                            </span>
+                          ) : (
+                            <span className="text-red-500 text-xs">No match</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {!item.costCode && item.suggestedCode && (
+                            <button
+                              onClick={() => assignCode(item.id)}
+                              className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-all"
+                            >
+                              Assign
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredData.length > 100 && (
+                  <div className="p-4 bg-gray-50 text-center text-sm text-gray-600">
+                    Showing first 100 of {filteredData.length} items
                   </div>
-                </>
-              )}
+                )}
+              </div>
+            </>
+          )}
 
-              {activeTab === 'costcodes' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-blue-600 font-medium">Field Labor Codes</h3>
-                      <div className="text-3xl font-bold text-blue-900">{COST_CODES_DB.fieldLabor.length}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-green-600 font-medium">Material Codes</h3>
-                      <div className="text-3xl font-bold text-green-900">{COST_CODES_DB.material.length}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-purple-600 font-medium">Items Coded</h3>
-                      <div className="text-3xl font-bold text-purple-900">{stats.itemsCoded}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-amber-600 font-medium">Completion</h3>
-                      <div className="text-3xl font-bold text-amber-900">{stats.codingPercentage}%</div>
-                    </div>
-                  </div>
+          {/* Automation Tab */}
+          {activeTab === 'automation' && (
+            <div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">📘 SEC-ACT-COST HEAD Structure</h3>
+                <p className="text-blue-800">
+                  Cost codes follow the pattern: <strong>[SEC] [ACT] [COST HEAD]</strong>
+                </p>
+                <ul className="mt-2 space-y-1 text-blue-700">
+                  <li>• <strong>SEC</strong>: Section based on floor (01 for Level 01, 02 for Level 02, etc.)</li>
+                  <li>• <strong>ACT</strong>: Activity code (typically 0000)</li>
+                  <li>• <strong>COST HEAD</strong>: System-specific code (SNWV, STRM, DWTR, etc.)</li>
+                </ul>
+              </div>
 
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <h3 className="text-lg font-semibold mb-4">Available Cost Codes</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="font-medium mb-3">Labor Codes</h4>
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                          {COST_CODES_DB.fieldLabor.map(code => (
-                            <div key={code.code} className="flex justify-between p-2 bg-gray-50 rounded">
-                              <span className="font-mono text-sm">{code.code}</span>
-                              <span className="text-sm text-gray-600">{code.description}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="font-medium mb-3">Material Codes</h4>
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                          {COST_CODES_DB.material.map(code => (
-                            <div key={code.code} className="flex justify-between p-2 bg-gray-50 rounded">
-                              <span className="font-mono text-sm">{code.code}</span>
-                              <span className="text-sm text-gray-600">{code.description}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'automation' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-indigo-600 font-medium">Automation Rules</h3>
-                      <div className="text-3xl font-bold text-indigo-900">{AUTOMATION_RULES.length}</div>
-                    </div>
-                    <div className="bg-gradient-to-br from-teal-50 to-teal-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-teal-600 font-medium">Items with Suggestions</h3>
-                      <div className="text-3xl font-bold text-teal-900">
-                        {estimateData.filter(item => item.suggestedCodes.length > 0).length}
-                      </div>
-                    </div>
-                    <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-6 rounded-lg">
-                      <h3 className="text-sm text-pink-600 font-medium">Avg Confidence</h3>
-                      <div className="text-3xl font-bold text-pink-900">
-                        {estimateData.filter(item => item.suggestedCodes.length > 0).length > 0
-                          ? Math.round(
-                              estimateData
-                                .filter(item => item.suggestedCodes.length > 0)
-                                .reduce((sum, item) => sum + item.suggestedCodes[0].confidence, 0) /
-                              estimateData.filter(item => item.suggestedCodes.length > 0).length * 100
-                            )
-                          : 0}%
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <h3 className="text-lg font-semibold p-4 bg-gray-50">Automation Rules</h3>
-                    <table className="w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Pattern</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Field</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Assigns</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Matches</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {AUTOMATION_RULES.map((rule, index) => {
-                          const matchCount = estimateData.filter(item => {
-                            const fieldValue = item[rule.field] || '';
-                            return rule.pattern.test(fieldValue);
-                          }).length;
-                          
-                          return (
-                            <tr key={index} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm font-mono">{rule.pattern.source}</td>
-                              <td className="px-4 py-3 text-sm">{rule.field}</td>
-                              <td className="px-4 py-3 text-sm">
-                                {rule.codes.material && <span className="mr-2">{rule.codes.material}</span>}
-                                {rule.codes.labor && <span>{rule.codes.labor}</span>}
-                              </td>
-                              <td className="px-4 py-3 text-sm">{rule.description}</td>
-                              <td className="px-4 py-3 text-sm font-semibold">{matchCount}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <h3 className="text-lg font-semibold mb-4">System to Cost Head Mapping</h3>
+              <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">System Pattern</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Cost Head</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Example</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {Object.entries(COST_HEAD_MAPPING).map(([code, config]) => (
+                      <tr key={code} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-mono text-gray-600">
+                          {config.patterns.map(p => p.source).join(', ')}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold">{code}</td>
+                        <td className="px-4 py-3 text-sm">{config.description}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-mono text-xs">
+                            01 0000 {code}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </>
-        )}
+          )}
+
+          {/* Mapping Tab */}
+          {activeTab === 'mapping' && estimateData.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Current Code Assignments</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Object.entries(
+                  estimateData.reduce((acc: any, item: any) => {
+                    if (item.costCode) {
+                      if (!acc[item.costCode]) {
+                        acc[item.costCode] = { count: 0, hours: 0, items: [] };
+                      }
+                      acc[item.costCode].count++;
+                      acc[item.costCode].hours += item.hours;
+                      acc[item.costCode].items.push(item);
+                    }
+                    return acc;
+                  }, {})
+                ).map(([code, data]: any) => (
+                  <div key={code} className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded font-mono font-semibold">
+                        {code}
+                      </span>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-600">{data.count} items</div>
+                        <div className="text-sm font-semibold">{data.hours.toFixed(2)} hrs</div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {COST_HEAD_MAPPING[code.split(' ')[2]]?.description || ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Loading Overlay */}
         {loading && (
@@ -680,9 +649,9 @@ export default function Index() {
         {/* Notification */}
         {notification && (
           <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
-            notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-          } text-white`}>
-            {notification.message}
+            (notification as any).type === 'success' ? 'bg-green-600' : 'bg-red-600'
+          } text-white animate-slide-in`}>
+            {(notification as any).message}
           </div>
         )}
       </div>
