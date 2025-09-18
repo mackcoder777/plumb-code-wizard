@@ -1,13 +1,20 @@
-import React from 'react';
-import { EstimateItem } from '@/types/estimate';
-import { Card } from '@/components/ui/card';
+import React, { useMemo, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { EstimateItem } from "@/types/estimate";
+import { CostCodeLibraryManager } from "@/components/CostCodeLibraryManager";
+import { Library, Search } from "lucide-react";
 
 interface CostCodesTabProps {
   data: EstimateItem[];
 }
 
 export const CostCodesTab: React.FC<CostCodesTabProps> = ({ data }) => {
-  const systemSummary = React.useMemo(() => {
+  const [showLibrary, setShowLibrary] = useState(false);
+
+  const systemSummary = useMemo(() => {
     const systems = data.reduce((acc, item) => {
       const system = item.system || 'Unspecified';
       if (!acc[system]) {
@@ -23,32 +30,106 @@ export const CostCodesTab: React.FC<CostCodesTabProps> = ({ data }) => {
     return Object.entries(systems);
   }, [data]);
 
+  const stats = useMemo(() => {
+    const laborCodes = 561; // From analysis
+    const materialCodes = 258; // From analysis
+    const totalCoded = data.filter(item => item.costCode).length;
+    const completionPercentage = data.length > 0 ? Math.round((totalCoded / data.length) * 100) : 0;
+    
+    return { laborCodes, materialCodes, totalCoded, completionPercentage };
+  }, [data]);
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="p-6 text-center">
-          <h3 className="text-2xl font-bold text-primary">561</h3>
-          <p className="text-muted-foreground">Field Labor Codes</p>
+    <div className="p-6 space-y-6">
+      {/* Header with Library Access */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Cost Code Analysis</h2>
+          <p className="text-muted-foreground">Summary of cost code assignments and coverage</p>
+        </div>
+        <Dialog open={showLibrary} onOpenChange={setShowLibrary}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Library className="h-4 w-4" />
+              Cost Code Library
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Cost Code Library Manager</DialogTitle>
+            </DialogHeader>
+            <CostCodeLibraryManager showSelector={false} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Field Labor Codes</p>
+                <p className="text-2xl font-bold">{stats.laborCodes}</p>
+              </div>
+              <div className="h-8 w-8 bg-primary/10 rounded-full flex items-center justify-center">
+                <span className="text-primary font-semibold text-sm">L</span>
+              </div>
+            </div>
+          </CardContent>
         </Card>
-        <Card className="p-6 text-center">
-          <h3 className="text-2xl font-bold text-primary">258</h3>
-          <p className="text-muted-foreground">Material Codes</p>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Material Codes</p>
+                <p className="text-2xl font-bold">{stats.materialCodes}</p>
+              </div>
+              <div className="h-8 w-8 bg-success/10 rounded-full flex items-center justify-center">
+                <span className="text-success font-semibold text-sm">M</span>
+              </div>
+            </div>
+          </CardContent>
         </Card>
-        <Card className="p-6 text-center">
-          <h3 className="text-2xl font-bold text-success">{data.filter(item => item.costCode).length}</h3>
-          <p className="text-muted-foreground">Items Coded</p>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Items Coded</p>
+                <p className="text-2xl font-bold">{stats.totalCoded}</p>
+                <p className="text-xs text-muted-foreground">of {data.length} items</p>
+              </div>
+              <div className="h-8 w-8 bg-info/10 rounded-full flex items-center justify-center">
+                <span className="text-info font-semibold text-sm">C</span>
+              </div>
+            </div>
+          </CardContent>
         </Card>
-        <Card className="p-6 text-center">
-          <h3 className="text-2xl font-bold text-info">
-            {data.length > 0 ? Math.round((data.filter(item => item.costCode).length / data.length) * 100) : 0}%
-          </h3>
-          <p className="text-muted-foreground">Completion</p>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Completion</p>
+                <p className="text-2xl font-bold">{stats.completionPercentage}%</p>
+                <Progress value={stats.completionPercentage} className="mt-2 h-2" />
+              </div>
+              <div className="h-8 w-8 bg-warning/10 rounded-full flex items-center justify-center">
+                <span className="text-warning font-semibold text-sm">%</span>
+              </div>
+            </div>
+          </CardContent>
         </Card>
       </div>
 
+      {/* System Summary Table */}
       <Card>
-        <div className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Cost Code Summary by System</h3>
+        <CardHeader>
+          <CardTitle>Cost Code Summary by System</CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-muted/50">
@@ -85,7 +166,7 @@ export const CostCodesTab: React.FC<CostCodesTabProps> = ({ data }) => {
               </tbody>
             </table>
           </div>
-        </div>
+        </CardContent>
       </Card>
     </div>
   );
