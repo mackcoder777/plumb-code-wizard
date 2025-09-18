@@ -1,14 +1,18 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-// Cost Head Mapping Database
-const COST_HEAD_MAPPING = {
+// Default Cost Head Mapping Database
+const DEFAULT_COST_HEAD_MAPPING = {
   'SNWV': {
-    patterns: [/sanitary/i, /waste.*vent/i, /dwv/i, /soil/i, /^vent$/i],
+    patterns: [/^sanitary/i, /waste.*vent/i, /^dwv$/i, /soil/i, /^vent$/i],
     description: 'SANITARY WASTE AND VENT'
   },
+  'STRM': {
+    patterns: [/storm/i, /overflow.*dr/i, /roof.*drain/i, /rain/i],
+    description: 'STORM DRAIN'
+  },
   'GRWV': {
-    patterns: [/grease/i, /interceptor/i],
+    patterns: [/grease/i, /interceptor/i, /grey.*waste/i],
     description: 'GREASE WASTE AND VENT'
   },
   'DWTR': {
@@ -23,12 +27,8 @@ const COST_HEAD_MAPPING = {
     patterns: [/gray.*water/i, /grey.*water/i],
     description: 'GRAY WATER'
   },
-  'STRM': {
-    patterns: [/storm/i, /rain/i, /overflow.*drain/i, /roof.*drain/i],
-    description: 'STORM DRAIN'
-  },
   'DRNS': {
-    patterns: [/^drain/i, /floor.*drain/i, /area.*drain/i],
+    patterns: [/^drain$/i, /floor.*drain/i, /area.*drain/i],
     description: 'DRAINS'
   },
   'COND': {
@@ -38,10 +38,6 @@ const COST_HEAD_MAPPING = {
   'NGAS': {
     patterns: [/natural.*gas/i, /fuel.*gas/i, /^gas$/i],
     description: 'NATURAL GAS'
-  },
-  'FUEL': {
-    patterns: [/fuel.*oil/i, /diesel/i],
-    description: 'FUEL OIL'
   },
   'FNSH': {
     patterns: [/fixture/i, /toilet/i, /urinal/i, /lavatory/i, /sink/i, /faucet/i],
@@ -74,14 +70,14 @@ const COST_HEAD_MAPPING = {
 };
 
 const FLOOR_MAPPING = {
-  '01': [/level.*0?1/i, /^l1$/i, /floor.*1/i, /first.*floor/i, /1st.*floor/i],
-  '02': [/level.*0?2/i, /^l2$/i, /floor.*2/i, /second.*floor/i, /2nd.*floor/i],
-  '03': [/level.*0?3/i, /^l3$/i, /floor.*3/i, /third.*floor/i, /3rd.*floor/i],
-  '04': [/level.*0?4/i, /^l4$/i, /floor.*4/i, /fourth.*floor/i, /4th.*floor/i],
-  '05': [/level.*0?5/i, /^l5$/i, /floor.*5/i, /fifth.*floor/i, /5th.*floor/i],
-  'P1': [/level.*p1/i, /^p1$/i, /parking.*1/i, /garage.*1/i, /basement.*1/i, /^b1$/i],
-  'P2': [/level.*p2/i, /^p2$/i, /parking.*2/i, /garage.*2/i, /basement.*2/i, /^b2$/i],
-  'P3': [/level.*p3/i, /^p3$/i, /parking.*3/i, /garage.*3/i, /basement.*3/i, /^b3$/i],
+  '01': [/level.*0?1$/i, /^l1$/i, /floor.*1$/i, /first.*floor/i, /1st.*floor/i, /level 1$/i],
+  '02': [/level.*0?2$/i, /^l2$/i, /floor.*2$/i, /second.*floor/i, /2nd.*floor/i, /level 2$/i],
+  '03': [/level.*0?3$/i, /^l3$/i, /floor.*3$/i, /third.*floor/i, /3rd.*floor/i, /level 3$/i],
+  '04': [/level.*0?4$/i, /^l4$/i, /floor.*4$/i, /fourth.*floor/i, /4th.*floor/i],
+  '05': [/level.*0?5$/i, /^l5$/i, /floor.*5$/i, /fifth.*floor/i, /5th.*floor/i],
+  'P1': [/level.*p1$/i, /^p1$/i, /parking.*1/i, /garage.*1/i, /basement.*1/i, /^b1$/i],
+  'P2': [/level.*p2$/i, /^p2$/i, /parking.*2/i, /garage.*2/i, /basement.*2/i, /^b2$/i],
+  'P3': [/level.*p3$/i, /^p3$/i, /parking.*3/i, /garage.*3/i, /basement.*3/i, /^b3$/i],
   'RF': [/roof/i, /penthouse/i, /^ph$/i, /^r$/i],
   'GR': [/ground/i, /grade/i, /^g$/i, /plaza/i],
   'MZ': [/mezzanine/i, /^mz$/i, /^m$/i]
@@ -100,13 +96,14 @@ export default function Index() {
     costCode: 'all',
     search: ''
   });
+  const [customMappings, setCustomMappings] = useState({});
   const fileInputRef = useRef(null);
 
   // Generate cost code based on SEC-ACT-COST HEAD structure
   const generateCostCode = useCallback((item) => {
     // Determine Section (SEC) from floor
     let section = '01'; // Default
-    const floorText = (item.floor || '').toLowerCase();
+    const floorText = (item.floor || '').toLowerCase().trim();
     
     for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
       if (patterns.some(pattern => pattern.test(floorText))) {
@@ -118,29 +115,46 @@ export default function Index() {
     // Activity is always 0000
     const activity = '0000';
     
-    // Determine Cost Head from system
-    let costHead = 'SNWV'; // Default to sanitary waste and vent
-    let confidence = 0.5;
-    const systemText = (item.system || '').toLowerCase();
+    // Check custom mappings first
+    const systemLower = (item.system || '').toLowerCase().trim();
+    let costHead = customMappings[systemLower] || null;
+    let confidence = costHead ? 1.0 : 0;
     
-    for (const [code, config] of Object.entries(COST_HEAD_MAPPING)) {
-      if (config.patterns.some(pattern => pattern.test(systemText))) {
-        costHead = code;
-        confidence = 0.9;
-        break;
+    // If no custom mapping, use pattern matching
+    if (!costHead) {
+      // Check system patterns with priority for exact matches
+      for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
+        if (config.patterns.some(pattern => pattern.test(systemLower))) {
+          costHead = code;
+          // Higher confidence for exact or near-exact matches
+          if (systemLower === config.patterns[0].source.replace(/[\^$\/i]/g, '').toLowerCase()) {
+            confidence = 0.95;
+          } else {
+            confidence = 0.9;
+          }
+          break;
+        }
       }
     }
     
-    // Check material description for additional hints
-    const materialText = (item.materialDesc || '').toLowerCase();
-    for (const [code, config] of Object.entries(COST_HEAD_MAPPING)) {
-      if (config.patterns.some(pattern => pattern.test(materialText))) {
-        if (confidence < 0.9) {
-          costHead = code;
-          confidence = 0.8;
+    // Check material description as fallback
+    if (!costHead || confidence < 0.9) {
+      const materialText = (item.materialDesc || '').toLowerCase();
+      for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
+        if (config.patterns.some(pattern => pattern.test(materialText))) {
+          if (!costHead || confidence < 0.8) {
+            costHead = code;
+            confidence = 0.8;
+          }
+          break;
         }
-        break;
       }
+    }
+    
+    // Default fallback
+    if (!costHead) {
+      costHead = 'SNWV';
+      confidence = 0.5;
     }
     
     return {
@@ -149,9 +163,9 @@ export default function Index() {
       activity: activity,
       costHead: costHead,
       confidence: confidence,
-      description: COST_HEAD_MAPPING[costHead]?.description || 'Unknown'
+      description: DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 'Unknown'
     };
-  }, []);
+  }, [customMappings]);
 
   // Process uploaded file
   const handleFileUpload = useCallback((file) => {
@@ -198,6 +212,24 @@ export default function Index() {
           return item;
         });
         
+        // Extract unique systems and suggest initial mappings
+        const uniqueSystems = [...new Set(processedData.map(item => item.system.toLowerCase().trim()))].filter(Boolean);
+        const initialMappings = {};
+        
+        // Pre-populate obvious mappings
+        uniqueSystems.forEach(system => {
+          if (system.includes('storm') || system.includes('overflow')) {
+            initialMappings[system] = 'STRM';
+          } else if (system.includes('vent') && !system.includes('grease')) {
+            initialMappings[system] = 'SNWV';
+          } else if (system.includes('waste') && !system.includes('grease')) {
+            initialMappings[system] = 'SNWV';
+          } else if (system.includes('water') && !system.includes('waste')) {
+            initialMappings[system] = 'DWTR';
+          }
+        });
+        
+        setCustomMappings(initialMappings);
         setEstimateData(processedData);
         setFilteredData(processedData);
         setActiveTab('estimates');
@@ -211,6 +243,18 @@ export default function Index() {
     
     reader.readAsArrayBuffer(file);
   }, [generateCostCode]);
+
+  // Update all items when custom mappings change
+  useEffect(() => {
+    if (estimateData.length > 0) {
+      const updated = estimateData.map(item => ({
+        ...item,
+        suggestedCode: generateCostCode(item)
+      }));
+      setEstimateData(updated);
+      setFilteredData(updated);
+    }
+  }, [customMappings, generateCostCode]);
 
   // Show notification
   const showNotification = (message: string, type = 'success') => {
@@ -273,6 +317,21 @@ export default function Index() {
     showNotification('Cost code assigned', 'success');
   };
 
+  // Update custom mapping
+  const updateMapping = (system: string, costHead: string) => {
+    const newMappings = { ...customMappings };
+    const systemLower = system.toLowerCase().trim();
+    
+    if (costHead && costHead !== 'none') {
+      newMappings[systemLower] = costHead;
+    } else {
+      delete newMappings[systemLower];
+    }
+    
+    setCustomMappings(newMappings);
+    showNotification(`Updated mapping: ${system} → ${costHead}`, 'success');
+  };
+
   // Export with cost codes
   const exportWithCostCodes = () => {
     const exportData = filteredData.map((item: any) => ({
@@ -304,11 +363,11 @@ export default function Index() {
     showNotification('Export completed successfully', 'success');
   };
 
-  // Calculate stats
+  // Calculate stats - FIX THE HOURS SUMMATION
   const stats = {
     totalItems: filteredData.length,
     codedItems: filteredData.filter((item: any) => item.costCode).length,
-    totalHours: filteredData.reduce((sum: number, item: any) => sum + item.hours, 0),
+    totalHours: filteredData.reduce((sum: number, item: any) => sum + (item.hours || 0), 0),
     autoMatched: filteredData.filter((item: any) => item.suggestedCode && item.suggestedCode.confidence >= 0.8).length,
     codingPercentage: filteredData.length > 0 
       ? Math.round((filteredData.filter((item: any) => item.costCode).length / filteredData.length) * 100) 
@@ -319,6 +378,9 @@ export default function Index() {
   const getUniqueValues = (field: string) => {
     return [...new Set(estimateData.map((item: any) => item[field]))].filter(Boolean).sort();
   };
+
+  // Get unique systems for mapping
+  const uniqueSystems = [...new Set(estimateData.map((item: any) => item.system))].filter(Boolean).sort();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
@@ -341,7 +403,7 @@ export default function Index() {
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50">
-          {['upload', 'estimates', 'automation', 'mapping'].map((tab) => (
+          {['upload', 'estimates', 'mapping', 'rules'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -353,8 +415,8 @@ export default function Index() {
             >
               {tab === 'upload' && '📁 Upload'}
               {tab === 'estimates' && '📊 Estimates'}
-              {tab === 'automation' && '🤖 Rules'}
               {tab === 'mapping' && '🔗 Mapping'}
+              {tab === 'rules' && '🤖 Rules'}
             </button>
           ))}
         </div>
@@ -547,12 +609,99 @@ export default function Index() {
                     Showing first 100 of {filteredData.length} items
                   </div>
                 )}
+                {filteredData.length === 0 && (
+                  <div className="p-8 text-center text-gray-500">
+                    No items match the current filters
+                  </div>
+                )}
               </div>
             </>
           )}
 
-          {/* Automation Tab */}
-          {activeTab === 'automation' && (
+          {/* Mapping Tab - NEW! */}
+          {activeTab === 'mapping' && estimateData.length > 0 && (
+            <div>
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">🔧 Custom System Mapping</h3>
+                <p className="text-blue-700 text-sm">
+                  Map systems from your data to specific cost heads. These mappings will override the automatic pattern matching.
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">System in Data</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Current Mapping</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Cost Head</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Items</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {uniqueSystems.map(system => {
+                      const systemLower = system.toLowerCase().trim();
+                      const currentMapping = customMappings[systemLower];
+                      const itemCount = estimateData.filter((item: any) => item.system === system).length;
+                      const suggestedCode = generateCostCode({ system });
+                      const mappedCostHead = currentMapping || suggestedCode.costHead;
+                      
+                      return (
+                        <tr key={system} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium">{system}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-1 text-xs rounded font-mono ${
+                              currentMapping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {mappedCostHead}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <select
+                              value={currentMapping || mappedCostHead}
+                              onChange={(e) => updateMapping(system, e.target.value)}
+                              className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="none">Auto-detect</option>
+                              {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
+                                <option key={code} value={code}>{code}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {DEFAULT_COST_HEAD_MAPPING[mappedCostHead]?.description || ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold">{itemCount}</td>
+                          <td className="px-4 py-3 text-sm">
+                            {currentMapping && (
+                              <button
+                                onClick={() => updateMapping(system, 'none')}
+                                className="text-red-600 hover:text-red-800 text-xs"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">
+                  <strong>Note:</strong> Changes to mappings will automatically update all suggested cost codes. 
+                  Click "Auto-Assign All Codes" on the Estimates tab to apply the updated suggestions.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Rules Tab */}
+          {activeTab === 'rules' && (
             <div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <h3 className="text-lg font-semibold text-blue-900 mb-2">📘 SEC-ACT-COST HEAD Structure</h3>
@@ -578,10 +727,10 @@ export default function Index() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {Object.entries(COST_HEAD_MAPPING).map(([code, config]) => (
+                    {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
                       <tr key={code} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-mono text-gray-600">
-                          {config.patterns.map(p => p.source).join(', ')}
+                          {config.patterns.map(p => p.source.replace(/[\^$\/i]/g, '')).join(', ')}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold">{code}</td>
                         <td className="px-4 py-3 text-sm">{config.description}</td>
@@ -594,43 +743,6 @@ export default function Index() {
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          )}
-
-          {/* Mapping Tab */}
-          {activeTab === 'mapping' && estimateData.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Current Code Assignments</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {Object.entries(
-                  estimateData.reduce((acc: any, item: any) => {
-                    if (item.costCode) {
-                      if (!acc[item.costCode]) {
-                        acc[item.costCode] = { count: 0, hours: 0, items: [] };
-                      }
-                      acc[item.costCode].count++;
-                      acc[item.costCode].hours += item.hours;
-                      acc[item.costCode].items.push(item);
-                    }
-                    return acc;
-                  }, {})
-                ).map(([code, data]: any) => (
-                  <div key={code} className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded font-mono font-semibold">
-                        {code}
-                      </span>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-600">{data.count} items</div>
-                        <div className="text-sm font-semibold">{data.hours.toFixed(2)} hrs</div>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {COST_HEAD_MAPPING[code.split(' ')[2]]?.description || ''}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -649,9 +761,9 @@ export default function Index() {
         {/* Notification */}
         {notification && (
           <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
-            (notification as any).type === 'success' ? 'bg-green-600' : 'bg-red-600'
+            notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
           } text-white animate-slide-in`}>
-            {(notification as any).message}
+            {notification.message}
           </div>
         )}
       </div>
