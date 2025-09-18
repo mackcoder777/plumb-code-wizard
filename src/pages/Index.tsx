@@ -1,7 +1,80 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-// Default Cost Head Mapping Database
+// Complete Standard Cost Codes Database from your file
+const STANDARD_COST_CODES = {
+  'Field Labor': {
+    'NONREIMBURSABLE': [
+      { code: 'INJR', description: 'INJURY', units: 'HRS' },
+      { code: 'PNCH', description: 'PUNCH LIST', units: 'HRS' }
+    ],
+    'CHANGE WORK': [
+      { code: 'PLMB', description: 'MCE description, plumbing labor', units: 'HRS' },
+      { code: 'PIPE', description: 'MCE description, wetside labor', units: 'HRS' },
+      { code: 'DUCT', description: 'MCE description, dryside labor', units: 'HRS' },
+      { code: 'UNGD', description: 'MCE description, underground labor', units: 'HRS' },
+      { code: 'PROC', description: 'MCE description, process labor', units: 'HRS' }
+    ],
+    'PLUMBING': [
+      { code: 'COND', description: 'CONDENSATE', units: 'HRS' },
+      { code: 'DRNS', description: 'DRAINS', units: 'HRS' },
+      { code: 'DWTR', description: 'DOMESTIC WATER', units: 'HRS' },
+      { code: 'FNSH', description: 'FIXTURES', units: 'HRS' },
+      { code: 'FUEL', description: 'FUEL OIL', units: 'HRS' },
+      { code: 'GRWV', description: 'GREASE WASTE AND VENT', units: 'HRS' },
+      { code: 'HNGS', description: 'HANGERS AND SUPPORTS', units: 'HRS' },
+      { code: 'IWTR', description: 'INDUSTRIAL WATER', units: 'HRS' },
+      { code: 'NGAS', description: 'NATURAL GAS', units: 'HRS' },
+      { code: 'PIDV', description: 'PIPE ID AND VALVE TAGS', units: 'HRS' },
+      { code: 'RCLM', description: 'RECLAIMED WATER', units: 'HRS' },
+      { code: 'SEQP', description: 'EQUIPMENT SETTING', units: 'HRS' },
+      { code: 'SNWV', description: 'SANITARY WASTE AND VENT', units: 'HRS' },
+      { code: 'STRM', description: 'STORM DRAIN', units: 'HRS' },
+      { code: 'SZMC', description: 'SEISMIC', units: 'HRS' },
+      { code: 'TRAP', description: 'TRAP PRIMERS', units: 'HRS' },
+      { code: 'GRAY', description: 'GRAY WATER', units: 'HRS' }
+    ],
+    'UNDERGROUND': [
+      { code: '10FW', description: '10 INCH FIREWATER', units: 'HRS' },
+      { code: '10RW', description: '10IN RECLAIM WATER', units: 'HRS' },
+      { code: '10SW', description: '10IN SEWER WATER', units: 'HRS' },
+      { code: '10SD', description: '10IN STORM DRAIN', units: 'HRS' },
+      { code: '12FW', description: '12 INCH FIREWATER', units: 'HRS' },
+      { code: '12RW', description: '12IN RECLAIM WATER', units: 'HRS' },
+      { code: '12SW', description: '12IN SEWER WATER', units: 'HRS' },
+      { code: '12SD', description: '12IN STORM DRAIN', units: 'HRS' }
+    ]
+  },
+  'GC Labor': {
+    'DETAILING': [
+      { code: 'ANNO', description: 'ANNOTATION', units: 'HRS' },
+      { code: 'ASBL', description: 'AS-BUILTS', units: 'HRS' },
+      { code: 'BLBM', description: 'BLUEBEAM PROJECT SET-UP', units: 'HRS' },
+      { code: 'COOR', description: 'COORDINATION & REVISIONS', units: 'HRS' }
+    ],
+    'MANAGEMENT': [
+      { code: 'DEMR', description: 'DETAILING MANAGER', units: 'HRS' },
+      { code: 'PRMG', description: 'PROJECT MANAGER', units: 'HRS' },
+      { code: 'SUPT', description: 'SUPERINTENDENT', units: 'HRS' }
+    ]
+  },
+  'Material': {
+    'WARRANTY': [
+      { code: 'WRNT', description: 'WARRANTY - OTHER COST', units: 'EA' },
+      { code: 'WNTY', description: 'WARRANTY - LABOR', units: 'HRS' }
+    ],
+    'ALLOWANCES': [
+      { code: 'ALOW', description: 'ALLOWANCE', units: 'EA' },
+      { code: 'BCNT', description: 'BALANCE OF CONTRACT', units: 'EA' }
+    ],
+    'PERMITS': [
+      { code: 'BOND', description: 'BONDS & PERMITS', units: 'EA' },
+      { code: 'INSP', description: 'INSPECTIONS', units: 'EA' }
+    ]
+  }
+};
+
+// Default pattern-based mappings
 const DEFAULT_COST_HEAD_MAPPING = {
   'SNWV': {
     patterns: [/^sanitary/i, /waste.*vent/i, /^dwv$/i, /soil/i, /^vent$/i],
@@ -23,14 +96,6 @@ const DEFAULT_COST_HEAD_MAPPING = {
     patterns: [/reclaim/i, /recycled.*water/i],
     description: 'RECLAIMED WATER'
   },
-  'GRAY': {
-    patterns: [/gray.*water/i, /grey.*water/i],
-    description: 'GRAY WATER'
-  },
-  'DRNS': {
-    patterns: [/^drain$/i, /floor.*drain/i, /area.*drain/i],
-    description: 'DRAINS'
-  },
   'COND': {
     patterns: [/condensate/i, /ac.*drain/i],
     description: 'CONDENSATE'
@@ -43,52 +108,30 @@ const DEFAULT_COST_HEAD_MAPPING = {
     patterns: [/fixture/i, /toilet/i, /urinal/i, /lavatory/i, /sink/i, /faucet/i],
     description: 'FIXTURES'
   },
-  'SEQP': {
-    patterns: [/equipment/i, /pump/i, /heater/i, /boiler/i, /tank/i],
-    description: 'EQUIPMENT SETTING'
-  },
   'HNGS': {
     patterns: [/hanger/i, /support/i, /brace/i, /seismic/i, /strap/i],
     description: 'HANGERS AND SUPPORTS'
-  },
-  'IWTR': {
-    patterns: [/industrial.*water/i, /process.*water/i],
-    description: 'INDUSTRIAL WATER'
-  },
-  'PIDV': {
-    patterns: [/pipe.*id/i, /valve.*tag/i, /identification/i],
-    description: 'PIPE ID AND VALVE TAGS'
-  },
-  'SZMC': {
-    patterns: [/seismic/i, /earthquake/i],
-    description: 'SEISMIC'
-  },
-  'TRAP': {
-    patterns: [/trap.*primer/i, /^trap$/i],
-    description: 'TRAP PRIMERS'
   }
 };
 
 const FLOOR_MAPPING = {
-  '01': [/level.*0?1$/i, /^l1$/i, /floor.*1$/i, /first.*floor/i, /1st.*floor/i, /level 1$/i],
-  '02': [/level.*0?2$/i, /^l2$/i, /floor.*2$/i, /second.*floor/i, /2nd.*floor/i, /level 2$/i],
-  '03': [/level.*0?3$/i, /^l3$/i, /floor.*3$/i, /third.*floor/i, /3rd.*floor/i, /level 3$/i],
-  '04': [/level.*0?4$/i, /^l4$/i, /floor.*4$/i, /fourth.*floor/i, /4th.*floor/i],
-  '05': [/level.*0?5$/i, /^l5$/i, /floor.*5$/i, /fifth.*floor/i, /5th.*floor/i],
-  'P1': [/level.*p1$/i, /^p1$/i, /parking.*1/i, /garage.*1/i, /basement.*1/i, /^b1$/i],
-  'P2': [/level.*p2$/i, /^p2$/i, /parking.*2/i, /garage.*2/i, /basement.*2/i, /^b2$/i],
-  'P3': [/level.*p3$/i, /^p3$/i, /parking.*3/i, /garage.*3/i, /basement.*3/i, /^b3$/i],
-  'RF': [/roof/i, /penthouse/i, /^ph$/i, /^r$/i],
-  'GR': [/ground/i, /grade/i, /^g$/i, /plaza/i],
-  'MZ': [/mezzanine/i, /^mz$/i, /^m$/i]
+  '01': [/level.*0?1$/i, /^l1$/i, /floor.*1$/i, /first.*floor/i],
+  '02': [/level.*0?2$/i, /^l2$/i, /floor.*2$/i, /second.*floor/i],
+  '03': [/level.*0?3$/i, /^l3$/i, /floor.*3$/i, /third.*floor/i],
+  'P1': [/level.*p1$/i, /^p1$/i, /parking.*1/i, /basement.*1/i],
+  'P2': [/level.*p2$/i, /^p2$/i, /parking.*2/i, /basement.*2/i],
+  'P3': [/level.*p3$/i, /^p3$/i, /parking.*3/i, /basement.*3/i]
 };
 
-export default function Index() {
+export default function EnhancedCostCodeManager() {
   const [estimateData, setEstimateData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [activeTab, setActiveTab] = useState('upload');
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [estimatedTime, setEstimatedTime] = useState('');
   const [notification, setNotification] = useState(null);
   const [filters, setFilters] = useState({
     floor: 'all',
@@ -97,12 +140,16 @@ export default function Index() {
     search: ''
   });
   const [customMappings, setCustomMappings] = useState({});
+  const [mappingHistory, setMappingHistory] = useState({});
+  const [selectedCostCodeCategory, setSelectedCostCodeCategory] = useState('Field Labor');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  const [showCostCodeBrowser, setShowCostCodeBrowser] = useState(false);
+  const [editingSystem, setEditingSystem] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Generate cost code based on SEC-ACT-COST HEAD structure
+  // Generate cost code with audit trail
   const generateCostCode = useCallback((item) => {
-    // Determine Section (SEC) from floor
-    let section = '01'; // Default
+    let section = '01';
     const floorText = (item.floor || '').toLowerCase().trim();
     
     for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
@@ -112,40 +159,21 @@ export default function Index() {
       }
     }
     
-    // Activity is always 0000
     const activity = '0000';
+    const systemLower = (item.system || '').toLowerCase().trim();
     
     // Check custom mappings first
-    const systemLower = (item.system || '').toLowerCase().trim();
     let costHead = customMappings[systemLower] || null;
     let confidence = costHead ? 1.0 : 0;
+    let source = costHead ? 'custom' : '';
     
     // If no custom mapping, use pattern matching
     if (!costHead) {
-      // Check system patterns with priority for exact matches
       for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
         if (config.patterns.some(pattern => pattern.test(systemLower))) {
           costHead = code;
-          // Higher confidence for exact or near-exact matches
-          if (systemLower === config.patterns[0].source.replace(/[\^$\/i]/g, '').toLowerCase()) {
-            confidence = 0.95;
-          } else {
-            confidence = 0.9;
-          }
-          break;
-        }
-      }
-    }
-    
-    // Check material description as fallback
-    if (!costHead || confidence < 0.9) {
-      const materialText = (item.materialDesc || '').toLowerCase();
-      for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
-        if (config.patterns.some(pattern => pattern.test(materialText))) {
-          if (!costHead || confidence < 0.8) {
-            costHead = code;
-            confidence = 0.8;
-          }
+          confidence = 0.9;
+          source = 'auto-pattern';
           break;
         }
       }
@@ -155,6 +183,7 @@ export default function Index() {
     if (!costHead) {
       costHead = 'SNWV';
       confidence = 0.5;
+      source = 'default';
     }
     
     return {
@@ -163,88 +192,177 @@ export default function Index() {
       activity: activity,
       costHead: costHead,
       confidence: confidence,
-      description: DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 'Unknown'
+      source: source,
+      description: DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 
+                   Object.values(STANDARD_COST_CODES).flatMap(cat => 
+                     Object.values(cat).flat()
+                   ).find(c => c.code === costHead)?.description || 'Unknown'
     };
   }, [customMappings]);
 
-  // Process uploaded file
+  // Enhanced file upload with real progress tracking
   const handleFileUpload = useCallback((file) => {
     if (!file) return;
     
     setLoading(true);
+    setLoadingProgress(0);
+    setLoadingMessage('Reading file...');
     setFileName(file.name);
     
+    const startTime = Date.now();
+    const fileSize = file.size;
+    const estimatedProcessingTime = Math.max(3, fileSize / 100000); // seconds
+    setEstimatedTime(`~${Math.ceil(estimatedProcessingTime)}s remaining`);
+    
     const reader = new FileReader();
+    
+    reader.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentLoaded = Math.round((event.loaded / event.total) * 30);
+        setLoadingProgress(percentLoaded);
+        const elapsed = (Date.now() - startTime) / 1000;
+        const rate = event.loaded / elapsed;
+        const remaining = (event.total - event.loaded) / rate;
+        setEstimatedTime(`~${Math.ceil(remaining)}s remaining`);
+      }
+    };
+    
     reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        const sheetName = workbook.SheetNames.find(name => 
-          name.toLowerCase().includes('raw') || 
-          name.toLowerCase().includes('data')
-        ) || workbook.SheetNames[0];
-        
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet);
-        
-        const processedData = jsonData.map((row: any, index: number) => {
-          const item = {
-            id: index,
-            drawing: row['D'] || row['Drawing'] || '',
-            system: row['D_1'] || row['System'] || '',
-            floor: row['D_2'] || row['Floor'] || '',
-            zone: row['D_3'] || row['Zone'] || '',
-            materialDesc: row['A'] || row['Material Description'] || '',
-            itemName: row['A_1'] || row['Item Name'] || '',
-            size: row['A_2'] || row['Size'] || '',
-            quantity: parseFloat(row['T'] || row['Quantity'] || 0),
-            materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
-            hours: parseFloat(row['T_3'] || row['Hours'] || 0),
-            laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
-            costCode: '',
-            suggestedCode: null as any
+      setLoadingProgress(30);
+      setLoadingMessage('Parsing Excel data...');
+      
+      setTimeout(() => {
+        try {
+          const data = new Uint8Array(e.target.result as ArrayBuffer);
+          setLoadingProgress(40);
+          setLoadingMessage('Reading worksheets...');
+          
+          const workbook = XLSX.read(data, { type: 'array' });
+          setLoadingProgress(50);
+          
+          const sheetName = workbook.SheetNames.find(name => 
+            name.toLowerCase().includes('raw') || 
+            name.toLowerCase().includes('data')
+          ) || workbook.SheetNames[0];
+          
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet);
+          
+          setLoadingProgress(60);
+          setLoadingMessage(`Processing ${jsonData.length} items...`);
+          
+          // Process in chunks to show progress
+          const chunkSize = 100;
+          const chunks = [];
+          for (let i = 0; i < jsonData.length; i += chunkSize) {
+            chunks.push(jsonData.slice(i, i + chunkSize));
+          }
+          
+          let processedData = [];
+          let currentChunk = 0;
+          
+          const processChunk = () => {
+            if (currentChunk < chunks.length) {
+              const chunk = chunks[currentChunk];
+              const chunkData = chunk.map((row, index) => {
+                const globalIndex = currentChunk * chunkSize + index;
+                const item = {
+                  id: globalIndex,
+                  drawing: row['D'] || row['Drawing'] || '',
+                  system: row['D_1'] || row['System'] || '',
+                  floor: row['D_2'] || row['Floor'] || '',
+                  zone: row['D_3'] || row['Zone'] || '',
+                  materialDesc: row['A'] || row['Material Description'] || '',
+                  itemName: row['A_1'] || row['Item Name'] || '',
+                  size: row['A_2'] || row['Size'] || '',
+                  quantity: parseFloat(row['T'] || row['Quantity'] || 0),
+                  materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
+                  hours: parseFloat(row['T_3'] || row['Hours'] || 0),
+                  laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
+                  costCode: '',
+                  suggestedCode: null
+                };
+                
+                item.suggestedCode = generateCostCode(item);
+                return item;
+              });
+              
+              processedData = [...processedData, ...chunkData];
+              currentChunk++;
+              
+              const progress = 60 + Math.round((currentChunk / chunks.length) * 30);
+              setLoadingProgress(progress);
+              setLoadingMessage(`Processing items ${currentChunk * chunkSize} of ${jsonData.length}...`);
+              
+              // Process next chunk
+              setTimeout(processChunk, 10);
+            } else {
+              // All chunks processed
+              setLoadingProgress(95);
+              setLoadingMessage('Finalizing...');
+              
+              // Initialize mappings and history
+              const uniqueSystems = [...new Set(processedData.map(item => item.system.toLowerCase().trim()))].filter(Boolean);
+              const initialMappings = {};
+              const initialHistory = {};
+              
+              uniqueSystems.forEach(system => {
+                // Auto-detect initial mapping
+                const testItem = { system };
+                const suggested = generateCostCode(testItem);
+                
+                // Pre-populate obvious mappings
+                if (system.includes('storm') || system.includes('overflow')) {
+                  initialMappings[system] = 'STRM';
+                  initialHistory[system] = [{
+                    timestamp: new Date().toISOString(),
+                    user: 'system',
+                    from: suggested.costHead,
+                    to: 'STRM',
+                    reason: 'Auto-detected storm/overflow drain'
+                  }];
+                } else if (suggested.source === 'auto-pattern' && suggested.confidence >= 0.9) {
+                  // Keep high-confidence auto-detections
+                  initialHistory[system] = [{
+                    timestamp: new Date().toISOString(),
+                    user: 'system',
+                    from: null,
+                    to: suggested.costHead,
+                    reason: 'Auto-detected pattern match'
+                  }];
+                }
+              });
+              
+              setCustomMappings(initialMappings);
+              setMappingHistory(initialHistory);
+              setEstimateData(processedData);
+              setFilteredData(processedData);
+              
+              setLoadingProgress(100);
+              setLoadingMessage('Complete!');
+              
+              setTimeout(() => {
+                setLoading(false);
+                setActiveTab('estimates');
+                showNotification(`Successfully loaded ${processedData.length} items`, 'success');
+              }, 500);
+            }
           };
           
-          // Generate suggested cost code
-          item.suggestedCode = generateCostCode(item);
+          // Start processing chunks
+          processChunk();
           
-          return item;
-        });
-        
-        // Extract unique systems and suggest initial mappings
-        const uniqueSystems = [...new Set(processedData.map(item => item.system.toLowerCase().trim()))].filter(Boolean);
-        const initialMappings = {};
-        
-        // Pre-populate obvious mappings
-        uniqueSystems.forEach(system => {
-          if (system.includes('storm') || system.includes('overflow')) {
-            initialMappings[system] = 'STRM';
-          } else if (system.includes('vent') && !system.includes('grease')) {
-            initialMappings[system] = 'SNWV';
-          } else if (system.includes('waste') && !system.includes('grease')) {
-            initialMappings[system] = 'SNWV';
-          } else if (system.includes('water') && !system.includes('waste')) {
-            initialMappings[system] = 'DWTR';
-          }
-        });
-        
-        setCustomMappings(initialMappings);
-        setEstimateData(processedData);
-        setFilteredData(processedData);
-        setActiveTab('estimates');
-        showNotification(`Successfully loaded ${processedData.length} items`, 'success');
-      } catch (error: any) {
-        showNotification('Error processing file: ' + error.message, 'error');
-      } finally {
-        setLoading(false);
-      }
+        } catch (error) {
+          showNotification('Error processing file: ' + error.message, 'error');
+          setLoading(false);
+        }
+      }, 100);
     };
     
     reader.readAsArrayBuffer(file);
   }, [generateCostCode]);
 
-  // Update all items when custom mappings change
+  // Update all items when mappings change
   useEffect(() => {
     if (estimateData.length > 0) {
       const updated = estimateData.map(item => ({
@@ -257,7 +375,7 @@ export default function Index() {
   }, [customMappings, generateCostCode]);
 
   // Show notification
-  const showNotification = (message: string, type = 'success') => {
+  const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
@@ -267,19 +385,19 @@ export default function Index() {
     let filtered = [...estimateData];
     
     if (filters.floor !== 'all') {
-      filtered = filtered.filter((item: any) => item.floor === filters.floor);
+      filtered = filtered.filter(item => item.floor === filters.floor);
     }
     if (filters.system !== 'all') {
-      filtered = filtered.filter((item: any) => item.system === filters.system);
+      filtered = filtered.filter(item => item.system === filters.system);
     }
     if (filters.costCode === 'unassigned') {
-      filtered = filtered.filter((item: any) => !item.costCode);
+      filtered = filtered.filter(item => !item.costCode);
     } else if (filters.costCode !== 'all') {
-      filtered = filtered.filter((item: any) => item.costCode === filters.costCode);
+      filtered = filtered.filter(item => item.costCode === filters.costCode);
     }
     if (filters.search) {
       const search = filters.search.toLowerCase();
-      filtered = filtered.filter((item: any) => 
+      filtered = filtered.filter(item => 
         item.materialDesc.toLowerCase().includes(search) ||
         item.itemName.toLowerCase().includes(search) ||
         item.drawing.toLowerCase().includes(search)
@@ -292,7 +410,7 @@ export default function Index() {
   // Auto-assign cost codes
   const autoAssignCostCodes = () => {
     let assigned = 0;
-    const updated = estimateData.map((item: any) => {
+    const updated = estimateData.map(item => {
       if (!item.costCode && item.suggestedCode && item.suggestedCode.confidence >= 0.8) {
         assigned++;
         return { ...item, costCode: item.suggestedCode.code };
@@ -304,37 +422,50 @@ export default function Index() {
     showNotification(`Auto-assigned ${assigned} cost codes with high confidence`, 'success');
   };
 
-  // Assign single code
-  const assignCode = (itemId: number) => {
-    const updated = estimateData.map((item: any) => {
-      if (item.id === itemId && item.suggestedCode) {
-        return { ...item, costCode: item.suggestedCode.code };
-      }
-      return item;
-    });
-    
-    setEstimateData(updated);
-    showNotification('Cost code assigned', 'success');
-  };
-
-  // Update custom mapping
-  const updateMapping = (system: string, costHead: string) => {
-    const newMappings = { ...customMappings };
+  // Update custom mapping with audit trail
+  const updateMapping = (system, costHead, userName = 'user') => {
     const systemLower = system.toLowerCase().trim();
+    const history = mappingHistory[systemLower] || [];
+    const currentMapping = customMappings[systemLower];
+    const autoSuggestion = generateCostCode({ system }).costHead;
+    
+    const newMappings = { ...customMappings };
+    const newHistory = { ...mappingHistory };
     
     if (costHead && costHead !== 'none') {
       newMappings[systemLower] = costHead;
+      newHistory[systemLower] = [
+        ...history,
+        {
+          timestamp: new Date().toISOString(),
+          user: userName,
+          from: currentMapping || autoSuggestion,
+          to: costHead,
+          reason: currentMapping ? 'Manual change' : 'Initial assignment'
+        }
+      ];
     } else {
       delete newMappings[systemLower];
+      newHistory[systemLower] = [
+        ...history,
+        {
+          timestamp: new Date().toISOString(),
+          user: userName,
+          from: currentMapping || autoSuggestion,
+          to: autoSuggestion,
+          reason: 'Reset to auto-detection'
+        }
+      ];
     }
     
     setCustomMappings(newMappings);
-    showNotification(`Updated mapping: ${system} → ${costHead}`, 'success');
+    setMappingHistory(newHistory);
+    showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? autoSuggestion : costHead}`, 'success');
   };
 
   // Export with cost codes
   const exportWithCostCodes = () => {
-    const exportData = filteredData.map((item: any) => ({
+    const exportData = filteredData.map(item => ({
       'SEC': item.suggestedCode?.section || '',
       'ACT': item.suggestedCode?.activity || '',
       'COST HEAD': item.suggestedCode?.costHead || '',
@@ -350,7 +481,8 @@ export default function Index() {
       'Material $': item.materialDollars,
       'Assigned Code': item.costCode || '',
       'Suggested Code': item.suggestedCode?.code || '',
-      'Confidence': item.suggestedCode ? Math.round(item.suggestedCode.confidence * 100) + '%' : ''
+      'Confidence': item.suggestedCode ? Math.round(item.suggestedCode.confidence * 100) + '%' : '',
+      'Source': item.suggestedCode?.source || ''
     }));
     
     const ws = XLSX.utils.json_to_sheet(exportData);
@@ -363,24 +495,23 @@ export default function Index() {
     showNotification('Export completed successfully', 'success');
   };
 
-  // Calculate stats - FIX THE HOURS SUMMATION
+  // Calculate stats
   const stats = {
     totalItems: filteredData.length,
-    codedItems: filteredData.filter((item: any) => item.costCode).length,
-    totalHours: filteredData.reduce((sum: number, item: any) => sum + (item.hours || 0), 0),
-    autoMatched: filteredData.filter((item: any) => item.suggestedCode && item.suggestedCode.confidence >= 0.8).length,
+    codedItems: filteredData.filter(item => item.costCode).length,
+    totalHours: filteredData.reduce((sum, item) => sum + (item.hours || 0), 0),
+    autoMatched: filteredData.filter(item => item.suggestedCode && item.suggestedCode.confidence >= 0.8).length,
     codingPercentage: filteredData.length > 0 
-      ? Math.round((filteredData.filter((item: any) => item.costCode).length / filteredData.length) * 100) 
+      ? Math.round((filteredData.filter(item => item.costCode).length / filteredData.length) * 100) 
       : 0
   };
 
   // Get unique filter values
-  const getUniqueValues = (field: string) => {
-    return [...new Set(estimateData.map((item: any) => item[field]))].filter(Boolean).sort();
+  const getUniqueValues = (field) => {
+    return [...new Set(estimateData.map(item => item[field]))].filter(Boolean).sort();
   };
 
-  // Get unique systems for mapping
-  const uniqueSystems = [...new Set(estimateData.map((item: any) => item.system))].filter(Boolean).sort();
+  const uniqueSystems = [...new Set(estimateData.map(item => item.system))].filter(Boolean).sort();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
@@ -468,7 +599,9 @@ export default function Index() {
                 </div>
                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg">
                   <h3 className="text-sm text-purple-600 font-medium uppercase">Total Hours</h3>
-                  <div className="text-3xl font-bold text-purple-900">{stats.totalHours.toFixed(1)}</div>
+                  <div className="text-3xl font-bold text-purple-900">
+                    {isNaN(stats.totalHours) ? '0' : stats.totalHours.toFixed(1)}
+                  </div>
                   <p className="text-xs text-purple-600 mt-1">Labor hours</p>
                 </div>
                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-lg">
@@ -555,7 +688,7 @@ export default function Index() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.slice(0, 100).map((item: any) => (
+                    {filteredData.slice(0, 100).map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm">{item.drawing}</td>
                         <td className="px-4 py-3 text-sm">{item.system}</td>
@@ -579,7 +712,12 @@ export default function Index() {
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-red-100 text-red-800'
                               }`}
-                              onClick={() => assignCode(item.id)}
+                              onClick={() => {
+                                const updated = estimateData.map(e => 
+                                  e.id === item.id ? {...e, costCode: item.suggestedCode.code} : e
+                                );
+                                setEstimateData(updated);
+                              }}
                             >
                               {item.suggestedCode.code}
                               <span className="ml-1 text-xs opacity-75">
@@ -593,7 +731,12 @@ export default function Index() {
                         <td className="px-4 py-3 text-sm">
                           {!item.costCode && item.suggestedCode && (
                             <button
-                              onClick={() => assignCode(item.id)}
+                              onClick={() => {
+                                const updated = estimateData.map(e => 
+                                  e.id === item.id ? {...e, costCode: item.suggestedCode.code} : e
+                                );
+                                setEstimateData(updated);
+                              }}
                               className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-all"
                             >
                               Assign
@@ -609,16 +752,11 @@ export default function Index() {
                     Showing first 100 of {filteredData.length} items
                   </div>
                 )}
-                {filteredData.length === 0 && (
-                  <div className="p-8 text-center text-gray-500">
-                    No items match the current filters
-                  </div>
-                )}
               </div>
             </>
           )}
 
-          {/* Mapping Tab - NEW! */}
+          {/* Mapping Tab */}
           {activeTab === 'mapping' && estimateData.length > 0 && (
             <div>
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -644,34 +782,72 @@ export default function Index() {
                     {uniqueSystems.map(system => {
                       const systemLower = system.toLowerCase().trim();
                       const currentMapping = customMappings[systemLower];
-                      const itemCount = estimateData.filter((item: any) => item.system === system).length;
+                      const itemCount = estimateData.filter(item => item.system === system).length;
                       const suggestedCode = generateCostCode({ system });
                       const mappedCostHead = currentMapping || suggestedCode.costHead;
+                      const history = mappingHistory[systemLower] || [];
+                      const autoSuggestion = suggestedCode.source === 'default' ? suggestedCode.costHead : 
+                                             suggestedCode.source === 'auto-pattern' ? suggestedCode.costHead : null;
                       
                       return (
                         <tr key={system} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm font-medium">{system}</td>
                           <td className="px-4 py-3 text-sm">
-                            <span className={`px-2 py-1 text-xs rounded font-mono ${
-                              currentMapping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {mappedCostHead}
-                            </span>
+                            <div>
+                              <span className={`px-2 py-1 text-xs rounded font-mono ${
+                                currentMapping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {mappedCostHead}
+                              </span>
+                              {autoSuggestion && autoSuggestion !== mappedCostHead && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Auto-suggested: {autoSuggestion}
+                                </div>
+                              )}
+                              {history.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Last changed by: {history[history.length - 1].user}
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            <select
-                              value={currentMapping || mappedCostHead}
-                              onChange={(e) => updateMapping(system, e.target.value)}
-                              className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            >
-                              <option value="none">Auto-detect</option>
-                              {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
-                                <option key={code} value={code}>{code}</option>
-                              ))}
-                            </select>
+                            {editingSystem === system ? (
+                              <div className="flex gap-2 items-center">
+                                <button
+                                  onClick={() => setShowCostCodeBrowser(true)}
+                                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                >
+                                  Browse All Codes
+                                </button>
+                                <select
+                                  value={currentMapping || mappedCostHead}
+                                  onChange={(e) => {
+                                    updateMapping(system, e.target.value);
+                                    setEditingSystem(null);
+                                  }}
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="none">Auto-detect</option>
+                                  {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
+                                    <option key={code} value={code}>{code}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setEditingSystem(system)}
+                                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                              >
+                                Change
+                              </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {DEFAULT_COST_HEAD_MAPPING[mappedCostHead]?.description || ''}
+                            {DEFAULT_COST_HEAD_MAPPING[mappedCostHead]?.description || 
+                             Object.values(STANDARD_COST_CODES).flatMap(cat => 
+                               Object.values(cat).flat()
+                             ).find(c => c.code === mappedCostHead)?.description || ''}
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold">{itemCount}</td>
                           <td className="px-4 py-3 text-sm">
@@ -679,8 +855,9 @@ export default function Index() {
                               <button
                                 onClick={() => updateMapping(system, 'none')}
                                 className="text-red-600 hover:text-red-800 text-xs"
+                                title={`Reset to auto-detection (${autoSuggestion || 'SNWV'})`}
                               >
-                                Reset
+                                Reset to {autoSuggestion || 'Auto'}
                               </button>
                             )}
                           </td>
@@ -703,19 +880,15 @@ export default function Index() {
           {/* Rules Tab */}
           {activeTab === 'rules' && (
             <div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">📘 SEC-ACT-COST HEAD Structure</h3>
-                <p className="text-blue-800">
-                  Cost codes follow the pattern: <strong>[SEC] [ACT] [COST HEAD]</strong>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">📘 Default Pattern Rules (Read-Only)</h3>
+                <p className="text-amber-800 text-sm">
+                  These are the built-in pattern matching rules used for auto-detection. 
+                  To customize mappings for your project, use the <strong>Mapping</strong> tab.
                 </p>
-                <ul className="mt-2 space-y-1 text-blue-700">
-                  <li>• <strong>SEC</strong>: Section based on floor (01 for Level 01, 02 for Level 02, etc.)</li>
-                  <li>• <strong>ACT</strong>: Activity code (typically 0000)</li>
-                  <li>• <strong>COST HEAD</strong>: System-specific code (SNWV, STRM, DWTR, etc.)</li>
-                </ul>
               </div>
 
-              <h3 className="text-lg font-semibold mb-4">System to Cost Head Mapping</h3>
+              <h3 className="text-lg font-semibold mb-4">System Pattern to Cost Head Rules</h3>
               <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-200">
                 <table className="w-full">
                   <thead className="bg-gray-50">
@@ -723,7 +896,7 @@ export default function Index() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">System Pattern</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Cost Head</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Example</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Example Code</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -744,16 +917,136 @@ export default function Index() {
                   </tbody>
                 </table>
               </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <strong>💡 Tip:</strong> These patterns automatically detect common plumbing systems. 
+                  For project-specific customizations or to override these defaults, go to the Mapping tab 
+                  where you can set custom mappings that take precedence over these rules.
+                </p>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Loading Overlay */}
+        {/* Cost Code Browser Modal */}
+        {showCostCodeBrowser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
+              <div className="p-6 border-b">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold">📋 Standard Cost Code Library</h3>
+                  <button
+                    onClick={() => setShowCostCodeBrowser(false)}
+                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                  >
+                    Close
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">Browse and select from the complete standard cost code database</p>
+              </div>
+
+              <div className="flex h-96">
+                {/* Category Selection */}
+                <div className="w-1/3 border-r bg-gray-50">
+                  <div className="p-4">
+                    <h4 className="font-medium mb-3">Categories</h4>
+                    {Object.keys(STANDARD_COST_CODES).map(category => (
+                      <button
+                        key={category}
+                        onClick={() => {
+                          setSelectedCostCodeCategory(category);
+                          setSelectedSubCategory('');
+                        }}
+                        className={`block w-full text-left px-3 py-2 rounded mb-1 text-sm ${
+                          selectedCostCodeCategory === category 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'hover:bg-gray-200'
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Subcategory Selection */}
+                <div className="w-1/3 border-r bg-gray-25">
+                  <div className="p-4">
+                    <h4 className="font-medium mb-3">Subcategories</h4>
+                    {Object.keys(STANDARD_COST_CODES[selectedCostCodeCategory] || {}).map(subcat => (
+                      <button
+                        key={subcat}
+                        onClick={() => setSelectedSubCategory(subcat)}
+                        className={`block w-full text-left px-3 py-2 rounded mb-1 text-sm ${
+                          selectedSubCategory === subcat 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'hover:bg-gray-200'
+                        }`}
+                      >
+                        {subcat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Code Selection */}
+                <div className="w-1/3 bg-white">
+                  <div className="p-4">
+                    <h4 className="font-medium mb-3">Cost Codes</h4>
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {selectedSubCategory && 
+                       STANDARD_COST_CODES[selectedCostCodeCategory]?.[selectedSubCategory]?.map(codeItem => (
+                        <div key={codeItem.code} className="border rounded p-2 hover:bg-gray-50">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="font-mono font-bold text-sm">{codeItem.code}</span>
+                              <div className="text-xs text-gray-600">{codeItem.description}</div>
+                              <div className="text-xs text-gray-500">{codeItem.units}</div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (editingSystem) {
+                                  updateMapping(editingSystem, codeItem.code);
+                                  setEditingSystem(null);
+                                }
+                                setShowCostCodeBrowser(false);
+                              }}
+                              className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                            >
+                              Select
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading Overlay with Progress */}
         {loading && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-lg">
-              <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-              <p className="mt-4">Processing file...</p>
+            <div className="bg-white p-8 rounded-lg min-w-96">
+              <div className="text-center mb-4">
+                <div className="text-lg font-semibold mb-2">{loadingMessage}</div>
+                <div className="text-sm text-gray-600">{estimatedTime}</div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                <div 
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${loadingProgress}%` }}
+                ></div>
+              </div>
+              
+              <div className="text-center text-sm text-gray-600">
+                {loadingProgress}% Complete
+              </div>
             </div>
           </div>
         )}
