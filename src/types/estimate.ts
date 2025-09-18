@@ -1,0 +1,56 @@
+export interface EstimateItem {
+  id: number;
+  drawing: string;
+  system: string;
+  floor: string;
+  zone: string;
+  symbol: string;
+  estimator: string;
+  materialSpec: string;
+  itemType: string;
+  reportCat: string;
+  trade: string;
+  materialDesc: string;
+  itemName: string;
+  size: string;
+  quantity: number;
+  listPrice: number;
+  materialDollars: number;
+  weight: number;
+  hours: number;
+  laborDollars: number;
+  costCode: string;
+  suggestedCodes: CostCodeSuggestion[];
+}
+
+export interface CostCodeSuggestion {
+  code: string;
+  type: 'material' | 'labor';
+  confidence: number;
+  reason: string;
+}
+
+export interface CostCodeEntry {
+  code: string;
+  description: string;
+  category: 'L' | 'M';
+  keywords: string[];
+}
+
+export interface AutomationRule {
+  pattern: RegExp;
+  field: string;
+  codes: {
+    material?: string;
+    labor?: string;
+  };
+  description: string;
+}
+
+export interface ProjectStats {
+  totalItems: number;
+  totalMaterial: number;
+  totalHours: number;
+  itemsCoded: number;
+  codingCompletion: number;
+}
