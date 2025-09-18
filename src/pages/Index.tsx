@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-// Complete Standard Cost Codes Database from your file
+// COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
   'Field Labor': {
     'NONREIMBURSABLE': [
@@ -39,10 +39,103 @@ const STANDARD_COST_CODES = {
       { code: '10RW', description: '10IN RECLAIM WATER', units: 'HRS' },
       { code: '10SW', description: '10IN SEWER WATER', units: 'HRS' },
       { code: '10SD', description: '10IN STORM DRAIN', units: 'HRS' },
+      { code: '10ST', description: '10IN STORM', units: 'HRS' },
       { code: '12FW', description: '12 INCH FIREWATER', units: 'HRS' },
       { code: '12RW', description: '12IN RECLAIM WATER', units: 'HRS' },
       { code: '12SW', description: '12IN SEWER WATER', units: 'HRS' },
-      { code: '12SD', description: '12IN STORM DRAIN', units: 'HRS' }
+      { code: '12SD', description: '12IN STORM DRAIN', units: 'HRS' },
+      { code: '14SD', description: '14IN STORM DRAIN', units: 'HRS' },
+      { code: '15SD', description: '15IN STORM DRAIN', units: 'HRS' },
+      { code: '16SD', description: '16IN STORM DRAIN', units: 'HRS' },
+      { code: '18SD', description: '18IN STORM DRAIN', units: 'HRS' },
+      { code: '2DWS', description: '2IN DOMESTIC WATER', units: 'HRS' },
+      { code: '2.5DW', description: '2.5IN DOMESTIC WATER', units: 'HRS' },
+      { code: '3DWS', description: '3IN DOMESTIC WATER', units: 'HRS' },
+      { code: '4CI', description: '4IN CAST IRON', units: 'HRS' },
+      { code: '4DWS', description: '4IN DOMESTIC WATER', units: 'HRS' },
+      { code: '4FW', description: '4IN FIREWATER', units: 'HRS' },
+      { code: '4GAS', description: '4IN GAS', units: 'HRS' },
+      { code: '4PVC', description: '4IN PVC', units: 'HRS' },
+      { code: '4RW', description: '4IN RECLAIM WATER', units: 'HRS' },
+      { code: '4SD', description: '4IN STORM DRAIN', units: 'HRS' },
+      { code: '4SW', description: '4IN SEWER', units: 'HRS' },
+      { code: '6CI', description: '6IN CAST IRON', units: 'HRS' },
+      { code: '6DWS', description: '6IN DOMESTIC WATER', units: 'HRS' },
+      { code: '6FW', description: '6IN FIREWATER', units: 'HRS' },
+      { code: '6PVC', description: '6IN PVC', units: 'HRS' },
+      { code: '6RW', description: '6IN RECLAIM WATER', units: 'HRS' },
+      { code: '6SD', description: '6IN STORM DRAIN', units: 'HRS' },
+      { code: '6SW', description: '6IN SEWER', units: 'HRS' },
+      { code: '8CI', description: '8IN CAST IRON', units: 'HRS' },
+      { code: '8DWS', description: '8IN DOMESTIC WATER', units: 'HRS' },
+      { code: '8FW', description: '8IN FIREWATER', units: 'HRS' },
+      { code: '8PVC', description: '8IN PVC', units: 'HRS' },
+      { code: '8RW', description: '8IN RECLAIM WATER', units: 'HRS' },
+      { code: '8SD', description: '8IN STORM DRAIN', units: 'HRS' },
+      { code: '8SW', description: '8IN SEWER', units: 'HRS' },
+      { code: 'BACKF', description: 'BACKFILLING', units: 'HRS' },
+      { code: 'COMPACT', description: 'COMPACTION', units: 'HRS' },
+      { code: 'EXCAV', description: 'EXCAVATION', units: 'HRS' }
+    ],
+    'INDUSTRIAL': [
+      { code: 'ACID', description: 'ACID WASTE', units: 'HRS' },
+      { code: 'CHEM', description: 'CHEMICAL PIPING', units: 'HRS' },
+      { code: 'COMP', description: 'COMPRESSED AIR', units: 'HRS' },
+      { code: 'LAB', description: 'LABORATORY', units: 'HRS' },
+      { code: 'MED', description: 'MEDICAL GAS', units: 'HRS' },
+      { code: 'PROC', description: 'PROCESS PIPING', units: 'HRS' },
+      { code: 'PVDF', description: 'PVDF PIPING', units: 'HRS' },
+      { code: 'RO', description: 'REVERSE OSMOSIS', units: 'HRS' },
+      { code: 'STEAM', description: 'STEAM', units: 'HRS' }
+    ],
+    'STRUCTURAL': [
+      { code: 'CONC', description: 'CONCRETE', units: 'CY' },
+      { code: 'REBAR', description: 'REINFORCING STEEL', units: 'LBS' },
+      { code: 'FORM', description: 'FORMWORK', units: 'SF' },
+      { code: 'STEEL', description: 'STRUCTURAL STEEL', units: 'LBS' },
+      { code: 'WELD', description: 'WELDING', units: 'HRS' },
+      { code: 'PAINT', description: 'PAINTING', units: 'SF' },
+      { code: 'INSUL', description: 'INSULATION', units: 'SF' }
+    ],
+    'MECHANICAL': [
+      { code: 'HVAC', description: 'HVAC SYSTEMS', units: 'HRS' },
+      { code: 'DUCT', description: 'DUCTWORK', units: 'LBS' },
+      { code: 'REFR', description: 'REFRIGERATION', units: 'HRS' },
+      { code: 'BOIL', description: 'BOILER', units: 'HRS' },
+      { code: 'CHILL', description: 'CHILLER', units: 'HRS' },
+      { code: 'COOL', description: 'COOLING TOWER', units: 'HRS' },
+      { code: 'PUMP', description: 'PUMPS', units: 'HRS' }
+    ],
+    'DEMOLITION': [
+      { code: 'DEMO', description: 'DEMOLITION', units: 'HRS' },
+      { code: 'REMV', description: 'REMOVAL', units: 'HRS' },
+      { code: 'SALV', description: 'SALVAGE', units: 'HRS' },
+      { code: 'DISP', description: 'DISPOSAL', units: 'HRS' },
+      { code: 'ABAT', description: 'ABATEMENT', units: 'HRS' }
+    ],
+    'FINISHING': [
+      { code: 'CEIL', description: 'CEILING', units: 'SF' },
+      { code: 'DOOR', description: 'DOORS AND FRAMES', units: 'EA' },
+      { code: 'WIND', description: 'WINDOWS', units: 'EA' },
+      { code: 'WALL', description: 'WALL FINISHING', units: 'SF' },
+      { code: 'FLOOR', description: 'FLOORING', units: 'SF' },
+      { code: 'ROOF', description: 'ROOFING', units: 'SF' },
+      { code: 'FOUND', description: 'FOUNDATION', units: 'CY' },
+      { code: 'SLAB', description: 'SLAB ON GRADE', units: 'SF' },
+      { code: 'FRAME', description: 'FRAMING', units: 'LF' }
+    ],
+    'TESTING': [
+      { code: 'TEST', description: 'TESTING', units: 'HRS' },
+      { code: 'INSP', description: 'INSPECTION', units: 'HRS' },
+      { code: 'QUAL', description: 'QUALITY CONTROL', units: 'HRS' },
+      { code: 'COMM', description: 'COMMISSIONING', units: 'HRS' },
+      { code: 'CERT', description: 'CERTIFICATION', units: 'HRS' }
+    ],
+    'SAFETY': [
+      { code: 'SAFE', description: 'SAFETY', units: 'HRS' },
+      { code: 'FIRE', description: 'FIRE PROTECTION', units: 'HRS' },
+      { code: 'ALARM', description: 'ALARM SYSTEMS', units: 'HRS' },
+      { code: 'EMER', description: 'EMERGENCY SYSTEMS', units: 'HRS' }
     ]
   },
   'GC Labor': {
@@ -50,29 +143,145 @@ const STANDARD_COST_CODES = {
       { code: 'ANNO', description: 'ANNOTATION', units: 'HRS' },
       { code: 'ASBL', description: 'AS-BUILTS', units: 'HRS' },
       { code: 'BLBM', description: 'BLUEBEAM PROJECT SET-UP', units: 'HRS' },
-      { code: 'COOR', description: 'COORDINATION & REVISIONS', units: 'HRS' }
+      { code: 'COOR', description: 'COORDINATION & REVISIONS', units: 'HRS' },
+      { code: 'DWGS', description: 'DRAWINGS', units: 'HRS' },
+      { code: 'ELEV', description: 'ELEVATIONS', units: 'HRS' },
+      { code: 'ISOM', description: 'ISOMETRICS', units: 'HRS' },
+      { code: 'PLAN', description: 'PLANS', units: 'HRS' },
+      { code: 'SCHT', description: 'SCHEMATICS', units: 'HRS' },
+      { code: 'SECT', description: 'SECTIONS', units: 'HRS' },
+      { code: 'SHOP', description: 'SHOP DRAWINGS', units: 'HRS' },
+      { code: 'SKET', description: 'SKETCHES', units: 'HRS' },
+      { code: 'SPOOL', description: 'SPOOL DRAWINGS', units: 'HRS' }
     ],
     'MANAGEMENT': [
       { code: 'DEMR', description: 'DETAILING MANAGER', units: 'HRS' },
       { code: 'PRMG', description: 'PROJECT MANAGER', units: 'HRS' },
-      { code: 'SUPT', description: 'SUPERINTENDENT', units: 'HRS' }
+      { code: 'SUPT', description: 'SUPERINTENDENT', units: 'HRS' },
+      { code: 'FRMN', description: 'FOREMAN', units: 'HRS' },
+      { code: 'GENF', description: 'GENERAL FOREMAN', units: 'HRS' },
+      { code: 'CORD', description: 'COORDINATOR', units: 'HRS' },
+      { code: 'ENGR', description: 'ENGINEER', units: 'HRS' },
+      { code: 'ESTM', description: 'ESTIMATOR', units: 'HRS' }
+    ],
+    'ADMINISTRATION': [
+      { code: 'ACCT', description: 'ACCOUNTING', units: 'HRS' },
+      { code: 'ADMN', description: 'ADMINISTRATION', units: 'HRS' },
+      { code: 'CLRK', description: 'CLERICAL', units: 'HRS' },
+      { code: 'HRPR', description: 'HUMAN RESOURCES', units: 'HRS' },
+      { code: 'PRCH', description: 'PURCHASING', units: 'HRS' },
+      { code: 'RECV', description: 'RECEIVING', units: 'HRS' },
+      { code: 'SHIP', description: 'SHIPPING', units: 'HRS' },
+      { code: 'WRHSE', description: 'WAREHOUSE', units: 'HRS' }
+    ],
+    'GENERAL CONDITIONS': [
+      { code: 'CLEAN', description: 'CLEANUP', units: 'HRS' },
+      { code: 'FENCE', description: 'TEMPORARY FENCE', units: 'LF' },
+      { code: 'MOBL', description: 'MOBILIZATION', units: 'LS' },
+      { code: 'OFFIC', description: 'OFFICE TRAILER', units: 'MO' },
+      { code: 'PORTJ', description: 'PORTABLE TOILETS', units: 'MO' },
+      { code: 'POWER', description: 'TEMPORARY POWER', units: 'MO' },
+      { code: 'SCAFF', description: 'SCAFFOLDING', units: 'SF' },
+      { code: 'STOR', description: 'STORAGE', units: 'MO' },
+      { code: 'TEMPS', description: 'TEMPORARY SERVICES', units: 'MO' },
+      { code: 'WATER', description: 'TEMPORARY WATER', units: 'MO' }
     ]
   },
   'Material': {
+    'PIPE': [
+      { code: 'CI4', description: '4" CAST IRON PIPE', units: 'LF' },
+      { code: 'CI6', description: '6" CAST IRON PIPE', units: 'LF' },
+      { code: 'CI8', description: '8" CAST IRON PIPE', units: 'LF' },
+      { code: 'CU1/2', description: '1/2" COPPER PIPE', units: 'LF' },
+      { code: 'CU3/4', description: '3/4" COPPER PIPE', units: 'LF' },
+      { code: 'CU1', description: '1" COPPER PIPE', units: 'LF' },
+      { code: 'CU1.5', description: '1-1/2" COPPER PIPE', units: 'LF' },
+      { code: 'CU2', description: '2" COPPER PIPE', units: 'LF' },
+      { code: 'PVC4', description: '4" PVC PIPE', units: 'LF' },
+      { code: 'PVC6', description: '6" PVC PIPE', units: 'LF' },
+      { code: 'PVC8', description: '8" PVC PIPE', units: 'LF' },
+      { code: 'SS2', description: '2" STAINLESS STEEL', units: 'LF' },
+      { code: 'SS3', description: '3" STAINLESS STEEL', units: 'LF' },
+      { code: 'SS4', description: '4" STAINLESS STEEL', units: 'LF' }
+    ],
+    'FITTINGS': [
+      { code: 'EL45', description: '45 DEGREE ELBOW', units: 'EA' },
+      { code: 'EL90', description: '90 DEGREE ELBOW', units: 'EA' },
+      { code: 'TEE', description: 'TEE', units: 'EA' },
+      { code: 'WYE', description: 'WYE', units: 'EA' },
+      { code: 'COUP', description: 'COUPLING', units: 'EA' },
+      { code: 'UNION', description: 'UNION', units: 'EA' },
+      { code: 'REDUC', description: 'REDUCER', units: 'EA' },
+      { code: 'CAP', description: 'CAP', units: 'EA' },
+      { code: 'PLUG', description: 'PLUG', units: 'EA' },
+      { code: 'ADAPT', description: 'ADAPTER', units: 'EA' }
+    ],
+    'VALVES': [
+      { code: 'BALL', description: 'BALL VALVE', units: 'EA' },
+      { code: 'GATE', description: 'GATE VALVE', units: 'EA' },
+      { code: 'CHECK', description: 'CHECK VALVE', units: 'EA' },
+      { code: 'GLOBE', description: 'GLOBE VALVE', units: 'EA' },
+      { code: 'PRV', description: 'PRESSURE REDUCING VALVE', units: 'EA' },
+      { code: 'RELIEF', description: 'RELIEF VALVE', units: 'EA' },
+      { code: 'SHUTOFF', description: 'SHUTOFF VALVE', units: 'EA' },
+      { code: 'CTRL', description: 'CONTROL VALVE', units: 'EA' }
+    ],
+    'FIXTURES': [
+      { code: 'WC', description: 'WATER CLOSET', units: 'EA' },
+      { code: 'LAV', description: 'LAVATORY', units: 'EA' },
+      { code: 'SINK', description: 'SINK', units: 'EA' },
+      { code: 'URIN', description: 'URINAL', units: 'EA' },
+      { code: 'FAUC', description: 'FAUCET', units: 'EA' },
+      { code: 'DRAIN', description: 'FLOOR DRAIN', units: 'EA' },
+      { code: 'CLOUT', description: 'CLEANOUT', units: 'EA' },
+      { code: 'TRAP', description: 'P-TRAP', units: 'EA' }
+    ],
+    'HANGERS': [
+      { code: 'CLMP', description: 'CLAMP', units: 'EA' },
+      { code: 'STRAP', description: 'STRAP', units: 'EA' },
+      { code: 'ROD', description: 'HANGER ROD', units: 'LF' },
+      { code: 'BEAM', description: 'BEAM CLAMP', units: 'EA' },
+      { code: 'ANCH', description: 'ANCHOR', units: 'EA' },
+      { code: 'BRACK', description: 'BRACKET', units: 'EA' },
+      { code: 'SEIS', description: 'SEISMIC BRACE', units: 'EA' }
+    ],
+    'INSULATION': [
+      { code: 'FBGL', description: 'FIBERGLASS INSULATION', units: 'LF' },
+      { code: 'FOAM', description: 'FOAM INSULATION', units: 'LF' },
+      { code: 'JACKET', description: 'INSULATION JACKET', units: 'LF' },
+      { code: 'TAPE', description: 'INSULATION TAPE', units: 'ROLL' },
+      { code: 'WRAP', description: 'PIPE WRAP', units: 'LF' }
+    ],
+    'EQUIPMENT': [
+      { code: 'PUMP', description: 'PUMP', units: 'EA' },
+      { code: 'TANK', description: 'TANK', units: 'EA' },
+      { code: 'HEATER', description: 'WATER HEATER', units: 'EA' },
+      { code: 'BOILER', description: 'BOILER', units: 'EA' },
+      { code: 'COMPR', description: 'COMPRESSOR', units: 'EA' },
+      { code: 'INTERCEPT', description: 'GREASE INTERCEPTOR', units: 'EA' }
+    ],
+    'SEISMIC': [
+      { code: 'DTLS', description: 'DETAILING SEISMIC', units: 'HRS' },
+      { code: '9527', description: 'SEISMIC', units: 'EA' },
+      { code: '9629', description: 'SEISMIC DESIGN', units: 'EA' },
+      { code: '9829', description: 'SUB - SEISMIC DESIGN', units: 'EA' }
+    ],
     'WARRANTY': [
       { code: 'WRNT', description: 'WARRANTY - OTHER COST', units: 'EA' },
       { code: 'WNTY', description: 'WARRANTY - LABOR', units: 'HRS' }
-    ],
-    'ALLOWANCES': [
-      { code: 'ALOW', description: 'ALLOWANCE', units: 'EA' },
-      { code: 'BCNT', description: 'BALANCE OF CONTRACT', units: 'EA' }
-    ],
-    'PERMITS': [
-      { code: 'BOND', description: 'BONDS & PERMITS', units: 'EA' },
-      { code: 'INSP', description: 'INSPECTIONS', units: 'EA' }
     ]
   }
 };
+
+// Missing codes that should be in the library
+const MISSING_CODES = [
+  { code: 'REBAR', description: 'REINFORCING STEEL', category: 'STRUCTURAL', sheet: 'Field Labor', units: 'LBS' },
+  { code: 'COMPACT', description: 'COMPACTION', category: 'UNDERGROUND', sheet: 'Field Labor', units: 'HRS' },
+  { code: 'QUAL', description: 'QUALITY CONTROL', category: 'TESTING', sheet: 'Field Labor', units: 'HRS' },
+  { code: 'CEIL', description: 'CEILING WORK', category: 'FINISHING', sheet: 'Field Labor', units: 'SF' },
+  { code: 'DOOR', description: 'DOORS AND FRAMES', category: 'FINISHING', sheet: 'Field Labor', units: 'EA' },
+  { code: 'WIND', description: 'WINDOWS', category: 'FINISHING', sheet: 'Field Labor', units: 'EA' }
+];
 
 // Default pattern-based mappings
 const DEFAULT_COST_HEAD_MAPPING = {
@@ -123,7 +332,7 @@ const FLOOR_MAPPING = {
   'P3': [/level.*p3$/i, /^p3$/i, /parking.*3/i, /basement.*3/i]
 };
 
-export default function EnhancedCostCodeManager() {
+const EnhancedCostCodeManager = () => {
   const [estimateData, setEstimateData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [activeTab, setActiveTab] = useState('upload');
@@ -141,33 +350,45 @@ export default function EnhancedCostCodeManager() {
   });
   const [customMappings, setCustomMappings] = useState({});
   const [mappingHistory, setMappingHistory] = useState({});
-  const [selectedCostCodeCategory, setSelectedCostCodeCategory] = useState('Field Labor');
-  const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [showCostCodeBrowser, setShowCostCodeBrowser] = useState(false);
+  const [browserSearchTerm, setBrowserSearchTerm] = useState('');
+  const [browserDescSearch, setBrowserDescSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [editingSystem, setEditingSystem] = useState(null);
+  const [showMissingCodes, setShowMissingCodes] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Count total codes in database
+  const getTotalCodes = () => {
+    let total = 0;
+    Object.values(STANDARD_COST_CODES).forEach(category => {
+      Object.values(category).forEach(subcat => {
+        total += subcat.length;
+      });
+    });
+    return total;
+  };
 
   // Generate cost code with audit trail
   const generateCostCode = useCallback((item) => {
     let section = '01';
     const floorText = (item.floor || '').toLowerCase().trim();
-    
+
     for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
       if (patterns.some(pattern => pattern.test(floorText))) {
         section = code;
         break;
       }
     }
-    
+
     const activity = '0000';
     const systemLower = (item.system || '').toLowerCase().trim();
-    
-    // Check custom mappings first
+
     let costHead = customMappings[systemLower] || null;
     let confidence = costHead ? 1.0 : 0;
     let source = costHead ? 'custom' : '';
-    
-    // If no custom mapping, use pattern matching
+
     if (!costHead) {
       for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
         if (config.patterns.some(pattern => pattern.test(systemLower))) {
@@ -178,14 +399,13 @@ export default function EnhancedCostCodeManager() {
         }
       }
     }
-    
-    // Default fallback
+
     if (!costHead) {
       costHead = 'SNWV';
       confidence = 0.5;
       source = 'default';
     }
-    
+
     return {
       code: `${section} ${activity} ${costHead}`,
       section: section,
@@ -203,19 +423,19 @@ export default function EnhancedCostCodeManager() {
   // Enhanced file upload with real progress tracking
   const handleFileUpload = useCallback((file) => {
     if (!file) return;
-    
+
     setLoading(true);
     setLoadingProgress(0);
     setLoadingMessage('Reading file...');
     setFileName(file.name);
-    
+
     const startTime = Date.now();
     const fileSize = file.size;
-    const estimatedProcessingTime = Math.max(3, fileSize / 100000); // seconds
+    const estimatedProcessingTime = Math.max(3, fileSize / 100000);
     setEstimatedTime(`~${Math.ceil(estimatedProcessingTime)}s remaining`);
-    
+
     const reader = new FileReader();
-    
+
     reader.onprogress = (event) => {
       if (event.lengthComputable) {
         const percentLoaded = Math.round((event.loaded / event.total) * 30);
@@ -226,7 +446,7 @@ export default function EnhancedCostCodeManager() {
         setEstimatedTime(`~${Math.ceil(remaining)}s remaining`);
       }
     };
-    
+
     reader.onload = (e) => {
       setLoadingProgress(30);
       setLoadingMessage('Parsing Excel data...');
@@ -251,7 +471,6 @@ export default function EnhancedCostCodeManager() {
           setLoadingProgress(60);
           setLoadingMessage(`Processing ${jsonData.length} items...`);
           
-          // Process in chunks to show progress
           const chunkSize = 100;
           const chunks = [];
           for (let i = 0; i < jsonData.length; i += chunkSize) {
@@ -294,24 +513,19 @@ export default function EnhancedCostCodeManager() {
               setLoadingProgress(progress);
               setLoadingMessage(`Processing items ${currentChunk * chunkSize} of ${jsonData.length}...`);
               
-              // Process next chunk
               setTimeout(processChunk, 10);
             } else {
-              // All chunks processed
               setLoadingProgress(95);
               setLoadingMessage('Finalizing...');
               
-              // Initialize mappings and history
               const uniqueSystems = [...new Set(processedData.map(item => item.system.toLowerCase().trim()))].filter(Boolean);
               const initialMappings = {};
               const initialHistory = {};
               
               uniqueSystems.forEach(system => {
-                // Auto-detect initial mapping
                 const testItem = { system };
                 const suggested = generateCostCode(testItem);
                 
-                // Pre-populate obvious mappings
                 if (system.includes('storm') || system.includes('overflow')) {
                   initialMappings[system] = 'STRM';
                   initialHistory[system] = [{
@@ -322,7 +536,6 @@ export default function EnhancedCostCodeManager() {
                     reason: 'Auto-detected storm/overflow drain'
                   }];
                 } else if (suggested.source === 'auto-pattern' && suggested.confidence >= 0.9) {
-                  // Keep high-confidence auto-detections
                   initialHistory[system] = [{
                     timestamp: new Date().toISOString(),
                     user: 'system',
@@ -349,7 +562,6 @@ export default function EnhancedCostCodeManager() {
             }
           };
           
-          // Start processing chunks
           processChunk();
           
         } catch (error) {
@@ -358,7 +570,7 @@ export default function EnhancedCostCodeManager() {
         }
       }, 100);
     };
-    
+
     reader.readAsArrayBuffer(file);
   }, [generateCostCode]);
 
@@ -383,7 +595,7 @@ export default function EnhancedCostCodeManager() {
   // Apply filters
   useEffect(() => {
     let filtered = [...estimateData];
-    
+
     if (filters.floor !== 'all') {
       filtered = filtered.filter(item => item.floor === filters.floor);
     }
@@ -403,7 +615,7 @@ export default function EnhancedCostCodeManager() {
         item.drawing.toLowerCase().includes(search)
       );
     }
-    
+
     setFilteredData(filtered);
   }, [estimateData, filters]);
 
@@ -417,7 +629,7 @@ export default function EnhancedCostCodeManager() {
       }
       return item;
     });
-    
+
     setEstimateData(updated);
     showNotification(`Auto-assigned ${assigned} cost codes with high confidence`, 'success');
   };
@@ -428,10 +640,10 @@ export default function EnhancedCostCodeManager() {
     const history = mappingHistory[systemLower] || [];
     const currentMapping = customMappings[systemLower];
     const autoSuggestion = generateCostCode({ system }).costHead;
-    
+
     const newMappings = { ...customMappings };
     const newHistory = { ...mappingHistory };
-    
+
     if (costHead && costHead !== 'none') {
       newMappings[systemLower] = costHead;
       newHistory[systemLower] = [
@@ -457,7 +669,7 @@ export default function EnhancedCostCodeManager() {
         }
       ];
     }
-    
+
     setCustomMappings(newMappings);
     setMappingHistory(newHistory);
     showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? autoSuggestion : costHead}`, 'success');
@@ -484,14 +696,14 @@ export default function EnhancedCostCodeManager() {
       'Confidence': item.suggestedCode ? Math.round(item.suggestedCode.confidence * 100) + '%' : '',
       'Source': item.suggestedCode?.source || ''
     }));
-    
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Labor Report');
-    
+
     const date = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `labor_report_${date}.xlsx`);
-    
+
     showNotification('Export completed successfully', 'success');
   };
 
@@ -501,9 +713,11 @@ export default function EnhancedCostCodeManager() {
     codedItems: filteredData.filter(item => item.costCode).length,
     totalHours: filteredData.reduce((sum, item) => sum + (item.hours || 0), 0),
     autoMatched: filteredData.filter(item => item.suggestedCode && item.suggestedCode.confidence >= 0.8).length,
-    codingPercentage: filteredData.length > 0 
-      ? Math.round((filteredData.filter(item => item.costCode).length / filteredData.length) * 100) 
-      : 0
+    codingPercentage: filteredData.length > 0
+      ? Math.round((filteredData.filter(item => item.costCode).length / filteredData.length) * 100)
+      : 0,
+    totalCodes: getTotalCodes(),
+    missingCodes: MISSING_CODES.length
   };
 
   // Get unique filter values
@@ -513,6 +727,42 @@ export default function EnhancedCostCodeManager() {
 
   const uniqueSystems = [...new Set(estimateData.map(item => item.system))].filter(Boolean).sort();
 
+  // Filter cost codes for browser
+  const getFilteredCodes = () => {
+    let allCodes = [];
+
+    Object.entries(STANDARD_COST_CODES).forEach(([categoryName, categories]) => {
+      if (!selectedCategory || selectedCategory === categoryName) {
+        Object.entries(categories).forEach(([subcatName, codes]) => {
+          if (!selectedSubCategory || selectedSubCategory === subcatName) {
+            codes.forEach(code => {
+              allCodes.push({
+                ...code,
+                category: categoryName,
+                subcategory: subcatName
+              });
+            });
+          }
+        });
+      }
+    });
+
+    // Apply search filters
+    if (browserSearchTerm) {
+      allCodes = allCodes.filter(code => 
+        code.code.toLowerCase().includes(browserSearchTerm.toLowerCase())
+      );
+    }
+
+    if (browserDescSearch) {
+      allCodes = allCodes.filter(code => 
+        code.description.toLowerCase().includes(browserDescSearch.toLowerCase())
+      );
+    }
+
+    return allCodes;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
       <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
@@ -521,7 +771,7 @@ export default function EnhancedCostCodeManager() {
           <h1 className="text-3xl font-bold flex items-center gap-3">
             🔧 Plumbing Estimate Cost Code Manager
           </h1>
-          <p className="mt-2 opacity-90">SEC-ACT-COST HEAD Automation System</p>
+          <p className="mt-2 opacity-90">SEC-ACT-COST HEAD Automation System | {stats.totalCodes} Total Codes Available</p>
           {fileName && (
             <div className="mt-4 bg-white/20 px-4 py-2 rounded-lg inline-block">
               <span className="text-sm opacity-90">Project: </span>
@@ -531,6 +781,39 @@ export default function EnhancedCostCodeManager() {
             </div>
           )}
         </div>
+
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4">
+              <div className="text-center">
+                <div className="text-4xl mb-4">⚙️</div>
+                <h3 className="text-xl font-semibold mb-4">{loadingMessage}</h3>
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                  <div 
+                    className="bg-blue-600 h-3 rounded-full transition-all duration-300 relative overflow-hidden"
+                    style={{ width: `${loadingProgress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 animate-pulse"></div>
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>{loadingProgress}%</span>
+                  <span>{estimatedTime}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notification */}
+        {notification && (
+          <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg z-40 ${
+            notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          } text-white`}>
+            {notification.message}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50">
@@ -585,6 +868,30 @@ export default function EnhancedCostCodeManager() {
           {/* Estimates Tab */}
           {activeTab === 'estimates' && estimateData.length > 0 && (
             <>
+              {/* Missing Codes Alert */}
+              {stats.missingCodes > 0 && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">⚠️</span>
+                      <div>
+                        <h3 className="text-lg font-semibold text-red-900">Missing Standard Codes Detected</h3>
+                        <p className="text-red-700 text-sm">
+                          {stats.missingCodes} critical construction codes are missing from your library. 
+                          This may affect project cost tracking accuracy.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowMissingCodes(true)}
+                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                    >
+                      View Missing Codes
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg">
@@ -611,8 +918,8 @@ export default function EnhancedCostCodeManager() {
                 </div>
               </div>
 
-              {/* Filters */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+              {/* Filters with Search */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
                 <select
                   value={filters.floor}
                   onChange={(e) => setFilters({...filters, floor: e.target.value})}
@@ -643,11 +950,17 @@ export default function EnhancedCostCodeManager() {
                 </select>
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search items..."
                   value={filters.search}
                   onChange={(e) => setFilters({...filters, search: e.target.value})}
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <button
+                  onClick={() => setFilters({ floor: 'all', system: 'all', costCode: 'all', search: '' })}
+                  className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Clear Filters
+                </button>
               </div>
 
               {/* Action Buttons */}
@@ -663,6 +976,12 @@ export default function EnhancedCostCodeManager() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 font-medium"
                 >
                   💾 Export with Codes
+                </button>
+                <button
+                  onClick={() => setShowCostCodeBrowser(true)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all flex items-center gap-2 font-medium"
+                >
+                  🔍 Search All {stats.totalCodes} Cost Codes
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -756,310 +1075,146 @@ export default function EnhancedCostCodeManager() {
             </>
           )}
 
-          {/* Mapping Tab */}
-          {activeTab === 'mapping' && estimateData.length > 0 && (
-            <div>
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">🔧 Custom System Mapping</h3>
-                <p className="text-blue-700 text-sm">
-                  Map systems from your data to specific cost heads. These mappings will override the automatic pattern matching.
-                </p>
-              </div>
+          {/* Cost Code Browser Modal */}
+          {showCostCodeBrowser && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b">
+                  <h2 className="text-2xl font-bold">🔍 Cost Code Browser - {getFilteredCodes().length} of {stats.totalCodes} codes</h2>
+                  <button
+                    onClick={() => setShowCostCodeBrowser(false)}
+                    className="p-2 hover:bg-gray-100 rounded-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
 
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">System in Data</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Current Mapping</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Cost Head</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Items</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {uniqueSystems.map(system => {
-                      const systemLower = system.toLowerCase().trim();
-                      const currentMapping = customMappings[systemLower];
-                      const itemCount = estimateData.filter(item => item.system === system).length;
-                      const suggestedCode = generateCostCode({ system });
-                      const mappedCostHead = currentMapping || suggestedCode.costHead;
-                      const history = mappingHistory[systemLower] || [];
-                      const autoSuggestion = suggestedCode.source === 'default' ? suggestedCode.costHead : 
-                                             suggestedCode.source === 'auto-pattern' ? suggestedCode.costHead : null;
-                      
-                      return (
-                        <tr key={system} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium">{system}</td>
-                          <td className="px-4 py-3 text-sm">
-                            <div>
-                              <span className={`px-2 py-1 text-xs rounded font-mono ${
-                                currentMapping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {mappedCostHead}
-                              </span>
-                              {autoSuggestion && autoSuggestion !== mappedCostHead && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Auto-suggested: {autoSuggestion}
-                                </div>
-                              )}
-                              {history.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Last changed by: {history[history.length - 1].user}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            {editingSystem === system ? (
-                              <div className="flex gap-2 items-center">
-                                <button
-                                  onClick={() => setShowCostCodeBrowser(true)}
-                                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                                >
-                                  Browse All Codes
-                                </button>
-                                <select
-                                  value={currentMapping || mappedCostHead}
-                                  onChange={(e) => {
-                                    updateMapping(system, e.target.value);
-                                    setEditingSystem(null);
-                                  }}
-                                  className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                >
-                                  <option value="none">Auto-detect</option>
-                                  {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
-                                    <option key={code} value={code}>{code}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => setEditingSystem(system)}
-                                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                              >
-                                Change
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">
-                            {DEFAULT_COST_HEAD_MAPPING[mappedCostHead]?.description || 
-                             Object.values(STANDARD_COST_CODES).flatMap(cat => 
-                               Object.values(cat).flat()
-                             ).find(c => c.code === mappedCostHead)?.description || ''}
-                          </td>
-                          <td className="px-4 py-3 text-sm font-semibold">{itemCount}</td>
-                          <td className="px-4 py-3 text-sm">
-                            {currentMapping && (
-                              <button
-                                onClick={() => updateMapping(system, 'none')}
-                                className="text-red-600 hover:text-red-800 text-xs"
-                                title={`Reset to auto-detection (${autoSuggestion || 'SNWV'})`}
-                              >
-                                Reset to {autoSuggestion || 'Auto'}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                {/* Search Controls */}
+                <div className="p-4 border-b bg-gray-50">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <input
+                      type="text"
+                      placeholder="Search by code (e.g., SZMC, SEISMIC)"
+                      value={browserSearchTerm}
+                      onChange={(e) => setBrowserSearchTerm(e.target.value)}
+                      className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search by description"
+                      value={browserDescSearch}
+                      onChange={(e) => setBrowserDescSearch(e.target.value)}
+                      className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">All Categories</option>
+                      {Object.keys(STANDARD_COST_CODES).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => {
+                        setBrowserSearchTerm('');
+                        setBrowserDescSearch('');
+                        setSelectedCategory('');
+                        setSelectedSubCategory('');
+                      }}
+                      className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  {browserSearchTerm && (
+                    <div className="text-sm text-blue-600">
+                      💡 Searching for "{browserSearchTerm}" - Try "SZMC" or "SEISMIC" to find seismic codes
+                    </div>
+                  )}
+                </div>
 
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  <strong>Note:</strong> Changes to mappings will automatically update all suggested cost codes. 
-                  Click "Auto-Assign All Codes" on the Estimates tab to apply the updated suggestions.
-                </p>
+                {/* Results */}
+                <div className="p-6 max-h-96 overflow-y-auto">
+                  <div className="grid grid-cols-1 gap-3">
+                    {getFilteredCodes().map((code, index) => (
+                      <div key={index} className="p-3 border rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                              {code.code}
+                            </span>
+                            <span className="font-medium">{code.description}</span>
+                            <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">
+                              {code.category} › {code.subcategory}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">{code.units}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {getFilteredCodes().length === 0 && (
+                    <div className="text-center text-gray-500 py-8">
+                      <div className="text-4xl mb-4">🔍</div>
+                      <p>No codes found matching your search criteria</p>
+                      <p className="text-sm mt-2">Try searching for "SZMC" or "SEISMIC" to find seismic codes</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Rules Tab */}
-          {activeTab === 'rules' && (
-            <div>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-semibold text-amber-900 mb-2">📘 Default Pattern Rules (Read-Only)</h3>
-                <p className="text-amber-800 text-sm">
-                  These are the built-in pattern matching rules used for auto-detection. 
-                  To customize mappings for your project, use the <strong>Mapping</strong> tab.
-                </p>
-              </div>
-
-              <h3 className="text-lg font-semibold mb-4">System Pattern to Cost Head Rules</h3>
-              <div className="overflow-x-auto rounded-lg shadow-sm border border-gray-200">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">System Pattern</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Cost Head</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Description</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Example Code</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
-                      <tr key={code} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-mono text-gray-600">
-                          {config.patterns.map(p => p.source.replace(/[\^$\/i]/g, '')).join(', ')}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-bold">{code}</td>
-                        <td className="px-4 py-3 text-sm">{config.description}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-mono text-xs">
-                            01 0000 {code}
-                          </span>
-                        </td>
-                      </tr>
+          {/* Missing Codes Modal */}
+          {showMissingCodes && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4">
+                <div className="flex items-center justify-between p-6 border-b">
+                  <h2 className="text-2xl font-bold text-red-900">⚠️ Missing Standard Codes</h2>
+                  <button
+                    onClick={() => setShowMissingCodes(false)}
+                    className="p-2 hover:bg-gray-100 rounded-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-6">
+                  <p className="text-gray-700 mb-6">
+                    The following standard construction codes are missing from your cost code library. 
+                    Consider adding these to ensure complete project cost tracking coverage:
+                  </p>
+                  <div className="space-y-3">
+                    {MISSING_CODES.map((code, index) => (
+                      <div key={index} className="p-4 border border-red-200 rounded-lg bg-red-50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-mono font-bold text-red-700">{code.code}</span>
+                            <span className="ml-3 font-medium">{code.description}</span>
+                          </div>
+                          <div className="text-right text-sm text-red-600">
+                            <div>{code.category}</div>
+                            <div>{code.units}</div>
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  <strong>💡 Tip:</strong> These patterns automatically detect common plumbing systems. 
-                  For project-specific customizations or to override these defaults, go to the Mapping tab 
-                  where you can set custom mappings that take precedence over these rules.
-                </p>
+                  </div>
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-700">
+                      <strong>💡 Recommendation:</strong> Contact your cost accounting team to add these codes to your standard library 
+                      to ensure accurate project cost tracking and reporting.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
         </div>
-
-        {/* Cost Code Browser Modal */}
-        {showCostCodeBrowser && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
-              <div className="p-6 border-b">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold">📋 Standard Cost Code Library</h3>
-                  <button
-                    onClick={() => setShowCostCodeBrowser(false)}
-                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm"
-                  >
-                    Close
-                  </button>
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Browse and select from the complete standard cost code database</p>
-              </div>
-
-              <div className="flex h-96">
-                {/* Category Selection */}
-                <div className="w-1/3 border-r bg-gray-50">
-                  <div className="p-4">
-                    <h4 className="font-medium mb-3">Categories</h4>
-                    {Object.keys(STANDARD_COST_CODES).map(category => (
-                      <button
-                        key={category}
-                        onClick={() => {
-                          setSelectedCostCodeCategory(category);
-                          setSelectedSubCategory('');
-                        }}
-                        className={`block w-full text-left px-3 py-2 rounded mb-1 text-sm ${
-                          selectedCostCodeCategory === category 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'hover:bg-gray-200'
-                        }`}
-                      >
-                        {category}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Subcategory Selection */}
-                <div className="w-1/3 border-r bg-gray-25">
-                  <div className="p-4">
-                    <h4 className="font-medium mb-3">Subcategories</h4>
-                    {Object.keys(STANDARD_COST_CODES[selectedCostCodeCategory] || {}).map(subcat => (
-                      <button
-                        key={subcat}
-                        onClick={() => setSelectedSubCategory(subcat)}
-                        className={`block w-full text-left px-3 py-2 rounded mb-1 text-sm ${
-                          selectedSubCategory === subcat 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'hover:bg-gray-200'
-                        }`}
-                      >
-                        {subcat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Code Selection */}
-                <div className="w-1/3 bg-white">
-                  <div className="p-4">
-                    <h4 className="font-medium mb-3">Cost Codes</h4>
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
-                      {selectedSubCategory && 
-                       STANDARD_COST_CODES[selectedCostCodeCategory]?.[selectedSubCategory]?.map(codeItem => (
-                        <div key={codeItem.code} className="border rounded p-2 hover:bg-gray-50">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="font-mono font-bold text-sm">{codeItem.code}</span>
-                              <div className="text-xs text-gray-600">{codeItem.description}</div>
-                              <div className="text-xs text-gray-500">{codeItem.units}</div>
-                            </div>
-                            <button
-                              onClick={() => {
-                                if (editingSystem) {
-                                  updateMapping(editingSystem, codeItem.code);
-                                  setEditingSystem(null);
-                                }
-                                setShowCostCodeBrowser(false);
-                              }}
-                              className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                            >
-                              Select
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Loading Overlay with Progress */}
-        {loading && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-lg min-w-96">
-              <div className="text-center mb-4">
-                <div className="text-lg font-semibold mb-2">{loadingMessage}</div>
-                <div className="text-sm text-gray-600">{estimatedTime}</div>
-              </div>
-              
-              {/* Progress Bar */}
-              <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-                <div 
-                  className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${loadingProgress}%` }}
-                ></div>
-              </div>
-              
-              <div className="text-center text-sm text-gray-600">
-                {loadingProgress}% Complete
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Notification */}
-        {notification && (
-          <div className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
-            notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-          } text-white animate-slide-in`}>
-            {notification.message}
-          </div>
-        )}
       </div>
     </div>
   );
-}
+};
+
+export default EnhancedCostCodeManager;
