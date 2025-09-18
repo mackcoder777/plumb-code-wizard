@@ -357,7 +357,26 @@ const EnhancedCostCodeManager = () => {
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [editingSystem, setEditingSystem] = useState(null);
   const [showMissingCodes, setShowMissingCodes] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+
+  // Helper function for auto-detecting cost codes
+  const autoDetectCostCode = (description: string): string => {
+    const desc = description.toLowerCase();
+    
+    // Pattern matching for auto-detection
+    if (desc.includes('snow') || desc.includes('snwv')) return 'SNWV';
+    if (desc.includes('storm') || desc.includes('strm')) return 'STRM';
+    if (desc.includes('sani') || desc.includes('sanitary')) return 'SNWV';
+    if (desc.includes('water') || desc.includes('dwtr')) return 'DWTR';
+    if (desc.includes('seismic') || desc.includes('szmc')) return 'SZMC';
+    if (desc.includes('fire') || desc.includes('firewater')) return 'FNSH';
+    if (desc.includes('gas') || desc.includes('natural')) return 'NGAS';
+    if (desc.includes('drain') || desc.includes('drns')) return 'DRNS';
+    
+    // Default fallback
+    return 'SNWV';
+  };
 
   // Count total codes in database
   const getTotalCodes = () => {
@@ -369,6 +388,25 @@ const EnhancedCostCodeManager = () => {
     });
     return total;
   };
+
+  // Get all codes as flat array
+  const getAllCodes = () => {
+    const allCodes = [];
+    Object.entries(STANDARD_COST_CODES).forEach(([categoryName, categories]) => {
+      Object.entries(categories).forEach(([subcatName, codes]) => {
+        codes.forEach(code => {
+          allCodes.push({
+            ...code,
+            category: categoryName,
+            subcategory: subcatName
+          });
+        });
+      });
+    });
+    return allCodes;
+  };
+
+  const COST_CODES = getAllCodes();
 
   // Generate cost code with audit trail
   const generateCostCode = useCallback((item) => {
@@ -1073,6 +1111,251 @@ const EnhancedCostCodeManager = () => {
                 )}
               </div>
             </>
+          )}
+
+          {/* Mapping Tab */}
+          {activeTab === 'mapping' && estimateData.length > 0 && (
+            <div className="space-y-6">
+              {/* System Audit Trail Section */}
+              <div className="bg-white rounded-lg border shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900">System Mapping Audit Trail</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Track all system mappings and their change history
+                  </p>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {Object.entries(
+                      estimateData.reduce((acc: Record<string, any>, item) => {
+                        const system = item.system || 'Unknown';
+                        if (!acc[system]) {
+                          acc[system] = {
+                            count: 0,
+                            currentMapping: item.suggestedCode?.costHead || 'SNWV',
+                            autoDetected: !customMappings[system.toLowerCase()],
+                            lastChanged: new Date().toISOString(),
+                            changeHistory: mappingHistory[system.toLowerCase()] || []
+                          };
+                        }
+                        acc[system].count++;
+                        return acc;
+                      }, {})
+                    ).map(([system, data]: [string, any]) => (
+                      <div key={system} className="border rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-3">
+                            <span className="font-medium text-gray-900">{system}</span>
+                            <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                              {data.count} items
+                            </span>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              data.autoDetected 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {data.autoDetected ? 'Auto-detected' : 'Manual override'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => updateMapping(system, 'none')}
+                            className="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
+                          >
+                            Reset to Auto
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2 text-sm">
+                            <span className="text-gray-600">Current mapping:</span>
+                            <select
+                              value={data.currentMapping}
+                              onChange={(e) => updateMapping(system, e.target.value)}
+                              className="border rounded px-2 py-1 text-sm"
+                            >
+                              {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
+                                <option key={code} value={code}>
+                                  {code} - {config.description}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div className="text-xs text-gray-500">
+                            Last modified: {new Date(data.lastChanged).toLocaleString()}
+                          </div>
+                          
+                          {/* Breadcrumb trail */}
+                          <div className="text-xs text-gray-600 bg-white p-2 rounded border">
+                            <span className="font-medium">Change trail:</span>
+                            {data.autoDetected ? (
+                              <span className="ml-2">Auto-suggested: {data.currentMapping}</span>
+                            ) : (
+                              <span className="ml-2">
+                                Auto-suggested: {autoDetectCostCode(system)} → 
+                                <span className="text-blue-600 font-medium"> Changed by user to: {data.currentMapping}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mapping Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {Object.keys(customMappings).length}
+                  </div>
+                  <div className="text-sm text-gray-600">Custom Overrides</div>
+                </div>
+                
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-green-600">
+                    {uniqueSystems.length > 0 ? Math.round(((uniqueSystems.length - Object.keys(customMappings).length) / uniqueSystems.length) * 100) : 0}%
+                  </div>
+                  <div className="text-sm text-gray-600">Auto-Detection Accuracy</div>
+                </div>
+                
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {uniqueSystems.length}
+                  </div>
+                  <div className="text-sm text-gray-600">Unique Systems</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rules Tab */}
+          {activeTab === 'rules' && (
+            <div className="space-y-6">
+              {/* Cost Code Library Browser */}
+              <div className="bg-white rounded-lg border shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900">Cost Code Library</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Browse and manage all {stats.totalCodes} available cost codes
+                  </p>
+                </div>
+                <div className="p-6">
+                  <div className="mb-4">
+                    <input
+                      type="text"
+                      placeholder="Search cost codes (try 'SZMC' or 'SEISMIC')..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                    {COST_CODES
+                      .filter(code => 
+                        code.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        code.description.toLowerCase().includes(searchTerm.toLowerCase())
+                      )
+                      .map((code, index) => {
+                        const usage = estimateData.filter(item => item.suggestedCode?.costHead === code.code).length;
+                        return (
+                          <div key={index} className="border rounded-lg p-3 hover:bg-gray-50">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-mono text-sm font-bold text-blue-600">
+                                {code.code}
+                              </span>
+                              {usage > 0 && (
+                                <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                                  {usage} uses
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-700 mb-2">{code.description}</div>
+                            <div className="text-xs text-gray-500">
+                              {code.category} › {code.subcategory}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  
+                  {searchTerm && COST_CODES.filter(code => 
+                    code.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    code.description.toLowerCase().includes(searchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <div className="text-center text-gray-500 py-8">
+                      <div className="text-4xl mb-4">🔍</div>
+                      <p>No codes found matching "{searchTerm}"</p>
+                      <p className="text-sm mt-2">Try searching for "SZMC" or "SEISMIC"</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Pattern Rules Management */}
+              <div className="bg-white rounded-lg border shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900">Auto-Detection Pattern Rules</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Manage how systems are automatically mapped to cost codes
+                  </p>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {/* Current Pattern Rules */}
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Current Pattern Rules</h4>
+                      <div className="space-y-2">
+                        {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
+                          <div key={code} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
+                            <div>
+                              <div className="text-sm font-medium">
+                                Patterns: <code className="bg-white px-2 py-1 rounded text-xs">{config.patterns.map(p => p.source).join(', ')}</code>
+                                → Maps to: <span className="font-mono text-blue-600">{code}</span>
+                              </div>
+                              <div className="text-xs text-gray-600 mt-1">{config.description}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pattern Testing */}
+                    <div className="border-t pt-4">
+                      <h4 className="font-medium text-gray-900 mb-3">Test Pattern Matching</h4>
+                      <div className="flex space-x-4">
+                        <input
+                          type="text"
+                          placeholder="Enter system description to test (e.g., 'storm drain', 'seismic brace')..."
+                          className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                          Test Match
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Usage Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-blue-600">{stats.totalCodes}</div>
+                  <div className="text-sm text-gray-600">Total Cost Codes</div>
+                </div>
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-green-600">{Object.keys(DEFAULT_COST_HEAD_MAPPING).length}</div>
+                  <div className="text-sm text-gray-600">Pattern Rules</div>
+                </div>
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-orange-600">{stats.missingCodes}</div>
+                  <div className="text-sm text-gray-600">Missing Codes</div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Cost Code Browser Modal */}
