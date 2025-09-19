@@ -458,158 +458,198 @@ const EnhancedCostCodeManager = () => {
     };
   }, [customMappings]);
 
-  // Enhanced file upload with real progress tracking
-  const handleFileUpload = useCallback((file) => {
+  // Optimized file upload with non-blocking processing
+  const handleFileUpload = useCallback((file: File | undefined) => {
     if (!file) return;
-
+    
+    let abortController = new AbortController();
     setLoading(true);
     setLoadingProgress(0);
     setLoadingMessage('Reading file...');
     setFileName(file.name);
-
-    const startTime = Date.now();
-    const fileSize = file.size;
-    const estimatedProcessingTime = Math.max(3, fileSize / 100000);
-    setEstimatedTime(`~${Math.ceil(estimatedProcessingTime)}s remaining`);
-
+    
+    const startTime = performance.now();
+    
     const reader = new FileReader();
-
+    
+    // Phase 1: File Reading (0-20%)
     reader.onprogress = (event) => {
       if (event.lengthComputable) {
-        const percentLoaded = Math.round((event.loaded / event.total) * 30);
+        const percentLoaded = Math.round((event.loaded / event.total) * 20);
         setLoadingProgress(percentLoaded);
-        const elapsed = (Date.now() - startTime) / 1000;
+        const elapsed = (performance.now() - startTime) / 1000;
         const rate = event.loaded / elapsed;
         const remaining = (event.total - event.loaded) / rate;
-        setEstimatedTime(`~${Math.ceil(remaining)}s remaining`);
+        setEstimatedTime(`Reading: ${Math.ceil(remaining)}s`);
       }
     };
-
-    reader.onload = (e) => {
-      setLoadingProgress(30);
-      setLoadingMessage('Parsing Excel data...');
+    
+    reader.onload = async (e) => {
+      // Phase 2: Excel Parsing (20-40%)
+      setLoadingProgress(20);
+      setLoadingMessage('Parsing Excel structure...');
       
-      setTimeout(() => {
-        try {
-          const data = new Uint8Array(e.target.result as ArrayBuffer);
-          setLoadingProgress(40);
-          setLoadingMessage('Reading worksheets...');
-          
-          const workbook = XLSX.read(data, { type: 'array' });
-          setLoadingProgress(50);
-          
-          const sheetName = workbook.SheetNames.find(name => 
-            name.toLowerCase().includes('raw') || 
-            name.toLowerCase().includes('data')
-          ) || workbook.SheetNames[0];
-          
-          const sheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(sheet);
-          
-          setLoadingProgress(60);
-          setLoadingMessage(`Processing ${jsonData.length} items...`);
-          
-          const chunkSize = 100;
-          const chunks = [];
-          for (let i = 0; i < jsonData.length; i += chunkSize) {
-            chunks.push(jsonData.slice(i, i + chunkSize));
+      const processWithIdle = (fn: () => any): Promise<any> => {
+        return new Promise((resolve) => {
+          if ('requestIdleCallback' in window) {
+            (requestIdleCallback as any)(() => resolve(fn()), { timeout: 50 });
+          } else {
+            setTimeout(() => resolve(fn()), 0);
+          }
+        });
+      };
+      
+      try {
+        // Parse Excel with minimal options
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        
+        const workbook = await processWithIdle(() => {
+          setLoadingProgress(25);
+          return XLSX.read(data, { 
+            type: 'array',
+            cellDates: false,
+            cellStyles: false,
+            cellNF: false,
+            cellFormula: false
+          });
+        });
+        
+        setLoadingProgress(30);
+        const sheetName = workbook.SheetNames.find(name => 
+          name.toLowerCase().includes('raw') || 
+          name.toLowerCase().includes('data')
+        ) || workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        
+        // Convert to JSON in chunks
+        const jsonData = await processWithIdle(() => {
+          setLoadingMessage('Converting data format...');
+          return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        });
+        
+        setLoadingProgress(40);
+        const totalItems = jsonData.length;
+        setLoadingMessage(`Processing ${totalItems.toLocaleString()} items...`);
+        
+        // Phase 3: Processing (40-90%)
+        const CHUNK_SIZE = 25; // Smaller chunks
+        const processedData = new Array(totalItems); // Pre-allocate
+        let processedCount = 0;
+        const processingStart = performance.now();
+        
+        // Process in batches
+        for (let i = 0; i < totalItems; i += CHUNK_SIZE) {
+          if (abortController.signal.aborted) {
+            throw new Error('Processing cancelled');
           }
           
-          let processedData = [];
-          let currentChunk = 0;
+          const chunk = (jsonData as any[]).slice(i, Math.min(i + CHUNK_SIZE, totalItems));
           
-          const processChunk = () => {
-            if (currentChunk < chunks.length) {
-              const chunk = chunks[currentChunk];
-              const chunkData = chunk.map((row, index) => {
-                const globalIndex = currentChunk * chunkSize + index;
-                const item = {
-                  id: globalIndex,
-                  drawing: row['D'] || row['Drawing'] || '',
-                  system: row['D_1'] || row['System'] || '',
-                  floor: row['D_2'] || row['Floor'] || '',
-                  zone: row['D_3'] || row['Zone'] || '',
-                  materialDesc: row['A'] || row['Material Description'] || '',
-                  itemName: row['A_1'] || row['Item Name'] || '',
-                  size: row['A_2'] || row['Size'] || '',
-                  quantity: parseFloat(row['T'] || row['Quantity'] || 0),
-                  materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
-                  hours: parseFloat(row['T_3'] || row['Hours'] || 0),
-                  laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
-                  costCode: '',
-                  suggestedCode: null
-                };
-                
-                item.suggestedCode = generateCostCode(item);
-                return item;
-              });
+          await processWithIdle(() => {
+            chunk.forEach((row: any, index: number) => {
+              const globalIndex = i + index;
               
-              processedData = [...processedData, ...chunkData];
-              currentChunk++;
+              // Create item with safe parsing
+              const item = {
+                id: globalIndex,
+                drawing: String(row['D'] || row['Drawing'] || ''),
+                system: String(row['D_1'] || row['System'] || ''),
+                floor: String(row['D_2'] || row['Floor'] || ''),
+                zone: String(row['D_3'] || row['Zone'] || ''),
+                materialDesc: String(row['A'] || row['Material Description'] || ''),
+                itemName: String(row['A_1'] || row['Item Name'] || ''),
+                size: String(row['A_2'] || row['Size'] || ''),
+                quantity: Number(row['T'] || row['Quantity']) || 0,
+                materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
+                hours: Number(row['T_3'] || row['Hours']) || 0,
+                laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
+                costCode: '',
+                suggestedCode: generateCostCode({
+                  system: String(row['D_1'] || row['System'] || ''),
+                  floor: String(row['D_2'] || row['Floor'] || '')
+                })
+              };
               
-              const progress = 60 + Math.round((currentChunk / chunks.length) * 30);
-              setLoadingProgress(progress);
-              setLoadingMessage(`Processing items ${currentChunk * chunkSize} of ${jsonData.length}...`);
-              
-              setTimeout(processChunk, 10);
-            } else {
-              setLoadingProgress(95);
-              setLoadingMessage('Finalizing...');
-              
-              const uniqueSystems = [...new Set(processedData.map(item => item.system.toLowerCase().trim()))].filter(Boolean);
-              const initialMappings = {};
-              const initialHistory = {};
-              
-              uniqueSystems.forEach(system => {
-                const testItem = { system };
-                const suggested = generateCostCode(testItem);
-                
-                if (system.includes('storm') || system.includes('overflow')) {
-                  initialMappings[system] = 'STRM';
-                  initialHistory[system] = [{
-                    timestamp: new Date().toISOString(),
-                    user: 'system',
-                    from: suggested.costHead,
-                    to: 'STRM',
-                    reason: 'Auto-detected storm/overflow drain'
-                  }];
-                } else if (suggested.source === 'auto-pattern' && suggested.confidence >= 0.9) {
-                  initialHistory[system] = [{
-                    timestamp: new Date().toISOString(),
-                    user: 'system',
-                    from: null,
-                    to: suggested.costHead,
-                    reason: 'Auto-detected pattern match'
-                  }];
-                }
-              });
-              
-              setCustomMappings(initialMappings);
-              setMappingHistory(initialHistory);
-              setEstimateData(processedData);
-              setFilteredData(processedData);
-              
-              setLoadingProgress(100);
-              setLoadingMessage('Complete!');
-              
-              setTimeout(() => {
-                setLoading(false);
-                setActiveTab('estimates');
-                showNotification(`Successfully loaded ${processedData.length} items`, 'success');
-              }, 500);
-            }
-          };
-          
-          processChunk();
-          
-        } catch (error) {
-          showNotification('Error processing file: ' + error.message, 'error');
-          setLoading(false);
+              processedData[globalIndex] = item;
+              processedCount++;
+            });
+            
+            // Update progress with accurate metrics
+            const progress = 40 + Math.round((processedCount / totalItems) * 50);
+            const elapsed = (performance.now() - processingStart) / 1000;
+            const itemsPerSecond = Math.round(processedCount / elapsed);
+            const remaining = Math.ceil((totalItems - processedCount) / itemsPerSecond);
+            
+            setLoadingProgress(progress);
+            setLoadingMessage(`Processing row ${processedCount.toLocaleString()} of ${totalItems.toLocaleString()}...`);
+            setEstimatedTime(`${remaining}s remaining (${itemsPerSecond} items/sec)`);
+          });
         }
-      }, 100);
+        
+        // Phase 4: Finalization (90-100%)
+        setLoadingProgress(90);
+        setLoadingMessage('Analyzing patterns...');
+        
+        await processWithIdle(() => {
+          const validData = processedData.filter(Boolean);
+          
+          // Initialize mappings
+          const systems = [...new Set(validData.map(item => 
+            item.system.toLowerCase().trim()
+          ))].filter(Boolean);
+          
+          const mappings: Record<string, string> = {};
+          const history: Record<string, any[]> = {};
+          
+          systems.forEach(system => {
+            if (system.includes('storm') || system.includes('overflow')) {
+              mappings[system] = 'STRM';
+              history[system] = [{
+                timestamp: new Date().toISOString(),
+                user: 'system',
+                from: 'SNWV',
+                to: 'STRM',
+                reason: 'Auto-detected storm/overflow drain'
+              }];
+            }
+          });
+          
+          setCustomMappings(mappings);
+          setMappingHistory(history);
+          setEstimateData(validData);
+          setFilteredData(validData);
+          
+          const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
+          setLoadingProgress(100);
+          setLoadingMessage(`Complete! ${validData.length.toLocaleString()} items in ${totalTime}s`);
+          
+          setTimeout(() => {
+            setLoading(false);
+            setActiveTab('estimates');
+            showNotification(`Loaded ${validData.length.toLocaleString()} items`, 'success');
+          }, 500);
+        });
+        
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Processing error:', error);
+          showNotification(`Error: ${(error as Error).message}`, 'error');
+        }
+        setLoading(false);
+      }
     };
-
+    
+    reader.onerror = () => {
+      showNotification('Error reading file', 'error');
+      setLoading(false);
+    };
+    
     reader.readAsArrayBuffer(file);
+    
+    // Return abort function for cleanup
+    return () => {
+      abortController.abort();
+    };
   }, [generateCostCode]);
 
   // Update all items when mappings change
