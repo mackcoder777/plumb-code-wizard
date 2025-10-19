@@ -228,7 +228,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             </SelectItem>
                             {COST_CODES_DB.material.map((code) => (
                               <SelectItem key={code.code} value={code.code}>
-                                {code.code} - {code.description}
+                                {code.description}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -250,7 +250,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             </SelectItem>
                             {COST_CODES_DB.fieldLabor.map((code) => (
                               <SelectItem key={code.code} value={code.code}>
-                                {code.code} - {code.description}
+                                {code.description}
                               </SelectItem>
                             ))}
                           </SelectContent>
