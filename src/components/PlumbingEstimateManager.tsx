@@ -7,6 +7,7 @@ import { EstimatesTab } from './tabs/EstimatesTab';
 import { CostCodesTab } from './tabs/CostCodesTab';
 import { AutomationTab } from './tabs/AutomationTab';
 import { DashboardTab } from './tabs/DashboardTab';
+import { SystemMappingTab } from './tabs/SystemMappingTab';
 import { toast } from '@/components/ui/use-toast';
 
 export const PlumbingEstimateManager: React.FC = () => {
@@ -87,6 +88,12 @@ export const PlumbingEstimateManager: React.FC = () => {
           <div className="p-6">
             {activeTab === 'estimates' && (
               <EstimatesTab 
+                data={estimateData} 
+                onDataUpdate={updateEstimateData}
+              />
+            )}
+            {activeTab === 'mapping' && (
+              <SystemMappingTab 
                 data={estimateData} 
                 onDataUpdate={updateEstimateData}
               />

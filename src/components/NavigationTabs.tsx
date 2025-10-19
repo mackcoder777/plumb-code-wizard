@@ -6,7 +6,8 @@ import {
   Bot, 
   ShoppingCart, 
   TrendingUp, 
-  LayoutDashboard 
+  LayoutDashboard,
+  Map
 } from 'lucide-react';
 
 interface NavigationTabsProps {
@@ -16,6 +17,7 @@ interface NavigationTabsProps {
 
 const tabs = [
   { id: 'estimates', label: 'Estimates', icon: BarChart3 },
+  { id: 'mapping', label: 'System Mapping', icon: Map },
   { id: 'costcodes', label: 'Cost Codes', icon: DollarSign },
   { id: 'automation', label: 'Auto-Assignment', icon: Bot },
   { id: 'buyout', label: 'Buyout Reports', icon: ShoppingCart },

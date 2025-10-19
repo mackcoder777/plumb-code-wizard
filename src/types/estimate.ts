@@ -54,3 +54,15 @@ export interface ProjectStats {
   itemsCoded: number;
   codingCompletion: number;
 }
+
+export interface SystemMapping {
+  system: string;
+  materialCode?: string;
+  laborCode?: string;
+  itemCount: number;
+}
+
+export interface SystemMappingState {
+  mappings: Record<string, { materialCode?: string; laborCode?: string }>;
+  appliedAt?: Date;
+}
