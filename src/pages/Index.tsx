@@ -458,24 +458,24 @@ const EnhancedCostCodeManager = () => {
     };
   }, [customMappings]);
 
-  // Optimized file upload with non-blocking processing
+  // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
     if (!file) return;
     
-    let abortController = new AbortController();
     setLoading(true);
     setLoadingProgress(0);
-    setLoadingMessage('Reading file...');
+    setLoadingMessage('Initializing...');
     setFileName(file.name);
     
     const startTime = performance.now();
+    let worker: Worker | null = null;
     
     const reader = new FileReader();
     
-    // Phase 1: File Reading (0-20%)
+    // Phase 1: File Reading (0-15%)
     reader.onprogress = (event) => {
       if (event.lengthComputable) {
-        const percentLoaded = Math.round((event.loaded / event.total) * 20);
+        const percentLoaded = Math.round((event.loaded / event.total) * 15);
         setLoadingProgress(percentLoaded);
         const elapsed = (performance.now() - startTime) / 1000;
         const rate = event.loaded / elapsed;
@@ -485,157 +485,214 @@ const EnhancedCostCodeManager = () => {
     };
     
     reader.onload = async (e) => {
-      // Phase 2: Excel Parsing (20-40%)
-      setLoadingProgress(20);
-      setLoadingMessage('Parsing Excel structure...');
-      
-      const processWithIdle = (fn: () => any): Promise<any> => {
-        return new Promise((resolve) => {
-          if ('requestIdleCallback' in window) {
-            (requestIdleCallback as any)(() => resolve(fn()), { timeout: 50 });
-          } else {
-            setTimeout(() => resolve(fn()), 0);
-          }
-        });
-      };
-      
       try {
-        // Parse Excel with minimal options
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        setLoadingProgress(15);
+        setLoadingMessage('Creating worker thread...');
         
-        const workbook = await processWithIdle(() => {
-          setLoadingProgress(25);
-          return XLSX.read(data, { 
-            type: 'array',
-            cellDates: false,
-            cellStyles: false,
-            cellNF: false,
-            cellFormula: false
-          });
-        });
-        
-        setLoadingProgress(30);
-        const sheetName = workbook.SheetNames.find(name => 
-          name.toLowerCase().includes('raw') || 
-          name.toLowerCase().includes('data')
-        ) || workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        
-        // Convert to JSON in chunks
-        const jsonData = await processWithIdle(() => {
-          setLoadingMessage('Converting data format...');
-          return XLSX.utils.sheet_to_json(sheet, { defval: '' });
-        });
-        
-        setLoadingProgress(40);
-        const totalItems = jsonData.length;
-        setLoadingMessage(`Processing ${totalItems.toLocaleString()} items...`);
-        
-        // Phase 3: Processing (40-90%)
-        const CHUNK_SIZE = 25; // Smaller chunks
-        const processedData = new Array(totalItems); // Pre-allocate
-        let processedCount = 0;
-        const processingStart = performance.now();
-        
-        // Process in batches
-        for (let i = 0; i < totalItems; i += CHUNK_SIZE) {
-          if (abortController.signal.aborted) {
-            throw new Error('Processing cancelled');
-          }
+        // Create inline Web Worker
+        const workerCode = `
+          importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
           
-          const chunk = (jsonData as any[]).slice(i, Math.min(i + CHUNK_SIZE, totalItems));
+          self.onmessage = function(e) {
+            const { data, action } = e.data;
+            
+            if (action === 'parse') {
+              try {
+                // Phase 1: Parse Excel (20-40%)
+                self.postMessage({ type: 'progress', progress: 20, message: 'Parsing Excel structure...' });
+                
+                const workbook = XLSX.read(data, { 
+                  type: 'array',
+                  cellDates: false,
+                  cellStyles: false,
+                  cellNF: false,
+                  cellFormula: false
+                });
+                
+                self.postMessage({ type: 'progress', progress: 30, message: 'Reading data sheet...' });
+                
+                // Find Raw Data sheet
+                const sheetName = workbook.SheetNames.find(name => 
+                  name.toLowerCase().includes('raw') || 
+                  name.toLowerCase().includes('data')
+                ) || workbook.SheetNames[0];
+                
+                if (!sheetName) {
+                  throw new Error('No valid sheet found in workbook');
+                }
+                
+                const sheet = workbook.Sheets[sheetName];
+                
+                self.postMessage({ type: 'progress', progress: 50, message: 'Converting to JSON...' });
+                
+                // Convert to JSON
+                const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                
+                self.postMessage({ type: 'progress', progress: 80, message: 'Preparing data transfer...' });
+                
+                // Send data back
+                self.postMessage({ 
+                  type: 'complete', 
+                  data: jsonData,
+                  totalRows: jsonData.length
+                });
+                
+              } catch (error) {
+                self.postMessage({ 
+                  type: 'error', 
+                  error: error.message || 'Unknown error occurred'
+                });
+              }
+            }
+          };
+        `;
+        
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+        worker = new Worker(workerUrl);
+        
+        // Handle worker messages
+        worker.onmessage = async (event) => {
+          const { type, progress, message, data: workerData, error, totalRows } = event.data;
           
-          await processWithIdle(() => {
-            chunk.forEach((row: any, index: number) => {
-              const globalIndex = i + index;
+          if (type === 'progress') {
+            setLoadingProgress(progress);
+            setLoadingMessage(message);
+            
+            const elapsed = (performance.now() - startTime) / 1000;
+            const estimatedTotal = (elapsed / progress) * 100;
+            const remaining = Math.max(0, estimatedTotal - elapsed);
+            setEstimatedTime(remaining > 1 ? `${Math.ceil(remaining)}s remaining` : 'Almost done...');
+            
+          } else if (type === 'complete') {
+            // Clean up worker
+            worker?.terminate();
+            URL.revokeObjectURL(workerUrl);
+            
+            setLoadingProgress(85);
+            setLoadingMessage(`Processing ${totalRows.toLocaleString()} items...`);
+            
+            // Phase 2: Process data on main thread (lighter operation)
+            const jsonData = workerData;
+            const totalItems = jsonData.length;
+            const CHUNK_SIZE = 100; // Process in chunks
+            const processedData: any[] = [];
+            
+            const processingStart = performance.now();
+            
+            // Process in chunks with progress updates
+            for (let i = 0; i < totalItems; i += CHUNK_SIZE) {
+              await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
               
-              // Create item with safe parsing
-              const item = {
-                id: globalIndex,
-                drawing: String(row['D'] || row['Drawing'] || ''),
-                system: String(row['D_1'] || row['System'] || ''),
-                floor: String(row['D_2'] || row['Floor'] || ''),
-                zone: String(row['D_3'] || row['Zone'] || ''),
-                materialDesc: String(row['A'] || row['Material Description'] || ''),
-                itemName: String(row['A_1'] || row['Item Name'] || ''),
-                size: String(row['A_2'] || row['Size'] || ''),
-                quantity: Number(row['T'] || row['Quantity']) || 0,
-                materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
-                hours: Number(row['T_3'] || row['Hours']) || 0,
-                laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
-                costCode: '',
-                suggestedCode: generateCostCode({
+              const chunk = jsonData.slice(i, Math.min(i + CHUNK_SIZE, totalItems));
+              
+              chunk.forEach((row: any, index: number) => {
+                const globalIndex = i + index;
+                
+                const item = {
+                  id: globalIndex,
+                  drawing: String(row['D'] || row['Drawing'] || ''),
                   system: String(row['D_1'] || row['System'] || ''),
-                  floor: String(row['D_2'] || row['Floor'] || '')
-                })
-              };
+                  floor: String(row['D_2'] || row['Floor'] || ''),
+                  zone: String(row['D_3'] || row['Zone'] || ''),
+                  materialDesc: String(row['A'] || row['Material Description'] || ''),
+                  itemName: String(row['A_1'] || row['Item Name'] || ''),
+                  size: String(row['A_2'] || row['Size'] || ''),
+                  quantity: Number(row['T'] || row['Quantity']) || 0,
+                  materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
+                  hours: Number(row['T_3'] || row['Hours']) || 0,
+                  laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
+                  costCode: '',
+                  suggestedCode: generateCostCode({
+                    system: String(row['D_1'] || row['System'] || ''),
+                    floor: String(row['D_2'] || row['Floor'] || '')
+                  })
+                };
+                
+                processedData.push(item);
+              });
               
-              processedData[globalIndex] = item;
-              processedCount++;
+              // Update progress
+              const progress = 85 + Math.round(((i + chunk.length) / totalItems) * 13);
+              const elapsed = (performance.now() - processingStart) / 1000;
+              const itemsPerSecond = Math.round((i + chunk.length) / elapsed);
+              const remaining = Math.ceil((totalItems - i - chunk.length) / itemsPerSecond);
+              
+              setLoadingProgress(progress);
+              setLoadingMessage(`Processing ${(i + chunk.length).toLocaleString()} of ${totalItems.toLocaleString()} items...`);
+              setEstimatedTime(remaining > 0 ? `${remaining}s (${itemsPerSecond}/s)` : 'Finalizing...');
+            }
+            
+            // Phase 3: Finalization
+            setLoadingProgress(98);
+            setLoadingMessage('Analyzing patterns...');
+            
+            await new Promise(resolve => setTimeout(resolve, 0));
+            
+            // Initialize mappings
+            const systems = [...new Set(processedData.map(item => 
+              item.system.toLowerCase().trim()
+            ))].filter(Boolean);
+            
+            const mappings: Record<string, string> = {};
+            const history: Record<string, any[]> = {};
+            
+            systems.forEach(system => {
+              if (system.includes('storm') || system.includes('overflow')) {
+                mappings[system] = 'STRM';
+                history[system] = [{
+                  timestamp: new Date().toISOString(),
+                  user: 'system',
+                  from: 'SNWV',
+                  to: 'STRM',
+                  reason: 'Auto-detected storm/overflow drain'
+                }];
+              }
             });
             
-            // Update progress with accurate metrics
-            const progress = 40 + Math.round((processedCount / totalItems) * 50);
-            const elapsed = (performance.now() - processingStart) / 1000;
-            const itemsPerSecond = Math.round(processedCount / elapsed);
-            const remaining = Math.ceil((totalItems - processedCount) / itemsPerSecond);
+            setCustomMappings(mappings);
+            setMappingHistory(history);
+            setEstimateData(processedData);
+            setFilteredData(processedData);
             
-            setLoadingProgress(progress);
-            setLoadingMessage(`Processing row ${processedCount.toLocaleString()} of ${totalItems.toLocaleString()}...`);
-            setEstimatedTime(`${remaining}s remaining (${itemsPerSecond} items/sec)`);
-          });
-        }
-        
-        // Phase 4: Finalization (90-100%)
-        setLoadingProgress(90);
-        setLoadingMessage('Analyzing patterns...');
-        
-        await processWithIdle(() => {
-          const validData = processedData.filter(Boolean);
-          
-          // Initialize mappings
-          const systems = [...new Set(validData.map(item => 
-            item.system.toLowerCase().trim()
-          ))].filter(Boolean);
-          
-          const mappings: Record<string, string> = {};
-          const history: Record<string, any[]> = {};
-          
-          systems.forEach(system => {
-            if (system.includes('storm') || system.includes('overflow')) {
-              mappings[system] = 'STRM';
-              history[system] = [{
-                timestamp: new Date().toISOString(),
-                user: 'system',
-                from: 'SNWV',
-                to: 'STRM',
-                reason: 'Auto-detected storm/overflow drain'
-              }];
-            }
-          });
-          
-          setCustomMappings(mappings);
-          setMappingHistory(history);
-          setEstimateData(validData);
-          setFilteredData(validData);
-          
-          const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
-          setLoadingProgress(100);
-          setLoadingMessage(`Complete! ${validData.length.toLocaleString()} items in ${totalTime}s`);
-          
-          setTimeout(() => {
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
+            setLoadingProgress(100);
+            setLoadingMessage(`Complete! ${processedData.length.toLocaleString()} items in ${totalTime}s`);
+            
+            setTimeout(() => {
+              setLoading(false);
+              setActiveTab('estimates');
+              showNotification(`Successfully loaded ${processedData.length.toLocaleString()} items`, 'success');
+            }, 800);
+            
+          } else if (type === 'error') {
+            worker?.terminate();
+            URL.revokeObjectURL(workerUrl);
+            console.error('Worker error:', error);
+            showNotification(`Error: ${error}`, 'error');
             setLoading(false);
-            setActiveTab('estimates');
-            showNotification(`Loaded ${validData.length.toLocaleString()} items`, 'success');
-          }, 500);
-        });
+          }
+        };
+        
+        worker.onerror = (error) => {
+          console.error('Worker error:', error);
+          showNotification('Error processing file in worker', 'error');
+          setLoading(false);
+          worker?.terminate();
+          URL.revokeObjectURL(workerUrl);
+        };
+        
+        // Send data to worker
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        worker.postMessage({ action: 'parse', data: arrayBuffer });
         
       } catch (error) {
-        if (!abortController.signal.aborted) {
-          console.error('Processing error:', error);
-          showNotification(`Error: ${(error as Error).message}`, 'error');
-        }
+        console.error('Processing error:', error);
+        showNotification(`Error: ${(error as Error).message}`, 'error');
         setLoading(false);
+        if (worker) {
+          worker.terminate();
+        }
       }
     };
     
@@ -645,11 +702,6 @@ const EnhancedCostCodeManager = () => {
     };
     
     reader.readAsArrayBuffer(file);
-    
-    // Return abort function for cleanup
-    return () => {
-      abortController.abort();
-    };
   }, [generateCostCode]);
 
   // Update all items when mappings change
