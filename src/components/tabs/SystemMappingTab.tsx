@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { EstimateItem, SystemMapping } from '@/types/estimate';
+import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,16 +7,29 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon } from 'lucide-react';
+import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
+import { FilterCards } from './SystemMappingTab/FilterCards';
+import { SystemCard } from './SystemMappingTab/SystemCard';
+import { QuickActions } from './SystemMappingTab/QuickActions';
+import { suggestCodesForSystem, generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
 }
 
+type ViewMode = 'cards' | 'table';
+
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
+  const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'mapped' | 'partial' | 'unmapped' | null>(null);
+  const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
+  const [showAllSystems, setShowAllSystems] = useState(false);
+  const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
 
   // Extract unique systems and count items
   const systemMappings = useMemo(() => {
@@ -34,17 +47,43 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         itemCount: count,
         materialCode: mappings[system]?.materialCode,
         laborCode: mappings[system]?.laborCode,
+        suggestedMaterialCode: suggestions[system]?.materialCode,
+        suggestedLaborCode: suggestions[system]?.laborCode,
       }))
       .sort((a, b) => b.itemCount - a.itemCount);
-  }, [data, mappings]);
+  }, [data, mappings, suggestions]);
 
-  // Filter systems by search term
+  // Filter systems by search term and active filters
   const filteredSystems = useMemo(() => {
-    if (!searchTerm) return systemMappings;
-    return systemMappings.filter(sm => 
-      sm.system.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [systemMappings, searchTerm]);
+    let filtered = systemMappings;
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(sm => 
+        sm.system.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Apply status filter
+    if (activeStatusFilter && activeStatusFilter !== 'all') {
+      if (activeStatusFilter === 'mapped') {
+        filtered = filtered.filter(sm => sm.materialCode && sm.laborCode);
+      } else if (activeStatusFilter === 'partial') {
+        filtered = filtered.filter(sm => 
+          (sm.materialCode || sm.laborCode) && !(sm.materialCode && sm.laborCode)
+        );
+      } else if (activeStatusFilter === 'unmapped') {
+        filtered = filtered.filter(sm => !sm.materialCode && !sm.laborCode);
+      }
+    }
+
+    // Apply system filter
+    if (activeSystemFilter) {
+      filtered = filtered.filter(sm => sm.system === activeSystemFilter);
+    }
+
+    return filtered;
+  }, [systemMappings, searchTerm, activeStatusFilter, activeSystemFilter]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -58,12 +97,23 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return { total, mapped, partial, unmapped };
   }, [systemMappings]);
 
+  // Top systems for filter cards
+  const topSystems = useMemo(() => {
+    return systemMappings.map(sm => ({
+      system: sm.system,
+      itemCount: sm.itemCount,
+      status: (sm.materialCode && sm.laborCode) ? 'mapped' as const 
+            : (sm.materialCode || sm.laborCode) ? 'partial' as const 
+            : 'unmapped' as const,
+    }));
+  }, [systemMappings]);
+
   const handleMappingChange = (system: string, type: 'materialCode' | 'laborCode', value: string) => {
     setMappings(prev => ({
       ...prev,
       [system]: {
         ...prev[system],
-        [type]: value === 'clear' ? undefined : value,
+        [type]: value === 'none' ? undefined : value,
       }
     }));
   };
@@ -82,9 +132,50 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   const clearAllMappings = () => {
     setMappings({});
+    setSuggestions({});
     toast({
       title: "All Mappings Cleared",
       description: "All system mappings have been removed",
+    });
+  };
+
+  const handleAutoSuggest = () => {
+    setIsAutoSuggestLoading(true);
+    
+    // Simulate processing time for better UX
+    setTimeout(() => {
+      const systemNames = systemMappings
+        .filter(sm => !sm.materialCode && !sm.laborCode) // Only suggest for unmapped systems
+        .map(sm => sm.system);
+      
+      const newSuggestions = generateAllSuggestions(systemNames);
+      setSuggestions(newSuggestions);
+      
+      const suggestionCount = Object.keys(newSuggestions).length;
+      setIsAutoSuggestLoading(false);
+      
+      toast({
+        title: "Smart Suggestions Generated",
+        description: `Generated ${suggestionCount} suggestion${suggestionCount !== 1 ? 's' : ''} based on system names`,
+      });
+    }, 800);
+  };
+
+  const applySystemSuggestions = (system: string) => {
+    const suggestion = suggestions[system];
+    if (!suggestion) return;
+
+    setMappings(prev => ({
+      ...prev,
+      [system]: {
+        materialCode: suggestion.materialCode || prev[system]?.materialCode,
+        laborCode: suggestion.laborCode || prev[system]?.laborCode,
+      }
+    }));
+
+    toast({
+      title: "Suggestions Applied",
+      description: `Applied smart suggestions for ${system}`,
     });
   };
 
@@ -97,7 +188,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       if (mapping && (mapping.materialCode || mapping.laborCode)) {
         appliedCount++;
         itemsAffected++;
-        // Prefer labor code, fallback to material code
         return {
           ...item,
           costCode: mapping.laborCode || mapping.materialCode || item.costCode,
@@ -114,178 +204,213 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   };
 
-  const getStatusBadge = (sm: SystemMapping) => {
+  const getStatusBadge = (sm: typeof systemMappings[0]) => {
     if (sm.materialCode && sm.laborCode) {
       return <Badge className="bg-success text-success-foreground"><Check className="w-3 h-3 mr-1" /> Mapped</Badge>;
     } else if (sm.materialCode || sm.laborCode) {
-      return <Badge variant="secondary"><AlertCircle className="w-3 h-3 mr-1" /> Partial</Badge>;
+      return <Badge variant="secondary" className="bg-warning text-warning-foreground"><AlertCircle className="w-3 h-3 mr-1" /> Partial</Badge>;
     } else {
       return <Badge variant="outline">Unmapped</Badge>;
     }
   };
 
+  const totalItems = data.length;
+  const hasMappings = Object.keys(mappings).length > 0;
+
   return (
     <div className="space-y-6">
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Systems</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Fully Mapped</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-success">{stats.mapped}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Partially Mapped</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-warning">{stats.partial}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Unmapped</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-muted-foreground">{stats.unmapped}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Progress Header */}
+      <SystemMappingHeader stats={stats} totalItems={totalItems} />
 
-      {/* Search and Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>System to Cost Code Mapping</CardTitle>
-          <CardDescription>
-            Map each system to material and labor cost codes. These mappings will be applied to all items in that system.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search systems..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={applyMappings} disabled={Object.keys(mappings).length === 0}>
-                Apply All Mappings
-              </Button>
-              <Button variant="outline" onClick={clearAllMappings} disabled={Object.keys(mappings).length === 0}>
-                Clear All
-              </Button>
-            </div>
-          </div>
+      {/* Main Content with Sidebar Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Main Content Area */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Filter Cards */}
+          <FilterCards
+            stats={stats}
+            activeStatusFilter={activeStatusFilter}
+            onStatusFilterChange={setActiveStatusFilter}
+            topSystems={topSystems}
+            activeSystemFilter={activeSystemFilter}
+            onSystemFilterChange={setActiveSystemFilter}
+            showAllSystems={showAllSystems}
+            onToggleShowAllSystems={() => setShowAllSystems(!showAllSystems)}
+          />
 
-          {/* Systems Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left p-3 font-medium">System</th>
-                    <th className="text-left p-3 font-medium">Material Code</th>
-                    <th className="text-left p-3 font-medium">Labor Code</th>
-                    <th className="text-right p-3 font-medium">Items</th>
-                    <th className="text-center p-3 font-medium">Status</th>
-                    <th className="text-center p-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+          {/* System Mapping Content */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle>System Mappings</CardTitle>
+                  <CardDescription>
+                    Assign material and labor codes to each system
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={viewMode === 'cards' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('cards')}
+                  >
+                    <LayoutGrid className="w-4 h-4 mr-2" />
+                    Cards
+                  </Button>
+                  <Button
+                    variant={viewMode === 'table' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('table')}
+                  >
+                    <TableIcon className="w-4 h-4 mr-2" />
+                    Table
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search systems..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              {/* Card View */}
+              {viewMode === 'cards' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredSystems.map((sm) => (
-                    <tr key={sm.system} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-3 font-medium">{sm.system}</td>
-                      
-                      {/* Material Code Select */}
-                      <td className="p-3">
-                        <Select
-                          value={sm.materialCode || 'none'}
-                          onValueChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select material code..." />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            <SelectItem value="none">
-                              <span className="text-muted-foreground">None</span>
-                            </SelectItem>
-                            {COST_CODES_DB.material.map((code) => (
-                              <SelectItem key={code.code} value={code.code}>
-                                {code.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      
-                      {/* Labor Code Select */}
-                      <td className="p-3">
-                        <Select
-                          value={sm.laborCode || 'none'}
-                          onValueChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select labor code..." />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            <SelectItem value="none">
-                              <span className="text-muted-foreground">None</span>
-                            </SelectItem>
-                            {COST_CODES_DB.fieldLabor.map((code) => (
-                              <SelectItem key={code.code} value={code.code}>
-                                {code.description}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      
-                      <td className="p-3 text-right tabular-nums font-medium">{sm.itemCount}</td>
-                      
-                      <td className="p-3 text-center">{getStatusBadge(sm)}</td>
-                      
-                      <td className="p-3 text-center">
-                        {(sm.materialCode || sm.laborCode) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => clearMapping(sm.system)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
+                    <SystemCard
+                      key={sm.system}
+                      system={sm.system}
+                      itemCount={sm.itemCount}
+                      materialCode={sm.materialCode}
+                      laborCode={sm.laborCode}
+                      suggestedMaterialCode={sm.suggestedMaterialCode}
+                      suggestedLaborCode={sm.suggestedLaborCode}
+                      onMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
+                      onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                      onClear={() => clearMapping(sm.system)}
+                      onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                    />
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </div>
+              )}
 
-          {filteredSystems.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No systems found matching "{searchTerm}"
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {/* Table View */}
+              {viewMode === 'table' && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-muted/50 sticky top-0">
+                        <tr>
+                          <th className="text-left p-3 font-medium">System</th>
+                          <th className="text-left p-3 font-medium">Material Code</th>
+                          <th className="text-left p-3 font-medium">Labor Code</th>
+                          <th className="text-right p-3 font-medium">Items</th>
+                          <th className="text-center p-3 font-medium">Status</th>
+                          <th className="text-center p-3 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {filteredSystems.map((sm) => (
+                          <tr key={sm.system} className="hover:bg-muted/30 transition-colors">
+                            <td className="p-3 font-medium">{sm.system}</td>
+                            
+                            <td className="p-3">
+                              <Select
+                                value={sm.materialCode || 'none'}
+                                onValueChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select material code..." />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px]">
+                                  <SelectItem value="none">
+                                    <span className="text-muted-foreground">None</span>
+                                  </SelectItem>
+                                  {COST_CODES_DB.material.map((code) => (
+                                    <SelectItem key={code.code} value={code.code}>
+                                      {code.description}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            
+                            <td className="p-3">
+                              <Select
+                                value={sm.laborCode || 'none'}
+                                onValueChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select labor code..." />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px]">
+                                  <SelectItem value="none">
+                                    <span className="text-muted-foreground">None</span>
+                                  </SelectItem>
+                                  {COST_CODES_DB.fieldLabor.map((code) => (
+                                    <SelectItem key={code.code} value={code.code}>
+                                      {code.description}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            
+                            <td className="p-3 text-right tabular-nums font-medium">{sm.itemCount}</td>
+                            <td className="p-3 text-center">{getStatusBadge(sm)}</td>
+                            <td className="p-3 text-center">
+                              {(sm.materialCode || sm.laborCode) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => clearMapping(sm.system)}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {filteredSystems.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p className="text-lg font-medium">No systems found</p>
+                  <p className="text-sm mt-1">
+                    {searchTerm || activeStatusFilter || activeSystemFilter
+                      ? 'Try adjusting your filters or search term'
+                      : 'Upload a file to get started'
+                    }
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Quick Actions Sidebar */}
+        <div className="lg:col-span-1">
+          <QuickActions
+            hasMappings={hasMappings}
+            mappedCount={stats.mapped}
+            totalCount={stats.total}
+            onAutoSuggest={handleAutoSuggest}
+            onApplyAll={applyMappings}
+            isAutoSuggestLoading={isAutoSuggestLoading}
+          />
+        </div>
+      </div>
     </div>
   );
 };

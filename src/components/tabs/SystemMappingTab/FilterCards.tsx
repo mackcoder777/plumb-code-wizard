@@ -1,0 +1,203 @@
+import React from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle, AlertCircle, XCircle, Grid3x3, X } from 'lucide-react';
+
+interface FilterCardsProps {
+  stats: {
+    total: number;
+    mapped: number;
+    partial: number;
+    unmapped: number;
+  };
+  activeStatusFilter: 'all' | 'mapped' | 'partial' | 'unmapped' | null;
+  onStatusFilterChange: (filter: 'all' | 'mapped' | 'partial' | 'unmapped' | null) => void;
+  topSystems: Array<{ system: string; itemCount: number; status: 'mapped' | 'partial' | 'unmapped' }>;
+  activeSystemFilter: string | null;
+  onSystemFilterChange: (system: string | null) => void;
+  showAllSystems: boolean;
+  onToggleShowAllSystems: () => void;
+}
+
+export const FilterCards: React.FC<FilterCardsProps> = ({
+  stats,
+  activeStatusFilter,
+  onStatusFilterChange,
+  topSystems,
+  activeSystemFilter,
+  onSystemFilterChange,
+  showAllSystems,
+  onToggleShowAllSystems,
+}) => {
+  const statusFilters = [
+    {
+      id: 'all' as const,
+      label: 'All Systems',
+      count: stats.total,
+      icon: Grid3x3,
+      color: 'default',
+    },
+    {
+      id: 'mapped' as const,
+      label: 'Fully Mapped',
+      count: stats.mapped,
+      icon: CheckCircle,
+      color: 'success',
+    },
+    {
+      id: 'partial' as const,
+      label: 'Partially Mapped',
+      count: stats.partial,
+      icon: AlertCircle,
+      color: 'warning',
+    },
+    {
+      id: 'unmapped' as const,
+      label: 'Unmapped',
+      count: stats.unmapped,
+      icon: XCircle,
+      color: 'muted',
+    },
+  ];
+
+  const getStatusDot = (status: 'mapped' | 'partial' | 'unmapped') => {
+    if (status === 'mapped') return 'bg-success';
+    if (status === 'partial') return 'bg-warning';
+    return 'bg-muted-foreground';
+  };
+
+  const activeFilterCount = (activeStatusFilter && activeStatusFilter !== 'all' ? 1 : 0) + 
+                           (activeSystemFilter ? 1 : 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Active Filters Banner */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center justify-between p-3 bg-primary/10 border border-primary/20 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Badge variant="default">{activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}</Badge>
+            {activeStatusFilter && activeStatusFilter !== 'all' && (
+              <Badge variant="outline">
+                Status: {activeStatusFilter}
+                <button
+                  onClick={() => onStatusFilterChange(null)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+            {activeSystemFilter && (
+              <Badge variant="outline">
+                System: {activeSystemFilter}
+                <button
+                  onClick={() => onSystemFilterChange(null)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onStatusFilterChange(null);
+              onSystemFilterChange(null);
+            }}
+          >
+            Clear All Filters
+          </Button>
+        </div>
+      )}
+
+      {/* Status Filter Cards */}
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground mb-3">Filter by Status</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {statusFilters.map((filter) => {
+            const Icon = filter.icon;
+            const isActive = activeStatusFilter === filter.id;
+            
+            return (
+              <Card
+                key={filter.id}
+                className={`
+                  cursor-pointer transition-all hover:scale-105 hover:shadow-md
+                  ${isActive ? 'ring-2 ring-primary bg-primary/10' : 'hover:border-primary/50'}
+                  ${filter.color === 'success' && !isActive ? 'border-success/30' : ''}
+                  ${filter.color === 'warning' && !isActive ? 'border-warning/30' : ''}
+                `}
+                onClick={() => onStatusFilterChange(isActive ? null : filter.id)}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Icon
+                      className={`
+                        w-5 h-5
+                        ${filter.color === 'success' ? 'text-success' : ''}
+                        ${filter.color === 'warning' ? 'text-warning' : ''}
+                        ${filter.color === 'default' ? 'text-primary' : ''}
+                        ${filter.color === 'muted' ? 'text-muted-foreground' : ''}
+                      `}
+                    />
+                    {isActive && <Badge variant="default" className="text-xs">Active</Badge>}
+                  </div>
+                  <div className="text-2xl font-bold">{filter.count}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{filter.label}</div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* System Filter Cards */}
+      {topSystems.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-muted-foreground">Filter by System</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleShowAllSystems}
+            >
+              {showAllSystems ? 'Show Top 8' : 'Show All Systems'}
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {(showAllSystems ? topSystems : topSystems.slice(0, 8)).map((system) => {
+              const isActive = activeSystemFilter === system.system;
+              
+              return (
+                <Card
+                  key={system.system}
+                  className={`
+                    cursor-pointer transition-all hover:scale-105 hover:shadow-md
+                    ${isActive ? 'ring-2 ring-primary bg-primary/10' : 'hover:border-primary/50'}
+                  `}
+                  onClick={() => onSystemFilterChange(isActive ? null : system.system)}
+                >
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDot(system.status)}`} />
+                        <span className="font-medium text-sm truncate">{system.system}</span>
+                      </div>
+                      {isActive && <Badge variant="default" className="text-xs flex-shrink-0">Active</Badge>}
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      {system.itemCount} items
+                    </Badge>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
