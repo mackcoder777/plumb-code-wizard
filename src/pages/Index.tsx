@@ -525,17 +525,73 @@ const EnhancedCostCodeManager = () => {
                 
                 self.postMessage({ type: 'progress', progress: 50, message: 'Converting to JSON...' });
                 
-                // Convert to JSON
-                const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                // Get sheet dimensions
+                const range = XLSX.utils.decode_range(sheet['!ref']);
+                const totalRows = range.e.r - range.s.r;
                 
-                // Send data in chunks to avoid memory errors
+                self.postMessage({ 
+                  type: 'progress', 
+                  progress: 40, 
+                  message: \`Found \${totalRows.toLocaleString()} rows, starting conversion...\` 
+                });
+                
+                // Convert to JSON in BATCHES to prevent freezing
+                const CONVERSION_BATCH_SIZE = 100;
+                const jsonData = [];
+                
+                for (let startRow = range.s.r + 1; startRow <= range.e.r; startRow += CONVERSION_BATCH_SIZE) {
+                  const endRow = Math.min(startRow + CONVERSION_BATCH_SIZE - 1, range.e.r);
+                  
+                  // Create batch range
+                  const batchRange = XLSX.utils.encode_range({
+                    s: { r: startRow, c: range.s.c },
+                    e: { r: endRow, c: range.e.c }
+                  });
+                  
+                  // Get headers
+                  const headers = [];
+                  for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const header = sheet[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
+                    headers.push(header ? String(header.v) : \`Column\${C}\`);
+                  }
+                  
+                  // Convert batch rows
+                  for (let R = startRow; R <= endRow; ++R) {
+                    const row = {};
+                    for (let C = range.s.c; C <= range.e.c; ++C) {
+                      const cell = sheet[XLSX.utils.encode_cell({ r: R, c: C })];
+                      row[headers[C - range.s.c]] = cell ? cell.v : '';
+                    }
+                    jsonData.push(row);
+                  }
+                  
+                  // Report progress
+                  const rowsProcessed = startRow - range.s.r;
+                  const progress = 40 + Math.round((rowsProcessed / totalRows) * 25);
+                  self.postMessage({ 
+                    type: 'progress', 
+                    progress: progress, 
+                    message: \`Converting rows \${startRow}-\${endRow} of \${totalRows}...\` 
+                  });
+                  
+                  // Yield control back to event loop
+                  await new Promise(resolve => setTimeout(resolve, 0));
+                }
+                
+                self.postMessage({ 
+                  type: 'progress', 
+                  progress: 65, 
+                  message: 'Conversion complete, preparing transfer...' 
+                });
+                
+                // Send data in chunks to avoid memory errors during transfer
                 const TRANSFER_CHUNK_SIZE = 100;
                 const totalChunks = Math.ceil(jsonData.length / TRANSFER_CHUNK_SIZE);
                 
                 for (let i = 0; i < jsonData.length; i += TRANSFER_CHUNK_SIZE) {
                   const chunk = jsonData.slice(i, i + TRANSFER_CHUNK_SIZE);
                   const chunkNumber = Math.floor(i / TRANSFER_CHUNK_SIZE) + 1;
-                  const progress = 50 + Math.round((chunkNumber / totalChunks) * 30);
+                  const progress = 65 + Math.round((chunkNumber / totalChunks) * 15);
                   
                   self.postMessage({
                     type: 'chunk',
@@ -544,11 +600,11 @@ const EnhancedCostCodeManager = () => {
                     totalChunks: totalChunks,
                     totalRows: jsonData.length,
                     progress: progress,
-                    message: \`Transferring data: chunk \${chunkNumber} of \${totalChunks}...\`
+                    message: \`Transferring chunk \${chunkNumber} of \${totalChunks}...\`
                   });
                   
-                  // Clear chunk to free memory
-                  chunk.length = 0;
+                  // Yield control
+                  await new Promise(resolve => setTimeout(resolve, 0));
                 }
                 
                 // Signal transfer complete
@@ -572,7 +628,7 @@ const EnhancedCostCodeManager = () => {
         worker = new Worker(workerUrl);
         
         // Handle worker messages
-        const receivedChunks: any[] = [];
+        let receivedChunks: any[] = [];
         let expectedTotalRows = 0;
         const chunkStartTime = performance.now();
         
@@ -583,31 +639,37 @@ const EnhancedCostCodeManager = () => {
             setLoadingProgress(progress);
             setLoadingMessage(message);
             
-            const elapsed = (performance.now() - startTime) / 1000;
-            const estimatedTotal = (elapsed / progress) * 100;
-            const remaining = Math.max(0, estimatedTotal - elapsed);
-            setEstimatedTime(remaining > 1 ? `${Math.ceil(remaining)}s remaining` : 'Almost done...');
+            // During conversion phase (40-65%), show processing message
+            if (progress >= 40 && progress < 65) {
+              setEstimatedTime('Processing...');
+            } else {
+              // Early phases - rough estimate
+              const elapsed = (performance.now() - startTime) / 1000;
+              const estimatedTotal = elapsed / (progress / 100);
+              const remaining = Math.max(0, estimatedTotal - elapsed);
+              setEstimatedTime(remaining > 1 ? `~${Math.ceil(remaining)}s` : 'Almost done...');
+            }
             
           } else if (type === 'chunk') {
-            // Accumulate chunks
-            receivedChunks.push(...chunk);
+            // Accumulate chunks efficiently
+            receivedChunks = receivedChunks.concat(chunk);
             expectedTotalRows = totalRows;
             
             // Update progress
             setLoadingProgress(progress);
             setLoadingMessage(message);
             
-            // Calculate transfer rate and time remaining
-            const elapsed = (performance.now() - chunkStartTime) / 1000;
-            const rowsPerSecond = Math.round(receivedChunks.length / elapsed);
-            const remainingRows = totalRows - receivedChunks.length;
-            const estimatedRemaining = Math.ceil(remainingRows / Math.max(rowsPerSecond, 1));
-            
-            setEstimatedTime(
-              estimatedRemaining > 0 
-                ? `${estimatedRemaining}s (${rowsPerSecond}/s)` 
-                : 'Almost done...'
-            );
+            // Calculate transfer rate only after receiving enough data
+            if (receivedChunks.length > 200) {
+              const elapsed = (performance.now() - chunkStartTime) / 1000;
+              const rowsPerSecond = Math.round(receivedChunks.length / elapsed);
+              const remainingRows = totalRows - receivedChunks.length;
+              const estimatedRemaining = Math.ceil(remainingRows / Math.max(rowsPerSecond, 10));
+              
+              setEstimatedTime(`${estimatedRemaining}s (${rowsPerSecond} rows/s)`);
+            } else {
+              setEstimatedTime('Calculating transfer rate...');
+            }
             
           } else if (type === 'transfer-complete') {
             // Clean up worker
