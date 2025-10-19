@@ -528,12 +528,32 @@ const EnhancedCostCodeManager = () => {
                 // Convert to JSON
                 const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
                 
-                self.postMessage({ type: 'progress', progress: 80, message: 'Preparing data transfer...' });
+                // Send data in chunks to avoid memory errors
+                const TRANSFER_CHUNK_SIZE = 100;
+                const totalChunks = Math.ceil(jsonData.length / TRANSFER_CHUNK_SIZE);
                 
-                // Send data back
+                for (let i = 0; i < jsonData.length; i += TRANSFER_CHUNK_SIZE) {
+                  const chunk = jsonData.slice(i, i + TRANSFER_CHUNK_SIZE);
+                  const chunkNumber = Math.floor(i / TRANSFER_CHUNK_SIZE) + 1;
+                  const progress = 50 + Math.round((chunkNumber / totalChunks) * 30);
+                  
+                  self.postMessage({
+                    type: 'chunk',
+                    chunk: chunk,
+                    chunkNumber: chunkNumber,
+                    totalChunks: totalChunks,
+                    totalRows: jsonData.length,
+                    progress: progress,
+                    message: \`Transferring data: chunk \${chunkNumber} of \${totalChunks}...\`
+                  });
+                  
+                  // Clear chunk to free memory
+                  chunk.length = 0;
+                }
+                
+                // Signal transfer complete
                 self.postMessage({ 
-                  type: 'complete', 
-                  data: jsonData,
+                  type: 'transfer-complete',
                   totalRows: jsonData.length
                 });
                 
@@ -552,8 +572,12 @@ const EnhancedCostCodeManager = () => {
         worker = new Worker(workerUrl);
         
         // Handle worker messages
+        const receivedChunks: any[] = [];
+        let expectedTotalRows = 0;
+        const chunkStartTime = performance.now();
+        
         worker.onmessage = async (event) => {
-          const { type, progress, message, data: workerData, error, totalRows } = event.data;
+          const { type, progress, message, chunk, error, totalRows, chunkNumber, totalChunks } = event.data;
           
           if (type === 'progress') {
             setLoadingProgress(progress);
@@ -564,7 +588,28 @@ const EnhancedCostCodeManager = () => {
             const remaining = Math.max(0, estimatedTotal - elapsed);
             setEstimatedTime(remaining > 1 ? `${Math.ceil(remaining)}s remaining` : 'Almost done...');
             
-          } else if (type === 'complete') {
+          } else if (type === 'chunk') {
+            // Accumulate chunks
+            receivedChunks.push(...chunk);
+            expectedTotalRows = totalRows;
+            
+            // Update progress
+            setLoadingProgress(progress);
+            setLoadingMessage(message);
+            
+            // Calculate transfer rate and time remaining
+            const elapsed = (performance.now() - chunkStartTime) / 1000;
+            const rowsPerSecond = Math.round(receivedChunks.length / elapsed);
+            const remainingRows = totalRows - receivedChunks.length;
+            const estimatedRemaining = Math.ceil(remainingRows / Math.max(rowsPerSecond, 1));
+            
+            setEstimatedTime(
+              estimatedRemaining > 0 
+                ? `${estimatedRemaining}s (${rowsPerSecond}/s)` 
+                : 'Almost done...'
+            );
+            
+          } else if (type === 'transfer-complete') {
             // Clean up worker
             worker?.terminate();
             URL.revokeObjectURL(workerUrl);
@@ -573,7 +618,7 @@ const EnhancedCostCodeManager = () => {
             setLoadingMessage(`Processing ${totalRows.toLocaleString()} items...`);
             
             // Phase 2: Process data on main thread (lighter operation)
-            const jsonData = workerData;
+            const jsonData = receivedChunks;
             const totalItems = jsonData.length;
             const CHUNK_SIZE = 100; // Process in chunks
             const processedData: any[] = [];
