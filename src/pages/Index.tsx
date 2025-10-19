@@ -493,131 +493,82 @@ const EnhancedCostCodeManager = () => {
         const workerCode = `
           importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
           
-          self.onmessage = function(e) {
+          self.onmessage = async function(e) {
             const { data, action } = e.data;
             
             if (action === 'parse') {
               try {
-                // Phase 1: Parse Excel (20-40%)
-                self.postMessage({ type: 'progress', progress: 20, message: 'Parsing Excel structure...' });
+                // Parse Excel file
+                self.postMessage({ type: 'progress', progress: 15, message: 'Parsing Excel structure...' });
                 
                 const workbook = XLSX.read(data, { 
                   type: 'array',
-                  cellDates: false,
-                  cellStyles: false,
-                  cellNF: false,
-                  cellFormula: false
+                  cellDates: true,
+                  cellNF: true,
+                  cellStyles: false
                 });
                 
-                self.postMessage({ type: 'progress', progress: 30, message: 'Reading data sheet...' });
+                self.postMessage({ type: 'progress', progress: 30, message: 'Finding Raw Data sheet...' });
                 
-                // Find Raw Data sheet
-                const sheetName = workbook.SheetNames.find(name => 
-                  name.toLowerCase().includes('raw') || 
-                  name.toLowerCase().includes('data')
-                ) || workbook.SheetNames[0];
-                
-                if (!sheetName) {
-                  throw new Error('No valid sheet found in workbook');
+                const sheet = workbook.Sheets['Raw Data'];
+                if (!sheet) {
+                  throw new Error('Raw Data sheet not found in file. Please ensure your Excel file has a "Raw Data" sheet.');
                 }
                 
-                const sheet = workbook.Sheets[sheetName];
-                
-                self.postMessage({ type: 'progress', progress: 50, message: 'Converting to JSON...' });
-                
-                // Get sheet dimensions
+                // Get row count for user info
                 const range = XLSX.utils.decode_range(sheet['!ref']);
                 const totalRows = range.e.r - range.s.r;
                 
                 self.postMessage({ 
                   type: 'progress', 
                   progress: 40, 
-                  message: \`Found \${totalRows.toLocaleString()} rows, starting conversion...\` 
+                  message: \`Found \${totalRows.toLocaleString()} rows. Converting to JSON...\`
                 });
                 
-                // Convert to JSON in BATCHES to prevent freezing
-                const CONVERSION_BATCH_SIZE = 100;
-                const jsonData = [];
-                
-                for (let startRow = range.s.r + 1; startRow <= range.e.r; startRow += CONVERSION_BATCH_SIZE) {
-                  const endRow = Math.min(startRow + CONVERSION_BATCH_SIZE - 1, range.e.r);
-                  
-                  // Create batch range
-                  const batchRange = XLSX.utils.encode_range({
-                    s: { r: startRow, c: range.s.c },
-                    e: { r: endRow, c: range.e.c }
-                  });
-                  
-                  // Get headers
-                  const headers = [];
-                  for (let C = range.s.c; C <= range.e.c; ++C) {
-                    const header = sheet[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
-                    headers.push(header ? String(header.v) : \`Column\${C}\`);
-                  }
-                  
-                  // Convert batch rows
-                  for (let R = startRow; R <= endRow; ++R) {
-                    const row = {};
-                    for (let C = range.s.c; C <= range.e.c; ++C) {
-                      const cell = sheet[XLSX.utils.encode_cell({ r: R, c: C })];
-                      row[headers[C - range.s.c]] = cell ? cell.v : '';
-                    }
-                    jsonData.push(row);
-                  }
-                  
-                  // Report progress
-                  const rowsProcessed = startRow - range.s.r;
-                  const progress = 40 + Math.round((rowsProcessed / totalRows) * 25);
-                  self.postMessage({ 
-                    type: 'progress', 
-                    progress: progress, 
-                    message: \`Converting rows \${startRow}-\${endRow} of \${totalRows}...\` 
-                  });
-                  
-                  // Yield control back to event loop
-                  await new Promise(resolve => setTimeout(resolve, 0));
-                }
+                // Use native sheet_to_json (fast, optimized, reliable)
+                // This will take 15-30 seconds for large files but won't crash
+                const startConversion = performance.now();
+                const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                const conversionTime = Math.round((performance.now() - startConversion) / 1000);
                 
                 self.postMessage({ 
                   type: 'progress', 
                   progress: 65, 
-                  message: 'Conversion complete, preparing transfer...' 
+                  message: \`Conversion complete in \${conversionTime}s. Preparing to transfer \${jsonData.length.toLocaleString()} rows...\`
                 });
                 
-                // Send data in chunks to avoid memory errors during transfer
+                // Send data in chunks to avoid memory issues during transfer
                 const TRANSFER_CHUNK_SIZE = 100;
                 const totalChunks = Math.ceil(jsonData.length / TRANSFER_CHUNK_SIZE);
                 
                 for (let i = 0; i < jsonData.length; i += TRANSFER_CHUNK_SIZE) {
                   const chunk = jsonData.slice(i, i + TRANSFER_CHUNK_SIZE);
-                  const chunkNumber = Math.floor(i / TRANSFER_CHUNK_SIZE) + 1;
-                  const progress = 65 + Math.round((chunkNumber / totalChunks) * 15);
+                  const chunkNum = Math.floor(i / TRANSFER_CHUNK_SIZE) + 1;
+                  const transferProgress = 65 + Math.round((chunkNum / totalChunks) * 15);
                   
-                  self.postMessage({
-                    type: 'chunk',
+                  self.postMessage({ 
+                    type: 'chunk', 
                     chunk: chunk,
-                    chunkNumber: chunkNumber,
+                    chunkNumber: chunkNum,
                     totalChunks: totalChunks,
                     totalRows: jsonData.length,
-                    progress: progress,
-                    message: \`Transferring chunk \${chunkNumber} of \${totalChunks}...\`
+                    progress: transferProgress,
+                    message: \`Transferring chunk \${chunkNum.toLocaleString()} of \${totalChunks.toLocaleString()}...\`
                   });
                   
-                  // Yield control
+                  // Small yield to keep worker responsive
                   await new Promise(resolve => setTimeout(resolve, 0));
                 }
                 
-                // Signal transfer complete
                 self.postMessage({ 
-                  type: 'transfer-complete',
-                  totalRows: jsonData.length
+                  type: 'transfer-complete', 
+                  totalRows: jsonData.length,
+                  progress: 80,
+                  message: \`Successfully transferred \${jsonData.length.toLocaleString()} rows!\`
                 });
                 
               } catch (error) {
-                self.postMessage({ 
-                  type: 'error', 
-                  error: error.message || 'Unknown error occurred'
-                });
+                self.postMessage({ type: 'error', error: error.message });
               }
             }
           };
