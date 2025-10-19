@@ -579,7 +579,8 @@ const EnhancedCostCodeManager = () => {
         worker = new Worker(workerUrl);
         
         // Handle worker messages
-        let receivedChunks: any[] = [];
+        let processedData: any[] = [];
+        let processedItemsCount = 0;
         let expectedTotalRows = 0;
         const chunkStartTime = performance.now();
         
@@ -602,24 +603,45 @@ const EnhancedCostCodeManager = () => {
             }
             
           } else if (type === 'chunk') {
-            // Accumulate chunks efficiently
-            receivedChunks = receivedChunks.concat(chunk);
+            // Process chunk immediately (no accumulation - saves memory)
+            const processedChunk = chunk.map((row: any, index: number) => ({
+              id: processedItemsCount + index,
+              drawing: String(row['D'] || row['Drawing'] || ''),
+              system: String(row['D_1'] || row['System'] || ''),
+              floor: String(row['D_2'] || row['Floor'] || ''),
+              zone: String(row['D_3'] || row['Zone'] || ''),
+              materialDesc: String(row['A'] || row['Material Description'] || ''),
+              itemName: String(row['A_1'] || row['Item Name'] || ''),
+              size: String(row['A_2'] || row['Size'] || ''),
+              quantity: Number(row['T'] || row['Quantity']) || 0,
+              materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
+              hours: Number(row['T_3'] || row['Hours']) || 0,
+              laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
+              costCode: '',
+              suggestedCode: generateCostCode({
+                system: String(row['D_1'] || row['System'] || ''),
+                floor: String(row['D_2'] || row['Floor'] || '')
+              })
+            }));
+            
+            processedData.push(...processedChunk);
+            processedItemsCount += chunk.length;
             expectedTotalRows = totalRows;
             
             // Update progress
             setLoadingProgress(progress);
-            setLoadingMessage(message);
+            setLoadingMessage(`Processing chunk ${chunkNumber} of ${totalChunks}... (${processedItemsCount.toLocaleString()} of ${totalRows.toLocaleString()} items)`);
             
-            // Calculate transfer rate only after receiving enough data
-            if (receivedChunks.length > 200) {
+            // Calculate processing rate
+            if (processedItemsCount > 200) {
               const elapsed = (performance.now() - chunkStartTime) / 1000;
-              const rowsPerSecond = Math.round(receivedChunks.length / elapsed);
-              const remainingRows = totalRows - receivedChunks.length;
-              const estimatedRemaining = Math.ceil(remainingRows / Math.max(rowsPerSecond, 10));
+              const itemsPerSecond = Math.round(processedItemsCount / elapsed);
+              const remainingItems = totalRows - processedItemsCount;
+              const estimatedRemaining = Math.ceil(remainingItems / Math.max(itemsPerSecond, 10));
               
-              setEstimatedTime(`${estimatedRemaining}s (${rowsPerSecond} rows/s)`);
+              setEstimatedTime(`${estimatedRemaining}s (${itemsPerSecond} items/s)`);
             } else {
-              setEstimatedTime('Calculating transfer rate...');
+              setEstimatedTime('Calculating processing rate...');
             }
             
           } else if (type === 'transfer-complete') {
@@ -627,63 +649,9 @@ const EnhancedCostCodeManager = () => {
             worker?.terminate();
             URL.revokeObjectURL(workerUrl);
             
+            // All processing already done incrementally - just finalize
             setLoadingProgress(85);
-            setLoadingMessage(`Processing ${totalRows.toLocaleString()} items...`);
-            
-            // Phase 2: Process data on main thread (lighter operation)
-            const jsonData = receivedChunks;
-            const totalItems = jsonData.length;
-            const CHUNK_SIZE = 100; // Process in chunks
-            const processedData: any[] = [];
-            
-            const processingStart = performance.now();
-            
-            // Process in chunks with progress updates
-            for (let i = 0; i < totalItems; i += CHUNK_SIZE) {
-              await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
-              
-              const chunk = jsonData.slice(i, Math.min(i + CHUNK_SIZE, totalItems));
-              
-              chunk.forEach((row: any, index: number) => {
-                const globalIndex = i + index;
-                
-                const item = {
-                  id: globalIndex,
-                  drawing: String(row['D'] || row['Drawing'] || ''),
-                  system: String(row['D_1'] || row['System'] || ''),
-                  floor: String(row['D_2'] || row['Floor'] || ''),
-                  zone: String(row['D_3'] || row['Zone'] || ''),
-                  materialDesc: String(row['A'] || row['Material Description'] || ''),
-                  itemName: String(row['A_1'] || row['Item Name'] || ''),
-                  size: String(row['A_2'] || row['Size'] || ''),
-                  quantity: Number(row['T'] || row['Quantity']) || 0,
-                  materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
-                  hours: Number(row['T_3'] || row['Hours']) || 0,
-                  laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
-                  costCode: '',
-                  suggestedCode: generateCostCode({
-                    system: String(row['D_1'] || row['System'] || ''),
-                    floor: String(row['D_2'] || row['Floor'] || '')
-                  })
-                };
-                
-                processedData.push(item);
-              });
-              
-              // Update progress
-              const progress = 85 + Math.round(((i + chunk.length) / totalItems) * 13);
-              const elapsed = (performance.now() - processingStart) / 1000;
-              const itemsPerSecond = Math.round((i + chunk.length) / elapsed);
-              const remaining = Math.ceil((totalItems - i - chunk.length) / itemsPerSecond);
-              
-              setLoadingProgress(progress);
-              setLoadingMessage(`Processing ${(i + chunk.length).toLocaleString()} of ${totalItems.toLocaleString()} items...`);
-              setEstimatedTime(remaining > 0 ? `${remaining}s (${itemsPerSecond}/s)` : 'Finalizing...');
-            }
-            
-            // Phase 3: Finalization
-            setLoadingProgress(98);
-            setLoadingMessage('Analyzing patterns...');
+            setLoadingMessage(`Finalizing ${processedData.length.toLocaleString()} items...`);
             
             await new Promise(resolve => setTimeout(resolve, 0));
             
