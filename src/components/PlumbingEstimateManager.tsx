@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { EstimateItem, ProjectStats } from '@/types/estimate';
 import { FileUpload } from './FileUpload';
 import { EstimateHeader } from './EstimateHeader';
@@ -15,6 +15,26 @@ export const PlumbingEstimateManager: React.FC = () => {
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState('estimates');
   const [isLoading, setIsLoading] = useState(false);
+  const [importedCostCodes, setImportedCostCodes] = useState<Array<{
+    code: string;
+    description: string;
+    category: 'L' | 'M';
+    subcategory?: string;
+    units?: string;
+  }>>([]);
+
+  // Load imported codes from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('importedCostCodes');
+    if (stored) {
+      try {
+        const codes = JSON.parse(stored);
+        setImportedCostCodes(codes);
+      } catch (error) {
+        console.error('Failed to load imported cost codes:', error);
+      }
+    }
+  }, []);
 
   const handleFileUpload = useCallback((data: EstimateItem[], file: File) => {
     setEstimateData(data);
@@ -44,6 +64,24 @@ export const PlumbingEstimateManager: React.FC = () => {
     setCurrentFile(null);
     setActiveTab('estimates');
   };
+
+  const handleCostCodeImport = useCallback((codes: Array<{
+    code: string;
+    description: string;
+    category: 'L' | 'M';
+    subcategory?: string;
+    units?: string;
+  }>) => {
+    setImportedCostCodes(codes);
+    
+    // Store in localStorage for persistence
+    localStorage.setItem('importedCostCodes', JSON.stringify(codes));
+    
+    toast({
+      title: "Cost Codes Imported",
+      description: `Successfully imported ${codes.length} cost codes. They are now available in System Mapping.`,
+    });
+  }, []);
 
   if (!currentFile) {
     return (
@@ -96,10 +134,14 @@ export const PlumbingEstimateManager: React.FC = () => {
               <SystemMappingTab 
                 data={estimateData} 
                 onDataUpdate={updateEstimateData}
+                importedCostCodes={importedCostCodes}
               />
             )}
             {activeTab === 'costcodes' && (
-              <CostCodesTab data={estimateData} />
+              <CostCodesTab 
+                data={estimateData} 
+                onImportCostCodes={handleCostCodeImport}
+              />
             )}
             {activeTab === 'automation' && (
               <AutomationTab data={estimateData} onDataUpdate={updateEstimateData} />

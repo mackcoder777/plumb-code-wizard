@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,13 @@ interface SystemCardProps {
   onLaborCodeChange: (value: string) => void;
   onClear: () => void;
   onApplySuggestions?: () => void;
+  importedCostCodes?: Array<{
+    code: string;
+    description: string;
+    category: 'L' | 'M';
+    subcategory?: string;
+    units?: string;
+  }>;
 }
 
 export const SystemCard: React.FC<SystemCardProps> = ({
@@ -30,10 +37,50 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   onLaborCodeChange,
   onClear,
   onApplySuggestions,
+  importedCostCodes = [],
 }) => {
   const isMapped = materialCode && laborCode;
   const isPartial = (materialCode || laborCode) && !(materialCode && laborCode);
   const hasSuggestions = suggestedMaterialCode || suggestedLaborCode;
+
+  // Merge imported codes with hardcoded codes
+  const allMaterialCodes = useMemo(() => {
+    const imported = importedCostCodes
+      .filter(c => c.category === 'M')
+      .map(c => ({
+        code: c.code,
+        description: c.description,
+        category: 'M' as const,
+        keywords: [],
+      }));
+    
+    // Combine and deduplicate by code
+    const combined = [...COST_CODES_DB.material, ...imported];
+    const uniqueCodes = Array.from(
+      new Map(combined.map(c => [c.code, c])).values()
+    );
+    
+    return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
+  }, [importedCostCodes]);
+
+  const allLaborCodes = useMemo(() => {
+    const imported = importedCostCodes
+      .filter(c => c.category === 'L')
+      .map(c => ({
+        code: c.code,
+        description: c.description,
+        category: 'L' as const,
+        keywords: [],
+      }));
+    
+    // Combine and deduplicate by code
+    const combined = [...COST_CODES_DB.fieldLabor, ...imported];
+    const uniqueCodes = Array.from(
+      new Map(combined.map(c => [c.code, c])).values()
+    );
+    
+    return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
+  }, [importedCostCodes]);
 
   const getStatusIcon = () => {
     if (isMapped) return <CheckCircle className="w-5 h-5 text-success" />;
@@ -117,9 +164,9 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               <SelectItem value="none">
                 <span className="text-muted-foreground">None</span>
               </SelectItem>
-              {COST_CODES_DB.material.map((code) => (
+              {allMaterialCodes.map((code) => (
                 <SelectItem key={code.code} value={code.code}>
-                  {code.description}
+                  {code.code} - {code.description}
                   {code.code === suggestedMaterialCode && !materialCode && (
                     <Badge variant="default" className="ml-2 text-xs">
                       <Sparkles className="w-3 h-3 mr-1" />
@@ -152,9 +199,9 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               <SelectItem value="none">
                 <span className="text-muted-foreground">None</span>
               </SelectItem>
-              {COST_CODES_DB.fieldLabor.map((code) => (
+              {allLaborCodes.map((code) => (
                 <SelectItem key={code.code} value={code.code}>
-                  {code.description}
+                  {code.code} - {code.description}
                   {code.code === suggestedLaborCode && !laborCode && (
                     <Badge variant="default" className="ml-2 text-xs">
                       <Sparkles className="w-3 h-3 mr-1" />

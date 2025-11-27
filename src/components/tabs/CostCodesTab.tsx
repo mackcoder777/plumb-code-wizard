@@ -5,14 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { EstimateItem } from "@/types/estimate";
 import { CostCodeLibraryManager } from "@/components/CostCodeLibraryManager";
-import { Library, Search } from "lucide-react";
+import { CostCodeImport } from "@/components/CostCodeImport";
+import { Library, Upload } from "lucide-react";
 
 interface CostCodesTabProps {
   data: EstimateItem[];
+  onImportCostCodes?: (codes: Array<{
+    code: string;
+    description: string;
+    category: 'L' | 'M';
+    subcategory?: string;
+    units?: string;
+  }>) => void;
 }
 
-export const CostCodesTab: React.FC<CostCodesTabProps> = ({ data }) => {
+export const CostCodesTab: React.FC<CostCodesTabProps> = ({ data, onImportCostCodes }) => {
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const systemSummary = useMemo(() => {
     const systems = data.reduce((acc, item) => {
@@ -47,20 +56,44 @@ export const CostCodesTab: React.FC<CostCodesTabProps> = ({ data }) => {
           <h2 className="text-2xl font-bold">Cost Code Analysis</h2>
           <p className="text-muted-foreground">Summary of cost code assignments and coverage</p>
         </div>
-        <Dialog open={showLibrary} onOpenChange={setShowLibrary}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Library className="h-4 w-4" />
-              Cost Code Library
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Cost Code Library Manager</DialogTitle>
-            </DialogHeader>
-            <CostCodeLibraryManager showSelector={false} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Dialog open={showImport} onOpenChange={setShowImport}>
+            <DialogTrigger asChild>
+              <Button variant="default" className="gap-2">
+                <Upload className="h-4 w-4" />
+                Import Codes
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Import Cost Code Library</DialogTitle>
+              </DialogHeader>
+              <CostCodeImport 
+                onImport={(codes) => {
+                  if (onImportCostCodes) {
+                    onImportCostCodes(codes);
+                  }
+                }}
+                onClose={() => setShowImport(false)}
+              />
+            </DialogContent>
+          </Dialog>
+          
+          <Dialog open={showLibrary} onOpenChange={setShowLibrary}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Library className="h-4 w-4" />
+                Browse Library
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Cost Code Library Manager</DialogTitle>
+              </DialogHeader>
+              <CostCodeLibraryManager showSelector={false} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Summary Cards */}
