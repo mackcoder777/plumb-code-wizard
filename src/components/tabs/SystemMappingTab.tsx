@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
+import { useMaterialCodes, useLaborCodes } from '@/hooks/useCostCodes';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,8 +39,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
 
-  // Merge imported codes with hardcoded codes
+  // Load cost codes from database
+  const { data: dbMaterialCodes = [] } = useMaterialCodes();
+  const { data: dbLaborCodes = [] } = useLaborCodes();
+
+  // Merge database codes with hardcoded codes and imported codes
   const allMaterialCodes = useMemo(() => {
+    const hardcoded = COST_CODES_DB.material;
     const imported = importedCostCodes
       .filter(c => c.category === 'M')
       .map(c => ({
@@ -48,16 +54,24 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         category: 'M' as const,
         keywords: [],
       }));
+    const dbCodes = dbMaterialCodes.map(c => ({
+      code: c.code,
+      description: c.description,
+      category: 'M' as const,
+      keywords: [],
+    }));
     
-    const combined = [...COST_CODES_DB.material, ...imported];
+    // Combine all sources and deduplicate by code
+    const combined = [...hardcoded, ...imported, ...dbCodes];
     const uniqueCodes = Array.from(
       new Map(combined.map(c => [c.code, c])).values()
     );
     
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
-  }, [importedCostCodes]);
+  }, [importedCostCodes, dbMaterialCodes]);
 
   const allLaborCodes = useMemo(() => {
+    const hardcoded = COST_CODES_DB.fieldLabor;
     const imported = importedCostCodes
       .filter(c => c.category === 'L')
       .map(c => ({
@@ -66,14 +80,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         category: 'L' as const,
         keywords: [],
       }));
+    const dbCodes = dbLaborCodes.map(c => ({
+      code: c.code,
+      description: c.description,
+      category: 'L' as const,
+      keywords: [],
+    }));
     
-    const combined = [...COST_CODES_DB.fieldLabor, ...imported];
+    // Combine all sources and deduplicate by code
+    const combined = [...hardcoded, ...imported, ...dbCodes];
     const uniqueCodes = Array.from(
       new Map(combined.map(c => [c.code, c])).values()
     );
     
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
-  }, [importedCostCodes]);
+  }, [importedCostCodes, dbLaborCodes]);
 
   // Extract unique systems and count items
   const systemMappings = useMemo(() => {
