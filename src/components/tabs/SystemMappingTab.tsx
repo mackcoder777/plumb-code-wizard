@@ -17,11 +17,18 @@ import { suggestCodesForSystem, generateAllSuggestions, SuggestionResult } from 
 interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
+  importedCostCodes?: Array<{
+    code: string;
+    description: string;
+    category: 'L' | 'M';
+    subcategory?: string;
+    units?: string;
+  }>;
 }
 
 type ViewMode = 'cards' | 'table';
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
   const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
@@ -30,6 +37,43 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
+
+  // Merge imported codes with hardcoded codes
+  const allMaterialCodes = useMemo(() => {
+    const imported = importedCostCodes
+      .filter(c => c.category === 'M')
+      .map(c => ({
+        code: c.code,
+        description: c.description,
+        category: 'M' as const,
+        keywords: [],
+      }));
+    
+    const combined = [...COST_CODES_DB.material, ...imported];
+    const uniqueCodes = Array.from(
+      new Map(combined.map(c => [c.code, c])).values()
+    );
+    
+    return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
+  }, [importedCostCodes]);
+
+  const allLaborCodes = useMemo(() => {
+    const imported = importedCostCodes
+      .filter(c => c.category === 'L')
+      .map(c => ({
+        code: c.code,
+        description: c.description,
+        category: 'L' as const,
+        keywords: [],
+      }));
+    
+    const combined = [...COST_CODES_DB.fieldLabor, ...imported];
+    const uniqueCodes = Array.from(
+      new Map(combined.map(c => [c.code, c])).values()
+    );
+    
+    return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
+  }, [importedCostCodes]);
 
   // Extract unique systems and count items
   const systemMappings = useMemo(() => {
@@ -296,6 +340,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                       onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
                       onClear={() => clearMapping(sm.system)}
                       onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                      importedCostCodes={importedCostCodes}
                     />
                   ))}
                 </div>
@@ -333,9 +378,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                   <SelectItem value="none">
                                     <span className="text-muted-foreground">None</span>
                                   </SelectItem>
-                                  {COST_CODES_DB.material.map((code) => (
+                                  {allMaterialCodes.map((code) => (
                                     <SelectItem key={code.code} value={code.code}>
-                                      {code.description}
+                                      {code.code} - {code.description}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -354,9 +399,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                   <SelectItem value="none">
                                     <span className="text-muted-foreground">None</span>
                                   </SelectItem>
-                                  {COST_CODES_DB.fieldLabor.map((code) => (
+                                  {allLaborCodes.map((code) => (
                                     <SelectItem key={code.code} value={code.code}>
-                                      {code.description}
+                                      {code.code} - {code.description}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
