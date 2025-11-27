@@ -1,0 +1,70 @@
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+
+export interface CostCode {
+  id: string;
+  code: string;
+  description: string;
+  category: 'L' | 'M';
+  subcategory?: string;
+  units?: string;
+}
+
+export const useCostCodes = () => {
+  return useQuery({
+    queryKey: ['cost_codes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cost_codes')
+        .select('*')
+        .order('description', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      return data as CostCode[];
+    },
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+};
+
+export const useLaborCodes = () => {
+  return useQuery({
+    queryKey: ['cost_codes', 'labor'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cost_codes')
+        .select('*')
+        .eq('category', 'L')
+        .order('description', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      return data as CostCode[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+};
+
+export const useMaterialCodes = () => {
+  return useQuery({
+    queryKey: ['cost_codes', 'material'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cost_codes')
+        .select('*')
+        .eq('category', 'M')
+        .order('description', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      return data as CostCode[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+};

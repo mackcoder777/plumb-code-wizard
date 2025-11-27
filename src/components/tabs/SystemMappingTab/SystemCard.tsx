@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { COST_CODES_DB } from '@/data/costCodes';
+import { useMaterialCodes, useLaborCodes } from '@/hooks/useCostCodes';
 import { CheckCircle, AlertCircle, XCircle, X, Sparkles } from 'lucide-react';
 
 interface SystemCardProps {
@@ -43,8 +44,13 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   const isPartial = (materialCode || laborCode) && !(materialCode && laborCode);
   const hasSuggestions = suggestedMaterialCode || suggestedLaborCode;
 
-  // Merge imported codes with hardcoded codes
+  // Load cost codes from database
+  const { data: dbMaterialCodes = [], isLoading: loadingMaterial } = useMaterialCodes();
+  const { data: dbLaborCodes = [], isLoading: loadingLabor } = useLaborCodes();
+
+  // Merge database codes with hardcoded codes and imported codes
   const allMaterialCodes = useMemo(() => {
+    const hardcoded = COST_CODES_DB.material;
     const imported = importedCostCodes
       .filter(c => c.category === 'M')
       .map(c => ({
@@ -53,17 +59,24 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         category: 'M' as const,
         keywords: [],
       }));
+    const dbCodes = dbMaterialCodes.map(c => ({
+      code: c.code,
+      description: c.description,
+      category: 'M' as const,
+      keywords: [],
+    }));
     
-    // Combine and deduplicate by code
-    const combined = [...COST_CODES_DB.material, ...imported];
+    // Combine all sources and deduplicate by code
+    const combined = [...hardcoded, ...imported, ...dbCodes];
     const uniqueCodes = Array.from(
       new Map(combined.map(c => [c.code, c])).values()
     );
     
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
-  }, [importedCostCodes]);
+  }, [importedCostCodes, dbMaterialCodes]);
 
   const allLaborCodes = useMemo(() => {
+    const hardcoded = COST_CODES_DB.fieldLabor;
     const imported = importedCostCodes
       .filter(c => c.category === 'L')
       .map(c => ({
@@ -72,15 +85,21 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         category: 'L' as const,
         keywords: [],
       }));
+    const dbCodes = dbLaborCodes.map(c => ({
+      code: c.code,
+      description: c.description,
+      category: 'L' as const,
+      keywords: [],
+    }));
     
-    // Combine and deduplicate by code
-    const combined = [...COST_CODES_DB.fieldLabor, ...imported];
+    // Combine all sources and deduplicate by code
+    const combined = [...hardcoded, ...imported, ...dbCodes];
     const uniqueCodes = Array.from(
       new Map(combined.map(c => [c.code, c])).values()
     );
     
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
-  }, [importedCostCodes]);
+  }, [importedCostCodes, dbLaborCodes]);
 
   const getStatusIcon = () => {
     if (isMapped) return <CheckCircle className="w-5 h-5 text-success" />;
