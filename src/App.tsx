@@ -1,8 +1,9 @@
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -14,7 +15,7 @@ import { Button } from "./components/ui/button";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -32,7 +33,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading, isAdmin } = useAuth();
 
   if (loading) {
@@ -54,7 +55,9 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
           <Shield className="h-16 w-16 text-destructive mx-auto" />
           <h1 className="text-2xl font-bold">Access Denied</h1>
           <p className="text-muted-foreground">You don't have admin permissions.</p>
-          <Button onClick={() => window.location.href = '/'}>Go to Home</Button>
+          <Link to="/">
+            <Button>Go to Home</Button>
+          </Link>
         </div>
       </div>
     );
@@ -63,7 +66,7 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const AppContent = () => {
+const AppContent: React.FC = () => {
   const { user, signOut, isAdmin } = useAuth();
 
   return (
@@ -82,14 +85,12 @@ const AppContent = () => {
             </div>
             <div className="flex items-center gap-4">
               {isAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.location.href = '/admin'}
-                >
-                  <Shield className="h-4 w-4 mr-2" />
-                  Admin Panel
-                </Button>
+                <Link to="/admin">
+                  <Button variant="outline" size="sm">
+                    <Shield className="h-4 w-4 mr-2" />
+                    Admin Panel
+                  </Button>
+                </Link>
               )}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="hidden sm:inline">{user.email}</span>
@@ -120,7 +121,6 @@ const AppContent = () => {
             </AdminRoute>
           }
         />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
@@ -128,7 +128,7 @@ const AppContent = () => {
   );
 };
 
-const App = () => (
+const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <TooltipProvider>
