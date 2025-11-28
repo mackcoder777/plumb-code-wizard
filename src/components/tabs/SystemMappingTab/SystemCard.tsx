@@ -1,11 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useMaterialCodes, useLaborCodes } from '@/hooks/useCostCodes';
-import { CheckCircle, AlertCircle, XCircle, X, Sparkles } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface SystemCardProps {
   system: string;
@@ -40,6 +43,9 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   onApplySuggestions,
   importedCostCodes = [],
 }) => {
+  const [materialOpen, setMaterialOpen] = useState(false);
+  const [laborOpen, setLaborOpen] = useState(false);
+  
   const isMapped = materialCode && laborCode;
   const isPartial = (materialCode || laborCode) && !(materialCode && laborCode);
   const hasSuggestions = suggestedMaterialCode || suggestedLaborCode;
@@ -116,6 +122,23 @@ export const SystemCard: React.FC<SystemCardProps> = ({
     return <Badge variant="outline">Unmapped</Badge>;
   };
 
+  const getCodeDisplay = (code: string | undefined, codes: Array<{ code: string; description: string }>, suggested?: string) => {
+    const effectiveCode = code || suggested;
+    if (!effectiveCode) return 'Select code...';
+    const found = codes.find(c => c.code === effectiveCode);
+    return found ? found.description : effectiveCode;
+  };
+
+  const handleMaterialSelect = (value: string) => {
+    onMaterialCodeChange(value);
+    setMaterialOpen(false);
+  };
+
+  const handleLaborSelect = (value: string) => {
+    onLaborCodeChange(value);
+    setLaborOpen(false);
+  };
+
   return (
     <Card className={`
       transition-all hover:shadow-lg
@@ -163,7 +186,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
           </div>
         )}
 
-        {/* Material Code Select */}
+        {/* Material Code Select - Searchable Combobox */}
         <div className="space-y-2">
           <label className="text-sm font-medium">
             Material Code {suggestedMaterialCode && !materialCode && (
@@ -172,33 +195,60 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               </Badge>
             )}
           </label>
-          <Select
-            value={materialCode || suggestedMaterialCode || 'none'}
-            onValueChange={onMaterialCodeChange}
-          >
-            <SelectTrigger className={suggestedMaterialCode && !materialCode ? 'border-primary/50' : ''}>
-              <SelectValue placeholder="Select material code..." />
-            </SelectTrigger>
-            <SelectContent className="max-h-[300px]">
-              <SelectItem value="none">
-                <span className="text-muted-foreground">None</span>
-              </SelectItem>
-              {allMaterialCodes.map((code) => (
-                <SelectItem key={code.code} value={code.code}>
-                  {code.code} - {code.description}
-                  {code.code === suggestedMaterialCode && !materialCode && (
-                    <Badge variant="default" className="ml-2 text-xs">
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      Suggested
-                    </Badge>
-                  )}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={materialOpen} onOpenChange={setMaterialOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={materialOpen}
+                className={cn(
+                  "w-full justify-between font-normal",
+                  suggestedMaterialCode && !materialCode ? 'border-primary/50' : '',
+                  !materialCode && !suggestedMaterialCode ? 'text-muted-foreground' : ''
+                )}
+              >
+                {getCodeDisplay(materialCode, allMaterialCodes, suggestedMaterialCode)}
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[400px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search material codes..." />
+                <CommandList>
+                  <CommandEmpty>No code found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="none"
+                      onSelect={() => handleMaterialSelect('none')}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", !materialCode && !suggestedMaterialCode ? "opacity-100" : "opacity-0")} />
+                      <span className="text-muted-foreground">None</span>
+                    </CommandItem>
+                    {allMaterialCodes.map((code) => (
+                      <CommandItem
+                        key={code.code}
+                        value={`${code.code} ${code.description}`}
+                        onSelect={() => handleMaterialSelect(code.code)}
+                      >
+                        <Check className={cn("mr-2 h-4 w-4", (materialCode || suggestedMaterialCode) === code.code ? "opacity-100" : "opacity-0")} />
+                        <span className="font-mono text-xs mr-2">{code.code}</span>
+                        <span className="truncate">{code.description}</span>
+                        {code.code === suggestedMaterialCode && !materialCode && (
+                          <Badge variant="default" className="ml-auto text-xs">
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            Suggested
+                          </Badge>
+                        )}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
 
-        {/* Labor Code Select */}
+        {/* Labor Code Select - Searchable Combobox */}
         <div className="space-y-2">
           <label className="text-sm font-medium">
             Labor Code {suggestedLaborCode && !laborCode && (
@@ -207,31 +257,68 @@ export const SystemCard: React.FC<SystemCardProps> = ({
               </Badge>
             )}
           </label>
-          <Select
-            value={laborCode || suggestedLaborCode || 'none'}
-            onValueChange={onLaborCodeChange}
-          >
-            <SelectTrigger className={suggestedLaborCode && !laborCode ? 'border-primary/50' : ''}>
-              <SelectValue placeholder="Select labor code..." />
-            </SelectTrigger>
-            <SelectContent className="max-h-[300px]">
-              <SelectItem value="none">
-                <span className="text-muted-foreground">None</span>
-              </SelectItem>
-              {allLaborCodes.map((code) => (
-                <SelectItem key={code.code} value={code.code}>
-                  {code.code} - {code.description}
-                  {code.code === suggestedLaborCode && !laborCode && (
-                    <Badge variant="default" className="ml-2 text-xs">
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      Suggested
-                    </Badge>
-                  )}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={laborOpen} onOpenChange={setLaborOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={laborOpen}
+                className={cn(
+                  "w-full justify-between font-normal",
+                  suggestedLaborCode && !laborCode ? 'border-primary/50' : '',
+                  !laborCode && !suggestedLaborCode ? 'text-muted-foreground' : ''
+                )}
+              >
+                {getCodeDisplay(laborCode, allLaborCodes, suggestedLaborCode)}
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[400px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search labor codes... (e.g., COMA, compressed air)" />
+                <CommandList>
+                  <CommandEmpty>No code found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="none"
+                      onSelect={() => handleLaborSelect('none')}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", !laborCode && !suggestedLaborCode ? "opacity-100" : "opacity-0")} />
+                      <span className="text-muted-foreground">None</span>
+                    </CommandItem>
+                    {allLaborCodes.map((code) => (
+                      <CommandItem
+                        key={code.code}
+                        value={`${code.code} ${code.description}`}
+                        onSelect={() => handleLaborSelect(code.code)}
+                      >
+                        <Check className={cn("mr-2 h-4 w-4", (laborCode || suggestedLaborCode) === code.code ? "opacity-100" : "opacity-0")} />
+                        <span className="font-mono text-xs mr-2">{code.code}</span>
+                        <span className="truncate">{code.description}</span>
+                        {code.code === suggestedLaborCode && !laborCode && (
+                          <Badge variant="default" className="ml-auto text-xs">
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            Suggested
+                          </Badge>
+                        )}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
+
+        {/* Current mapping info */}
+        {(materialCode || laborCode) && (
+          <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+            <div>Last modified: {new Date().toLocaleString()}</div>
+            {(suggestedMaterialCode || suggestedLaborCode) && (
+              <div>Change trail: Auto-suggested: {suggestedMaterialCode || suggestedLaborCode}</div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
