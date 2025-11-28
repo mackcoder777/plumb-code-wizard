@@ -351,6 +351,7 @@ const EnhancedCostCodeManager = () => {
   });
   const [customMappings, setCustomMappings] = useState({});
   const [mappingHistory, setMappingHistory] = useState({});
+  const [verifiedSystems, setVerifiedSystems] = useState<Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }>>({});
   const [showCostCodeBrowser, setShowCostCodeBrowser] = useState(false);
   const [browserSearchTerm, setBrowserSearchTerm] = useState('');
   const [browserDescSearch, setBrowserDescSearch] = useState('');
@@ -817,6 +818,31 @@ const EnhancedCostCodeManager = () => {
     showNotification(`Applied ${costHead} to ${assigned} items in ${system}`, 'success');
   };
 
+  // Verify/confirm a system mapping
+  const verifyMapping = (system: string, costHead: string) => {
+    const systemLower = system.toLowerCase().trim();
+    setVerifiedSystems(prev => ({
+      ...prev,
+      [systemLower]: {
+        verifiedAt: new Date().toISOString(),
+        verifiedBy: 'user',
+        costHead: costHead
+      }
+    }));
+    showNotification(`Verified mapping for ${system} → ${costHead}`, 'success');
+  };
+
+  // Unverify a system mapping
+  const unverifyMapping = (system: string) => {
+    const systemLower = system.toLowerCase().trim();
+    setVerifiedSystems(prev => {
+      const newVerified = { ...prev };
+      delete newVerified[systemLower];
+      return newVerified;
+    });
+    showNotification(`Removed verification for ${system}`, 'info');
+  };
+
   // Update custom mapping with audit trail
   const updateMapping = (system, costHead, userName = 'user') => {
     const systemLower = system.toLowerCase().trim();
@@ -1275,21 +1301,27 @@ const EnhancedCostCodeManager = () => {
                       estimateData.reduce((acc: Record<string, any>, item) => {
                         const system = item.system || 'Unknown';
                         if (!acc[system]) {
+                          const systemLower = system.toLowerCase().trim();
                           acc[system] = {
                             count: 0,
                             currentMapping: item.suggestedCode?.costHead || 'SNWV',
-                            autoDetected: !customMappings[system.toLowerCase()],
+                            autoDetected: !customMappings[systemLower],
                             lastChanged: new Date().toISOString(),
-                            changeHistory: mappingHistory[system.toLowerCase()] || []
+                            changeHistory: mappingHistory[systemLower] || [],
+                            isVerified: !!verifiedSystems[systemLower],
+                            verifiedAt: verifiedSystems[systemLower]?.verifiedAt
                           };
                         }
                         acc[system].count++;
                         return acc;
                       }, {})
                     ).map(([system, data]: [string, any]) => (
-                      <div key={system} className="border rounded-lg p-4 bg-gray-50">
+                      <div key={system} className={`border rounded-lg p-4 ${data.isVerified ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-3">
+                            {data.isVerified && (
+                              <span className="text-green-600 text-lg">✓</span>
+                            )}
                             <span className="font-medium text-gray-900">{system}</span>
                             <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                               {data.count} items
@@ -1301,8 +1333,28 @@ const EnhancedCostCodeManager = () => {
                             }`}>
                               {data.autoDetected ? 'Auto-detected' : 'Manual override'}
                             </span>
+                            {data.isVerified && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-green-600 text-white font-medium">
+                                ✓ Verified
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center space-x-2">
+                            {data.isVerified ? (
+                              <button
+                                onClick={() => unverifyMapping(system)}
+                                className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 font-medium"
+                              >
+                                Unverify
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => verifyMapping(system, data.currentMapping)}
+                                className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                              >
+                                ✓ Verify Mapping
+                              </button>
+                            )}
                             <button
                               onClick={() => applyMappingToSystem(system, data.currentMapping)}
                               className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 font-medium"
@@ -1330,6 +1382,11 @@ const EnhancedCostCodeManager = () => {
                           
                           <div className="text-xs text-gray-500">
                             Last modified: {new Date(data.lastChanged).toLocaleString()}
+                            {data.isVerified && (
+                              <span className="ml-3 text-green-600">
+                                • Verified: {new Date(data.verifiedAt).toLocaleString()}
+                              </span>
+                            )}
                           </div>
                           
                           {/* Breadcrumb trail */}
@@ -1352,7 +1409,21 @@ const EnhancedCostCodeManager = () => {
               </div>
 
               {/* Mapping Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-green-600">
+                    {Object.keys(verifiedSystems).length}
+                  </div>
+                  <div className="text-sm text-gray-600">Verified Systems</div>
+                </div>
+                
+                <div className="bg-white rounded-lg border p-4">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {uniqueSystems.length - Object.keys(verifiedSystems).length}
+                  </div>
+                  <div className="text-sm text-gray-600">Pending Review</div>
+                </div>
+                
                 <div className="bg-white rounded-lg border p-4">
                   <div className="text-2xl font-bold text-blue-600">
                     {Object.keys(customMappings).length}
@@ -1361,17 +1432,10 @@ const EnhancedCostCodeManager = () => {
                 </div>
                 
                 <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-green-600">
-                    {uniqueSystems.length > 0 ? Math.round(((uniqueSystems.length - Object.keys(customMappings).length) / uniqueSystems.length) * 100) : 0}%
-                  </div>
-                  <div className="text-sm text-gray-600">Auto-Detection Accuracy</div>
-                </div>
-                
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-orange-600">
+                  <div className="text-2xl font-bold text-purple-600">
                     {uniqueSystems.length}
                   </div>
-                  <div className="text-sm text-gray-600">Unique Systems</div>
+                  <div className="text-sm text-gray-600">Total Systems</div>
                 </div>
               </div>
             </div>
