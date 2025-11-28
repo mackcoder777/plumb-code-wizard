@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { MappingCombobox } from '@/components/MappingCombobox';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -1286,17 +1287,11 @@ const EnhancedCostCodeManager = () => {
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2 text-sm">
                             <span className="text-gray-600">Current mapping:</span>
-                            <select
+                            <MappingCombobox
                               value={data.currentMapping}
-                              onChange={(e) => updateMapping(system, e.target.value)}
-                              className="border rounded px-2 py-1 text-sm"
-                            >
-                              {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
-                                <option key={code} value={code}>
-                                  {code} - {config.description}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(value) => updateMapping(system, value)}
+                              className="min-w-[250px]"
+                            />
                           </div>
                           
                           <div className="text-xs text-gray-500">
