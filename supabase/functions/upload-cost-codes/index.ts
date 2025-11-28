@@ -97,16 +97,20 @@ Deno.serve(async (req) => {
       console.log('Existing codes deleted successfully');
     }
 
-    // Insert new codes with created_by field
+    // Prepare codes with created_by field
     const codesToInsert = codes.map(code => ({
       ...code,
       created_by: user.id,
     }));
 
-    console.log('Inserting new cost codes...');
+    console.log('Upserting cost codes...');
+    // Use upsert to handle duplicates - update existing codes, insert new ones
     const { data, error } = await supabase
       .from('cost_codes')
-      .insert(codesToInsert)
+      .upsert(codesToInsert, { 
+        onConflict: 'code,category',
+        ignoreDuplicates: false 
+      })
       .select();
 
     if (error) {
