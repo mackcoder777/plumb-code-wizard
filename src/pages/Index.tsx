@@ -791,6 +791,32 @@ const EnhancedCostCodeManager = () => {
     showNotification(`Auto-assigned ${assigned} cost codes with high confidence`, 'success');
   };
 
+  // Apply mapping to all items of a specific system
+  const applyMappingToSystem = (system: string, costHead: string) => {
+    const systemLower = system.toLowerCase().trim();
+    let assigned = 0;
+    
+    const updated = estimateData.map(item => {
+      if (item.system.toLowerCase().trim() === systemLower && !item.costCode) {
+        assigned++;
+        return { 
+          ...item, 
+          costCode: costHead,
+          suggestedCode: {
+            ...item.suggestedCode,
+            code: costHead,
+            costHead: costHead,
+            source: 'system-mapping'
+          }
+        };
+      }
+      return item;
+    });
+
+    setEstimateData(updated);
+    showNotification(`Applied ${costHead} to ${assigned} items in ${system}`, 'success');
+  };
+
   // Update custom mapping with audit trail
   const updateMapping = (system, costHead, userName = 'user') => {
     const systemLower = system.toLowerCase().trim();
@@ -1276,12 +1302,20 @@ const EnhancedCostCodeManager = () => {
                               {data.autoDetected ? 'Auto-detected' : 'Manual override'}
                             </span>
                           </div>
-                          <button
-                            onClick={() => updateMapping(system, 'none')}
-                            className="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
-                          >
-                            Reset to Auto
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => applyMappingToSystem(system, data.currentMapping)}
+                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 font-medium"
+                            >
+                              Apply to System ({data.count})
+                            </button>
+                            <button
+                              onClick={() => updateMapping(system, 'none')}
+                              className="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
+                            >
+                              Reset to Auto
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-2">
