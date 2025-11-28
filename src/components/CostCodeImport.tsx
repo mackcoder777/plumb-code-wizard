@@ -43,9 +43,11 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
       // Process each sheet - category is determined ONLY by sheet name
       for (const sheetName of workbook.SheetNames) {
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
         
-        if (jsonData.length === 0) {
+        // Read as raw arrays to find the actual header row (file may have title rows)
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        
+        if (rawData.length === 0) {
           console.log(`Skipping empty sheet: "${sheetName}"`);
           continue;
         }
@@ -59,23 +61,38 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
         
         console.log(`Processing sheet: "${sheetName}" as ${sheetCategory === 'M' ? 'Material' : 'Labor'}`);
 
-        // Get headers
-        const firstRow = jsonData[0] as any;
-        const originalHeaders = Object.keys(firstRow);
-        const headersLower = originalHeaders.map(h => h.toLowerCase().trim());
+        // Find the actual header row by looking for "Cost Head" or "Description"
+        let headerRowIdx = -1;
+        let headers: string[] = [];
         
-        console.log(`Sheet "${sheetName}" headers:`, originalHeaders);
+        for (let i = 0; i < Math.min(rawData.length, 10); i++) {
+          const row = rawData[i];
+          const rowLower = row.map((cell: any) => String(cell || '').toLowerCase().trim());
+          
+          // Check if this row contains expected header columns
+          const hasCostHead = rowLower.some(c => c.includes('cost head') || c === 'code');
+          const hasDescription = rowLower.some(c => c.includes('description') || c === 'desc');
+          
+          if (hasCostHead || hasDescription) {
+            headerRowIdx = i;
+            headers = row.map((cell: any) => String(cell || '').trim());
+            console.log(`Found header row at index ${i}:`, headers);
+            break;
+          }
+        }
+        
+        if (headerRowIdx === -1) {
+          console.log(`Skipping sheet "${sheetName}": could not find header row with Cost Head or Description`);
+          continue;
+        }
 
-        // Find columns - support both standard and Murray Company format
-        // Standard format: Code, Description, Category, Units
-        // Murray format: Typical Phase, Activity, Cost Head, Description, Un, Default Category
-        
-        // Try to find Cost Head column (Murray format)
+        const headersLower = headers.map(h => h.toLowerCase().trim());
+
+        // Find column indices
         const costHeadIdx = headersLower.findIndex(h => 
           h.includes('cost head') || h === 'costhead' || h === 'cost_head'
         );
         
-        // Try to find standard Code column
         const codeIdx = headersLower.findIndex(h => 
           h === 'code' || h === 'id' || h === 'number' || h === 'cost code'
         );
@@ -99,25 +116,24 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
         const useCodeIdx = costHeadIdx !== -1 ? costHeadIdx : codeIdx;
         
         // For Murray format, use the LAST description column (the detailed one)
-        // For standard format, use the first/only description column
         const useDescIdx = descIndices.length > 1 ? descIndices[descIndices.length - 1] : descIndices[0];
 
         if (useCodeIdx === -1 || useDescIdx === undefined || useDescIdx === -1) {
-          console.log(`Skipping sheet "${sheetName}": missing code or description columns`);
+          console.log(`Skipping sheet "${sheetName}": missing code (idx=${useCodeIdx}) or description (idx=${useDescIdx}) columns`);
+          console.log('Headers found:', headers);
           continue;
         }
 
+        console.log(`Using columns: code=${headers[useCodeIdx]}, description=${headers[useDescIdx]}, units=${unitsIdx >= 0 ? headers[unitsIdx] : 'N/A'}`);
+
         let sheetCodesCount = 0;
 
-        // Map the data
-        for (const row of jsonData) {
-          const rowData = row as any;
+        // Process data rows (starting after header row)
+        for (let i = headerRowIdx + 1; i < rawData.length; i++) {
+          const row = rawData[i];
           
-          const codeKey = originalHeaders[useCodeIdx];
-          const descKey = originalHeaders[useDescIdx];
-          
-          const code = String(rowData[codeKey] || '').trim().toUpperCase();
-          const description = String(rowData[descKey] || '').trim();
+          const code = String(row[useCodeIdx] || '').trim().toUpperCase();
+          const description = String(row[useDescIdx] || '').trim();
           
           // Skip empty rows or header-like rows
           if (!code || !description || 
@@ -126,21 +142,19 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
             continue;
           }
 
-          // Category is determined ONLY by sheet name - NO OVERRIDE from column
+          // Category is determined ONLY by sheet name
           const category = sheetCategory;
 
           // Get units
           let units: string | undefined;
           if (unitsIdx !== -1) {
-            const unitsKey = originalHeaders[unitsIdx];
-            units = String(rowData[unitsKey] || '').trim() || undefined;
+            units = String(row[unitsIdx] || '').trim() || undefined;
           }
 
           // Get subcategory/phase
           let subcategory: string | undefined;
           if (phaseIdx !== -1) {
-            const phaseKey = originalHeaders[phaseIdx];
-            subcategory = String(rowData[phaseKey] || '').trim() || undefined;
+            subcategory = String(row[phaseIdx] || '').trim() || undefined;
           }
 
           allCodes.push({
