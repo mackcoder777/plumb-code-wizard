@@ -37,24 +37,34 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
         units?: string;
       }> = [];
 
-      // Process each sheet - category is determined by sheet name
+      let laborCount = 0;
+      let materialCount = 0;
+
+      // Process each sheet - category is determined ONLY by sheet name
       for (const sheetName of workbook.SheetNames) {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
         
-        if (jsonData.length === 0) continue;
+        if (jsonData.length === 0) {
+          console.log(`Skipping empty sheet: "${sheetName}"`);
+          continue;
+        }
 
-        // Determine category from sheet name
+        // Determine category from sheet name ONLY - ignore any category column
         const sheetNameLower = sheetName.toLowerCase();
         let sheetCategory: 'L' | 'M' = 'L';
         if (sheetNameLower.includes('material')) {
           sheetCategory = 'M';
         }
+        
+        console.log(`Processing sheet: "${sheetName}" as ${sheetCategory === 'M' ? 'Material' : 'Labor'}`);
 
         // Get headers
         const firstRow = jsonData[0] as any;
         const originalHeaders = Object.keys(firstRow);
         const headersLower = originalHeaders.map(h => h.toLowerCase().trim());
+        
+        console.log(`Sheet "${sheetName}" headers:`, originalHeaders);
 
         // Find columns - support both standard and Murray Company format
         // Standard format: Code, Description, Category, Units
@@ -79,11 +89,6 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
         const unitsIdx = headersLower.findIndex(h => 
           h === 'un' || h === 'units' || h === 'uom' || h === 'unit'
         );
-        
-        // Find category column (for override)
-        const catIdx = headersLower.findIndex(h => 
-          h.includes('category') || h === 'cat' || h === 'type' || h.includes('default cat')
-        );
 
         // Find subcategory/phase column
         const phaseIdx = headersLower.findIndex(h => 
@@ -98,10 +103,11 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
         const useDescIdx = descIndices.length > 1 ? descIndices[descIndices.length - 1] : descIndices[0];
 
         if (useCodeIdx === -1 || useDescIdx === undefined || useDescIdx === -1) {
-          console.log(`Skipping sheet ${sheetName}: missing code or description columns`);
-          console.log('Headers found:', originalHeaders);
+          console.log(`Skipping sheet "${sheetName}": missing code or description columns`);
           continue;
         }
+
+        let sheetCodesCount = 0;
 
         // Map the data
         for (const row of jsonData) {
@@ -120,17 +126,8 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
             continue;
           }
 
-          // Determine category - use column value if available, otherwise sheet name
-          let category = sheetCategory;
-          if (catIdx !== -1) {
-            const catKey = originalHeaders[catIdx];
-            const catValue = String(rowData[catKey] || '').trim().toUpperCase();
-            if (catValue === 'M' || catValue.includes('MATERIAL')) {
-              category = 'M';
-            } else if (catValue === 'L' || catValue.includes('LABOR')) {
-              category = 'L';
-            }
-          }
+          // Category is determined ONLY by sheet name - NO OVERRIDE from column
+          const category = sheetCategory;
 
           // Get units
           let units: string | undefined;
@@ -153,7 +150,13 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
             subcategory,
             units,
           });
+          
+          sheetCodesCount++;
+          if (category === 'L') laborCount++;
+          else materialCount++;
         }
+        
+        console.log(`Sheet "${sheetName}": extracted ${sheetCodesCount} codes as ${sheetCategory === 'M' ? 'Material' : 'Labor'}`);
       }
 
       if (allCodes.length === 0) {
@@ -166,16 +169,24 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
         return;
       }
 
-      // Remove duplicates based on code
+      console.log(`Total before deduplication: ${allCodes.length} (${laborCount} Labor, ${materialCount} Material)`);
+
+      // Remove duplicates based on code AND category (same code can exist as both Labor and Material)
       const uniqueCodes = allCodes.filter((code, index, self) =>
         index === self.findIndex((c) => c.code === code.code && c.category === code.category)
       );
+      
+      const uniqueLabor = uniqueCodes.filter(c => c.category === 'L').length;
+      const uniqueMaterial = uniqueCodes.filter(c => c.category === 'M').length;
+      
+      console.log(`Total after deduplication: ${uniqueCodes.length} (${uniqueLabor} Labor, ${uniqueMaterial} Material)`);
+      console.log(`Duplicates removed: ${allCodes.length - uniqueCodes.length}`);
 
       setPreview(uniqueCodes.slice(0, 5));
       
       toast({
         title: "File Processed",
-        description: `Found ${uniqueCodes.length} cost codes from ${workbook.SheetNames.length} sheet(s).`,
+        description: `Found ${uniqueCodes.length} codes (${uniqueLabor} Labor, ${uniqueMaterial} Material) from ${workbook.SheetNames.length} sheets.`,
       });
 
       // Auto-import after preview
