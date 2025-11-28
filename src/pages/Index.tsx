@@ -1,6 +1,18 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
+import { ProjectSelector } from '@/components/ProjectSelector';
+import { 
+  useSystemMappings, 
+  useSaveMapping, 
+  useVerifyMapping,
+  useBatchSaveMappings,
+  useCreateProject,
+  useUpdateProject,
+  EstimateProject
+} from '@/hooks/useEstimateProjects';
+import { useAuth } from '@/hooks/useAuth';
+import { Auth } from '@/components/Auth';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -334,6 +346,13 @@ const FLOOR_MAPPING = {
 };
 
 const EnhancedCostCodeManager = () => {
+  // Auth state
+  const { user, loading: authLoading } = useAuth();
+  
+  // Project state
+  const [currentProject, setCurrentProject] = useState<EstimateProject | null>(null);
+  
+  // Estimate data
   const [estimateData, setEstimateData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [activeTab, setActiveTab] = useState('upload');
@@ -361,6 +380,52 @@ const EnhancedCostCodeManager = () => {
   const [showMissingCodes, setShowMissingCodes] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+
+  // Database hooks for persistence
+  const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
+  const saveMapping = useSaveMapping();
+  const verifyMappingMutation = useVerifyMapping();
+  const batchSaveMappings = useBatchSaveMappings();
+  const createProject = useCreateProject();
+  const updateProject = useUpdateProject();
+
+  // Load saved mappings when project changes
+  useEffect(() => {
+    if (savedMappings.length > 0) {
+      const mappings: Record<string, string> = {};
+      const verified: Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }> = {};
+      
+      savedMappings.forEach(m => {
+        mappings[m.system_name] = m.cost_head;
+        if (m.is_verified) {
+          verified[m.system_name] = {
+            verifiedAt: m.verified_at || new Date().toISOString(),
+            verifiedBy: m.verified_by || 'user',
+            costHead: m.cost_head
+          };
+        }
+      });
+      
+      setCustomMappings(mappings);
+      setVerifiedSystems(verified);
+    }
+  }, [savedMappings]);
+
+  // Show auth if not logged in
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   // Helper function for auto-detecting cost codes
   const autoDetectCostCode = (description: string): string => {
@@ -683,6 +748,38 @@ const EnhancedCostCodeManager = () => {
             setEstimateData(processedData);
             setFilteredData(processedData);
             
+            // Auto-create project if user is logged in and no project selected
+            if (user && !currentProject) {
+              const projectName = fileName.replace(/\.[^/.]+$/, '') || `Estimate ${new Date().toLocaleDateString()}`;
+              createProject.mutate({
+                name: projectName,
+                fileName: fileName,
+                totalItems: processedData.length
+              }, {
+                onSuccess: (newProject) => {
+                  setCurrentProject(newProject);
+                  // Save initial mappings to database
+                  if (Object.keys(mappings).length > 0) {
+                    const mappingsToSave = Object.entries(mappings).map(([systemName, costHead]) => ({
+                      systemName,
+                      costHead: costHead as string
+                    }));
+                    batchSaveMappings.mutate({
+                      projectId: newProject.id,
+                      mappings: mappingsToSave
+                    });
+                  }
+                }
+              });
+            } else if (currentProject) {
+              // Update existing project
+              updateProject.mutate({
+                id: currentProject.id,
+                file_name: fileName,
+                total_items: processedData.length
+              });
+            }
+            
             const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
             setLoadingProgress(100);
             setLoadingMessage(`Complete! ${processedData.length.toLocaleString()} items in ${totalTime}s`);
@@ -829,6 +926,16 @@ const EnhancedCostCodeManager = () => {
         costHead: costHead
       }
     }));
+    
+    // Persist to database if project exists
+    if (currentProject?.id) {
+      verifyMappingMutation.mutate({
+        projectId: currentProject.id,
+        systemName: system,
+        isVerified: true
+      });
+    }
+    
     showNotification(`Verified mapping for ${system} → ${costHead}`, 'success');
   };
 
@@ -840,6 +947,16 @@ const EnhancedCostCodeManager = () => {
       delete newVerified[systemLower];
       return newVerified;
     });
+    
+    // Persist to database if project exists
+    if (currentProject?.id) {
+      verifyMappingMutation.mutate({
+        projectId: currentProject.id,
+        systemName: system,
+        isVerified: false
+      });
+    }
+    
     showNotification(`Removed verification for ${system}`, 'info');
   };
 
@@ -865,6 +982,16 @@ const EnhancedCostCodeManager = () => {
           reason: currentMapping ? 'Manual change' : 'Initial assignment'
         }
       ];
+      
+      // Persist to database if project exists
+      if (currentProject?.id) {
+        saveMapping.mutate({
+          projectId: currentProject.id,
+          systemName: system,
+          costHead: costHead,
+          previousCode: currentMapping
+        });
+      }
     } else {
       delete newMappings[systemLower];
       newHistory[systemLower] = [
@@ -1023,6 +1150,28 @@ const EnhancedCostCodeManager = () => {
             {notification.message}
           </div>
         )}
+
+        {/* Project Selector */}
+        <ProjectSelector
+          currentProjectId={currentProject?.id || null}
+          onSelectProject={(project) => {
+            setCurrentProject(project);
+            if (!project) {
+              // Clear data when no project selected
+              setEstimateData([]);
+              setFilteredData([]);
+              setCustomMappings({});
+              setVerifiedSystems({});
+            }
+          }}
+          onNewProject={() => {
+            setEstimateData([]);
+            setFilteredData([]);
+            setCustomMappings({});
+            setVerifiedSystems({});
+            setActiveTab('upload');
+          }}
+        />
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50">

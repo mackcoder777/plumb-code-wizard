@@ -50,6 +50,121 @@ export type Database = {
         }
         Relationships: []
       }
+      estimate_projects: {
+        Row: {
+          created_at: string | null
+          file_name: string | null
+          id: string
+          name: string
+          total_items: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_name?: string | null
+          id?: string
+          name: string
+          total_items?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string | null
+          id?: string
+          name?: string
+          total_items?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mapping_history: {
+        Row: {
+          change_reason: string | null
+          changed_by: string | null
+          created_at: string | null
+          from_code: string | null
+          id: string
+          project_id: string
+          system_name: string
+          to_code: string
+        }
+        Insert: {
+          change_reason?: string | null
+          changed_by?: string | null
+          created_at?: string | null
+          from_code?: string | null
+          id?: string
+          project_id: string
+          system_name: string
+          to_code: string
+        }
+        Update: {
+          change_reason?: string | null
+          changed_by?: string | null
+          created_at?: string | null
+          from_code?: string | null
+          id?: string
+          project_id?: string
+          system_name?: string
+          to_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mapping_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_mappings: {
+        Row: {
+          cost_head: string
+          created_at: string | null
+          id: string
+          is_verified: boolean | null
+          project_id: string
+          system_name: string
+          updated_at: string | null
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          cost_head: string
+          created_at?: string | null
+          id?: string
+          is_verified?: boolean | null
+          project_id: string
+          system_name: string
+          updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          cost_head?: string
+          created_at?: string | null
+          id?: string
+          is_verified?: boolean | null
+          project_id?: string
+          system_name?: string
+          updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_mappings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
