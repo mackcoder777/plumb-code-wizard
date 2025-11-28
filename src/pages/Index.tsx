@@ -411,22 +411,6 @@ const EnhancedCostCodeManager = () => {
     }
   }, [savedMappings]);
 
-  // Show auth if not logged in
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Auth />;
-  }
-
   // Helper function for auto-detecting cost codes
   const autoDetectCostCode = (description: string): string => {
     const desc = description.toLowerCase();
@@ -873,6 +857,22 @@ const EnhancedCostCodeManager = () => {
 
     setFilteredData(filtered);
   }, [estimateData, filters]);
+
+  // Show auth if not logged in - MUST be after all hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   // Auto-assign cost codes
   const autoAssignCostCodes = () => {
