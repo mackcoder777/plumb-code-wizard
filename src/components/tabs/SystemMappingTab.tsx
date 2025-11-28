@@ -6,13 +6,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, ChevronDown } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
 import { QuickActions } from './SystemMappingTab/QuickActions';
+import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
 import { suggestCodesForSystem, generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 
 interface SystemMappingTabProps {
@@ -388,45 +391,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             <td className="p-3 font-medium">{sm.system}</td>
                             
                             <td className="p-3">
-                              <Select
-                                value={sm.materialCode || 'none'}
+                              <TableRowCombobox
+                                value={sm.materialCode}
+                                options={allMaterialCodes}
+                                placeholder="Select material code..."
                                 onValueChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select material code..." />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px]">
-                                  <SelectItem value="none">
-                                    <span className="text-muted-foreground">None</span>
-                                  </SelectItem>
-                                  {allMaterialCodes.map((code) => (
-                                    <SelectItem key={code.code} value={code.code}>
-                                      {code.code} - {code.description}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              />
                             </td>
                             
                             <td className="p-3">
-                              <Select
-                                value={sm.laborCode || 'none'}
+                              <TableRowCombobox
+                                value={sm.laborCode}
+                                options={allLaborCodes}
+                                placeholder="Select labor code..."
                                 onValueChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select labor code..." />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[300px]">
-                                  <SelectItem value="none">
-                                    <span className="text-muted-foreground">None</span>
-                                  </SelectItem>
-                                  {allLaborCodes.map((code) => (
-                                    <SelectItem key={code.code} value={code.code}>
-                                      {code.code} - {code.description}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              />
                             </td>
                             
                             <td className="p-3 text-right tabular-nums font-medium">{sm.itemCount}</td>
