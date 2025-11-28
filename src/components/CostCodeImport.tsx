@@ -29,119 +29,161 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       
-      // Try to find the right sheet
-      const sheetName = workbook.SheetNames.find(name => 
-        name.toLowerCase().includes('cost') || 
-        name.toLowerCase().includes('code') ||
-        name.toLowerCase().includes('labor') ||
-        name.toLowerCase().includes('material')
-      ) || workbook.SheetNames[0];
-      
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-      
-      if (jsonData.length === 0) {
-        toast({
-          title: "Empty File",
-          description: "The uploaded file contains no data.",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-        return;
-      }
+      const allCodes: Array<{
+        code: string;
+        description: string;
+        category: 'L' | 'M';
+        subcategory?: string;
+        units?: string;
+      }> = [];
 
-      // Detect column names (flexible mapping)
-      const firstRow = jsonData[0] as any;
-      const headers = Object.keys(firstRow).map(h => h.toLowerCase());
-      
-      const codeCol = headers.find(h => 
-        h.includes('code') || h === 'id' || h === 'number'
-      );
-      const descCol = headers.find(h => 
-        h.includes('desc') || h.includes('name') || h.includes('title')
-      );
-      const catCol = headers.find(h => 
-        h.includes('cat') || h.includes('type')
-      );
-      const subcatCol = headers.find(h => 
-        h.includes('sub') || h.includes('group')
-      );
-      const unitsCol = headers.find(h => 
-        h.includes('unit') || h.includes('uom')
-      );
-
-      if (!codeCol || !descCol) {
-        toast({
-          title: "Invalid Format",
-          description: "Could not find 'code' and 'description' columns. Please ensure your file has these columns.",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-        return;
-      }
-
-      // Map the data
-      const mappedCodes = jsonData.map((row: any) => {
-        const originalKeys = Object.keys(firstRow);
-        const codeKey = originalKeys[headers.indexOf(codeCol)];
-        const descKey = originalKeys[headers.indexOf(descCol)];
-        const catKey = catCol ? originalKeys[headers.indexOf(catCol)] : null;
-        const subcatKey = subcatCol ? originalKeys[headers.indexOf(subcatCol)] : null;
-        const unitsKey = unitsCol ? originalKeys[headers.indexOf(unitsCol)] : null;
-
-        const code = String(row[codeKey] || '').trim();
-        const description = String(row[descKey] || '').trim();
+      // Process each sheet - category is determined by sheet name
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
         
-        if (!code || !description) return null;
+        if (jsonData.length === 0) continue;
 
-        // Determine category (L for Labor, M for Material)
-        let category: 'L' | 'M' = 'L';
-        if (catKey) {
-          const catValue = String(row[catKey]).toLowerCase();
-          if (catValue.includes('m') || catValue.includes('mat')) {
-            category = 'M';
-          }
-        } else {
-          // Auto-detect from description
-          const desc = description.toLowerCase();
-          if (desc.includes('material') || desc.includes('mat\'l') || 
-              desc.includes('pipe') || desc.includes('fitting')) {
-            category = 'M';
-          }
+        // Determine category from sheet name
+        const sheetNameLower = sheetName.toLowerCase();
+        let sheetCategory: 'L' | 'M' = 'L';
+        if (sheetNameLower.includes('material')) {
+          sheetCategory = 'M';
         }
 
-        return {
-          code,
-          description: description.toUpperCase(),
-          category,
-          subcategory: subcatKey ? String(row[subcatKey] || '').trim() : undefined,
-          units: unitsKey ? String(row[unitsKey] || '').trim() : undefined,
-        };
-      }).filter(Boolean);
+        // Get headers
+        const firstRow = jsonData[0] as any;
+        const originalHeaders = Object.keys(firstRow);
+        const headersLower = originalHeaders.map(h => h.toLowerCase().trim());
 
-      if (mappedCodes.length === 0) {
+        // Find columns - support both standard and Murray Company format
+        // Standard format: Code, Description, Category, Units
+        // Murray format: Typical Phase, Activity, Cost Head, Description, Un, Default Category
+        
+        // Try to find Cost Head column (Murray format)
+        const costHeadIdx = headersLower.findIndex(h => 
+          h.includes('cost head') || h === 'costhead' || h === 'cost_head'
+        );
+        
+        // Try to find standard Code column
+        const codeIdx = headersLower.findIndex(h => 
+          h === 'code' || h === 'id' || h === 'number' || h === 'cost code'
+        );
+        
+        // Find description columns - there might be multiple
+        const descIndices = headersLower.map((h, i) => 
+          (h.includes('desc') || h === 'name' || h === 'title') ? i : -1
+        ).filter(i => i !== -1);
+        
+        // Find units column
+        const unitsIdx = headersLower.findIndex(h => 
+          h === 'un' || h === 'units' || h === 'uom' || h === 'unit'
+        );
+        
+        // Find category column (for override)
+        const catIdx = headersLower.findIndex(h => 
+          h.includes('category') || h === 'cat' || h === 'type' || h.includes('default cat')
+        );
+
+        // Find subcategory/phase column
+        const phaseIdx = headersLower.findIndex(h => 
+          h.includes('phase') || h.includes('section') || h.includes('sub')
+        );
+
+        // Determine which code column to use
+        const useCodeIdx = costHeadIdx !== -1 ? costHeadIdx : codeIdx;
+        
+        // For Murray format, use the LAST description column (the detailed one)
+        // For standard format, use the first/only description column
+        const useDescIdx = descIndices.length > 1 ? descIndices[descIndices.length - 1] : descIndices[0];
+
+        if (useCodeIdx === -1 || useDescIdx === undefined || useDescIdx === -1) {
+          console.log(`Skipping sheet ${sheetName}: missing code or description columns`);
+          console.log('Headers found:', originalHeaders);
+          continue;
+        }
+
+        // Map the data
+        for (const row of jsonData) {
+          const rowData = row as any;
+          
+          const codeKey = originalHeaders[useCodeIdx];
+          const descKey = originalHeaders[useDescIdx];
+          
+          const code = String(rowData[codeKey] || '').trim().toUpperCase();
+          const description = String(rowData[descKey] || '').trim();
+          
+          // Skip empty rows or header-like rows
+          if (!code || !description || 
+              code.toLowerCase() === 'cost head' || 
+              description.toLowerCase() === 'description') {
+            continue;
+          }
+
+          // Determine category - use column value if available, otherwise sheet name
+          let category = sheetCategory;
+          if (catIdx !== -1) {
+            const catKey = originalHeaders[catIdx];
+            const catValue = String(rowData[catKey] || '').trim().toUpperCase();
+            if (catValue === 'M' || catValue.includes('MATERIAL')) {
+              category = 'M';
+            } else if (catValue === 'L' || catValue.includes('LABOR')) {
+              category = 'L';
+            }
+          }
+
+          // Get units
+          let units: string | undefined;
+          if (unitsIdx !== -1) {
+            const unitsKey = originalHeaders[unitsIdx];
+            units = String(rowData[unitsKey] || '').trim() || undefined;
+          }
+
+          // Get subcategory/phase
+          let subcategory: string | undefined;
+          if (phaseIdx !== -1) {
+            const phaseKey = originalHeaders[phaseIdx];
+            subcategory = String(rowData[phaseKey] || '').trim() || undefined;
+          }
+
+          allCodes.push({
+            code,
+            description: description.toUpperCase(),
+            category,
+            subcategory,
+            units,
+          });
+        }
+      }
+
+      if (allCodes.length === 0) {
         toast({
           title: "No Valid Data",
-          description: "Could not extract any valid cost codes from the file.",
+          description: "Could not extract any valid cost codes from the file. Check that your file has 'Cost Head' or 'Code' and 'Description' columns.",
           variant: "destructive",
         });
         setIsProcessing(false);
         return;
       }
 
-      setPreview(mappedCodes.slice(0, 5));
+      // Remove duplicates based on code
+      const uniqueCodes = allCodes.filter((code, index, self) =>
+        index === self.findIndex((c) => c.code === code.code && c.category === code.category)
+      );
+
+      setPreview(uniqueCodes.slice(0, 5));
       
       toast({
         title: "File Processed",
-        description: `Found ${mappedCodes.length} cost codes. Review and confirm import.`,
+        description: `Found ${uniqueCodes.length} cost codes from ${workbook.SheetNames.length} sheet(s).`,
       });
 
-      // Auto-import if preview looks good
+      // Auto-import after preview
       setTimeout(() => {
-        onImport(mappedCodes);
+        onImport(uniqueCodes);
         toast({
           title: "Import Complete",
-          description: `Successfully imported ${mappedCodes.length} cost codes.`,
+          description: `Successfully imported ${uniqueCodes.length} cost codes.`,
         });
         if (onClose) onClose();
       }, 1500);
@@ -209,7 +251,7 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
                 {preview.map((code, idx) => (
                   <div key={idx} className="text-xs font-mono bg-background p-2 rounded">
                     <span className="font-bold">{code.code}</span> - {code.description} 
-                    <span className="text-muted-foreground ml-2">({code.category})</span>
+                    <span className="text-muted-foreground ml-2">({code.category === 'L' ? 'Labor' : 'Material'})</span>
                   </div>
                 ))}
               </div>
@@ -230,11 +272,12 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
                   Upload your company's cost code library from Excel or CSV
                 </p>
                 <div className="space-y-2 text-xs text-muted-foreground text-left max-w-md mx-auto bg-muted p-4 rounded-lg">
-                  <p className="font-semibold">Expected format:</p>
+                  <p className="font-semibold">Supported formats:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Required columns: <strong>Code</strong>, <strong>Description</strong></li>
-                    <li>Optional: Category (L/M), Subcategory, Units</li>
-                    <li>Supports .xlsx, .xls, and .csv files</li>
+                    <li><strong>Murray format:</strong> Cost Head, Description, Un (Units)</li>
+                    <li><strong>Standard format:</strong> Code, Description, Category</li>
+                    <li>Multiple sheets supported (Field Labor, GC Labor, Material)</li>
+                    <li>Category auto-detected from sheet name</li>
                   </ul>
                 </div>
               </div>
@@ -270,10 +313,11 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
             <div className="space-y-2 text-sm">
               <p className="font-semibold">Tips for successful import:</p>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• Ensure your file has column headers in the first row</li>
-                <li>• Code column should contain unique identifiers (e.g., COMP, DWTR, SNWV)</li>
-                <li>• Description column should have clear, readable names</li>
-                <li>• Category can be "L" (Labor), "M" (Material), or keywords like "labor"/"material"</li>
+                <li>• File should have column headers in the first row</li>
+                <li>• "Cost Head" or "Code" column contains the code identifier (e.g., PLMB, PIPE, INJR)</li>
+                <li>• "Description" column has the code name (e.g., PLUMBERS, PIPEFITTERS)</li>
+                <li>• Sheet names like "Field Labor", "Material" auto-set the category</li>
+                <li>• Supports .xlsx, .xls, and .csv files</li>
               </ul>
             </div>
           </div>
