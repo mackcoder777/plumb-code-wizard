@@ -718,29 +718,51 @@ const EnhancedCostCodeManager = () => {
             }
             
           } else if (type === 'chunk') {
-            // Process chunk immediately (no accumulation - saves memory)
-            const processedChunk = chunk.map((row: any, index: number) => ({
-              id: processedItemsCount + index,
-              drawing: String(row['D'] || row['Drawing'] || ''),
-              system: String(row['D_1'] || row['System'] || ''),
-              floor: String(row['D_2'] || row['Floor'] || ''),
-              zone: String(row['D_3'] || row['Zone'] || ''),
-              materialDesc: String(row['A'] || row['Material Description'] || ''),
-              itemName: String(row['A_1'] || row['Item Name'] || ''),
-              size: String(row['A_2'] || row['Size'] || ''),
-              quantity: Number(row['T'] || row['Quantity']) || 0,
-              materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
-              hours: Number(row['T_3'] || row['Hours']) || 0,
-              laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
-              costCode: '',
-              suggestedCode: generateCostCode({
+            // Helper to detect header rows (rows that contain column header text instead of actual data)
+            const isHeaderRow = (row: any): boolean => {
+              const drawing = String(row['D'] || row['Drawing'] || '').toLowerCase().trim();
+              const system = String(row['D_1'] || row['System'] || '').toLowerCase().trim();
+              const floor = String(row['D_2'] || row['Floor'] || '').toLowerCase().trim();
+              const materialDesc = String(row['A'] || row['Material Description'] || '').toLowerCase().trim();
+              const itemName = String(row['A_1'] || row['Item Name'] || '').toLowerCase().trim();
+              
+              // Check if this row contains column header text
+              const headerKeywords = ['drawing', 'system', 'floor', 'material description', 'item name', 'zone', 'quantity', 'hours'];
+              const fieldsToCheck = [drawing, system, floor, materialDesc, itemName];
+              
+              // If 3 or more fields match header keywords exactly, it's a header row
+              const headerMatches = fieldsToCheck.filter(field => 
+                headerKeywords.some(keyword => field === keyword)
+              ).length;
+              
+              return headerMatches >= 3;
+            };
+            
+            // Process chunk immediately, filtering out header rows
+            const processedChunk = chunk
+              .filter((row: any) => !isHeaderRow(row))
+              .map((row: any, index: number) => ({
+                id: processedItemsCount + index,
+                drawing: String(row['D'] || row['Drawing'] || ''),
                 system: String(row['D_1'] || row['System'] || ''),
-                floor: String(row['D_2'] || row['Floor'] || '')
-              })
-            }));
+                floor: String(row['D_2'] || row['Floor'] || ''),
+                zone: String(row['D_3'] || row['Zone'] || ''),
+                materialDesc: String(row['A'] || row['Material Description'] || ''),
+                itemName: String(row['A_1'] || row['Item Name'] || ''),
+                size: String(row['A_2'] || row['Size'] || ''),
+                quantity: Number(row['T'] || row['Quantity']) || 0,
+                materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
+                hours: Number(row['T_3'] || row['Hours']) || 0,
+                laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
+                costCode: '',
+                suggestedCode: generateCostCode({
+                  system: String(row['D_1'] || row['System'] || ''),
+                  floor: String(row['D_2'] || row['Floor'] || '')
+                })
+              }));
             
             processedData.push(...processedChunk);
-            processedItemsCount += chunk.length;
+            processedItemsCount += processedChunk.length;
             expectedTotalRows = totalRows;
             
             // Update progress
