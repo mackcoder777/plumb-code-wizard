@@ -27,7 +27,8 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { key: 'weight', label: 'Weight', visible: false, sortable: true },
   { key: 'hours', label: 'Hours', visible: true, sortable: true },
   { key: 'laborDollars', label: 'Labor $', visible: false, sortable: true },
-  { key: 'costCode', label: 'Cost Code', visible: true, sortable: true },
+  { key: 'materialCostCode', label: 'Material Code', visible: true, sortable: true },
+  { key: 'costCode', label: 'Labor Code', visible: true, sortable: true },
 ];
 
 const STORAGE_KEY = 'estimate-column-config';
@@ -69,7 +70,7 @@ export const useColumnConfig = () => {
     if (!data || data.length === 0) return;
 
     // Keys that should always remain visible regardless of data
-    const alwaysVisibleKeys = ['costCode', 'materialDesc', 'itemName', 'quantity', 'materialDollars', 'hours'];
+    const alwaysVisibleKeys = ['costCode', 'materialCostCode', 'materialDesc', 'itemName', 'quantity', 'materialDollars', 'hours'];
     
     setColumns(prev => prev.map(col => {
       // Skip columns that should always be visible

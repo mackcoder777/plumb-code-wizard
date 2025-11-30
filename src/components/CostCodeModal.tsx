@@ -17,7 +17,7 @@ interface CostCodeModalProps {
   item: EstimateItem;
   isOpen: boolean;
   onClose: () => void;
-  onAssign: (item: EstimateItem, costCode: string) => void;
+  onAssign: (item: EstimateItem, costCode: string, type?: 'labor' | 'material') => void;
 }
 
 export const CostCodeModal: React.FC<CostCodeModalProps> = ({
@@ -26,13 +26,13 @@ export const CostCodeModal: React.FC<CostCodeModalProps> = ({
   onClose,
   onAssign
 }) => {
-  const handleCodeSelect = (code: CostCode) => {
-    onAssign(item, code.costHead);
+  const handleCodeSelect = (code: CostCode, type: 'labor' | 'material' = 'labor') => {
+    onAssign(item, code.costHead, type);
     onClose();
   };
 
-  const handleAssign = (costCode: string) => {
-    onAssign(item, costCode);
+  const handleAssign = (costCode: string, type: 'labor' | 'material' = 'labor') => {
+    onAssign(item, costCode, type);
     onClose();
   };
 
@@ -64,9 +64,15 @@ export const CostCodeModal: React.FC<CostCodeModalProps> = ({
                 <strong>Location:</strong> {item.floor} / {item.zone}
               </div>
               <div>
-                <strong>Current Code:</strong> 
+                <strong>Labor Code:</strong> 
                 <Badge variant="outline" className="ml-2">
                   {item.costCode || 'Not assigned'}
+                </Badge>
+              </div>
+              <div>
+                <strong>Material Code:</strong> 
+                <Badge variant="outline" className="ml-2">
+                  {item.materialCostCode || 'Not assigned'}
                 </Badge>
               </div>
               <div>
@@ -83,13 +89,13 @@ export const CostCodeModal: React.FC<CostCodeModalProps> = ({
                 AI Suggested Codes
               </h4>
               <div className="flex flex-wrap gap-2 mb-4">
-                {item.suggestedCodes.map((suggestion, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    className="flex-col items-start p-3 h-auto hover:bg-primary/10 border-primary/20"
-                    onClick={() => handleAssign(suggestion.code)}
-                  >
+                  {item.suggestedCodes.map((suggestion, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      className="flex-col items-start p-3 h-auto hover:bg-primary/10 border-primary/20"
+                      onClick={() => handleAssign(suggestion.code, suggestion.type)}
+                    >
                     <div className="flex items-center gap-2 w-full">
                       <Badge variant={suggestion.type === 'labor' ? 'default' : 'secondary'}>
                         {suggestion.code}

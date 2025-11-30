@@ -278,21 +278,36 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
       
       // Priority: Item type mapping > System mapping > Existing code
-      // Labor code takes precedence when both are set
-      let newCostCode = item.costCode;
+      // Now we assign BOTH labor and material codes separately
+      let newLaborCode = item.costCode;
+      let newMaterialCode = item.materialCostCode || '';
+      let changed = false;
       
-      if (itemTypeMapping && (itemTypeMapping.laborCode || itemTypeMapping.materialCode)) {
+      if (itemTypeMapping) {
         // Use item type-specific mapping
-        newCostCode = itemTypeMapping.laborCode || itemTypeMapping.materialCode || item.costCode;
-        itemsAffected++;
-      } else if (systemMapping && (systemMapping.laborCode || systemMapping.materialCode)) {
+        if (itemTypeMapping.laborCode && !item.costCode) {
+          newLaborCode = itemTypeMapping.laborCode;
+          changed = true;
+        }
+        if (itemTypeMapping.materialCode && !item.materialCostCode) {
+          newMaterialCode = itemTypeMapping.materialCode;
+          changed = true;
+        }
+      } else if (systemMapping) {
         // Fall back to system-level mapping
-        newCostCode = systemMapping.laborCode || systemMapping.materialCode || item.costCode;
-        itemsAffected++;
+        if (systemMapping.laborCode && !item.costCode) {
+          newLaborCode = systemMapping.laborCode;
+          changed = true;
+        }
+        if (systemMapping.materialCode && !item.materialCostCode) {
+          newMaterialCode = systemMapping.materialCode;
+          changed = true;
+        }
       }
       
-      if (newCostCode !== item.costCode) {
-        return { ...item, costCode: newCostCode };
+      if (changed) {
+        itemsAffected++;
+        return { ...item, costCode: newLaborCode, materialCostCode: newMaterialCode };
       }
       return item;
     });
