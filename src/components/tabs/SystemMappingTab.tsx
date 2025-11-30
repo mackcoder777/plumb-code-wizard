@@ -21,6 +21,7 @@ import { suggestCodesForSystem, generateAllSuggestions, SuggestionResult } from 
 interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
+  onNavigateToEstimates?: (systemFilter: string) => void;
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -32,7 +33,7 @@ interface SystemMappingTabProps {
 
 type ViewMode = 'cards' | 'table';
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, importedCostCodes = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
   const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
@@ -101,18 +102,23 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   // Extract unique systems and count items
   const systemMappings = useMemo(() => {
-    const systemMap = new Map<string, number>();
+    const systemMap = new Map<string, { count: number; items: EstimateItem[] }>();
     
     data.forEach(item => {
-      if (item.system) {
-        systemMap.set(item.system, (systemMap.get(item.system) || 0) + 1);
+      const systemKey = item.system || 'Unknown';
+      if (!systemMap.has(systemKey)) {
+        systemMap.set(systemKey, { count: 0, items: [] });
       }
+      const entry = systemMap.get(systemKey)!;
+      entry.count++;
+      entry.items.push(item);
     });
 
     return Array.from(systemMap.entries())
-      .map(([system, count]) => ({
+      .map(([system, { count, items }]) => ({
         system,
         itemCount: count,
+        items,
         materialCode: mappings[system]?.materialCode,
         laborCode: mappings[system]?.laborCode,
         suggestedMaterialCode: suggestions[system]?.materialCode,
@@ -356,6 +362,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                       key={sm.system}
                       system={sm.system}
                       itemCount={sm.itemCount}
+                      items={sm.items}
                       materialCode={sm.materialCode}
                       laborCode={sm.laborCode}
                       suggestedMaterialCode={sm.suggestedMaterialCode}
@@ -364,6 +371,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                       onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
                       onClear={() => clearMapping(sm.system)}
                       onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                      onViewAllItems={onNavigateToEstimates}
                       importedCostCodes={importedCostCodes}
                     />
                   ))}

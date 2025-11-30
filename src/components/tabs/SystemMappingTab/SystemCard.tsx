@@ -5,10 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useMaterialCodes, useLaborCodes } from '@/hooks/useCostCodes';
-import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, Check } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EstimateItem } from '@/types/estimate';
 
 interface SystemCardProps {
   system: string;
@@ -21,6 +23,8 @@ interface SystemCardProps {
   onLaborCodeChange: (value: string) => void;
   onClear: () => void;
   onApplySuggestions?: () => void;
+  onViewAllItems?: (system: string) => void;
+  items?: EstimateItem[];
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -41,10 +45,13 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   onLaborCodeChange,
   onClear,
   onApplySuggestions,
+  onViewAllItems,
+  items = [],
   importedCostCodes = [],
 }) => {
   const [materialOpen, setMaterialOpen] = useState(false);
   const [laborOpen, setLaborOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   
   const isMapped = materialCode && laborCode;
   const isPartial = (materialCode || laborCode) && !(materialCode && laborCode);
@@ -319,6 +326,68 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             )}
           </div>
         )}
+
+        {/* Item Preview Section */}
+        <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground hover:text-foreground">
+              <span className="flex items-center gap-2">
+                <Eye className="w-4 h-4" />
+                Preview Items
+              </span>
+              {previewOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left p-2 font-medium">Drawing</th>
+                    <th className="text-left p-2 font-medium">Material Desc</th>
+                    <th className="text-right p-2 font-medium">Qty</th>
+                    <th className="text-right p-2 font-medium">$ Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {items.slice(0, 5).map((item, idx) => (
+                    <tr key={item.id || idx} className="text-xs">
+                      <td className="p-2 truncate max-w-[80px]" title={item.drawing}>{item.drawing || '-'}</td>
+                      <td className="p-2 truncate max-w-[120px]" title={item.materialDesc}>{item.materialDesc || '-'}</td>
+                      <td className="p-2 text-right tabular-nums">{item.quantity}</td>
+                      <td className="p-2 text-right tabular-nums">${(item.materialDollars || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {items.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                        No items found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              {items.length > 5 && (
+                <div className="p-2 border-t bg-muted/30 text-center">
+                  <span className="text-xs text-muted-foreground">
+                    Showing 5 of {items.length} items
+                  </span>
+                </div>
+              )}
+            </div>
+            {onViewAllItems && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full mt-2"
+                onClick={() => onViewAllItems(system)}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                View All {itemCount} Items in Estimates
+              </Button>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       </CardContent>
     </Card>
   );

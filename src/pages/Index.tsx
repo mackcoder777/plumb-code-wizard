@@ -1598,7 +1598,9 @@ const EnhancedCostCodeManager = () => {
                         acc[system].count++;
                         return acc;
                       }, {})
-                    ).map(([system, data]: [string, any]) => (
+                    ).map(([system, data]: [string, any]) => {
+                      const systemItems = estimateData.filter(item => (item.system || 'Unknown') === system);
+                      return (
                       <div key={system} className={`border rounded-lg p-4 ${data.isVerified ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-3">
@@ -1684,9 +1686,64 @@ const EnhancedCostCodeManager = () => {
                               </span>
                             )}
                           </div>
+
+                          {/* Item Preview Section */}
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900 flex items-center gap-2">
+                              <span>👁️ Preview Items ({systemItems.length})</span>
+                            </summary>
+                            <div className="mt-2 border rounded-lg overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-gray-100">
+                                  <tr>
+                                    <th className="text-left p-2 font-medium">Drawing</th>
+                                    <th className="text-left p-2 font-medium">Material Desc</th>
+                                    <th className="text-left p-2 font-medium">Item Name</th>
+                                    <th className="text-right p-2 font-medium">Qty</th>
+                                    <th className="text-right p-2 font-medium">$ Value</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                  {systemItems.slice(0, 5).map((item, idx) => (
+                                    <tr key={item.id || idx} className="bg-white">
+                                      <td className="p-2 truncate max-w-[80px]" title={item.drawing}>{item.drawing || '-'}</td>
+                                      <td className="p-2 truncate max-w-[150px]" title={item.materialDesc}>{item.materialDesc || '-'}</td>
+                                      <td className="p-2 truncate max-w-[120px]" title={item.itemName}>{item.itemName || '-'}</td>
+                                      <td className="p-2 text-right tabular-nums">{item.quantity}</td>
+                                      <td className="p-2 text-right tabular-nums">${(item.materialDollars || 0).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                  {systemItems.length === 0 && (
+                                    <tr>
+                                      <td colSpan={5} className="p-4 text-center text-gray-500">
+                                        No items found
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                              {systemItems.length > 5 && (
+                                <div className="p-2 bg-gray-50 border-t text-center text-xs text-gray-600">
+                                  Showing 5 of {systemItems.length} items
+                                </div>
+                              )}
+                              <div className="p-2 bg-gray-50 border-t">
+                                <button
+                                  onClick={() => {
+                                    setFilters(prev => ({ ...prev, system }));
+                                    setActiveTab('estimates');
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
+                                >
+                                  ↗️ View All {systemItems.length} Items in Estimates Tab
+                                </button>
+                              </div>
+                            </div>
+                          </details>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
