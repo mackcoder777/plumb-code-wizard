@@ -16,6 +16,8 @@ import {
   Plus
 } from 'lucide-react';
 import { CostCodeModal } from '../CostCodeModal';
+import { ColumnConfigPanel } from '../ColumnConfigPanel';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { toast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
 
@@ -40,6 +42,9 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedItem, setSelectedItem] = useState<EstimateItem | null>(null);
   const [showCostCodeModal, setShowCostCodeModal] = useState(false);
+  
+  // Column configuration
+  const { columns, visibleColumns, toggleColumn, resetToDefaults } = useColumnConfig();
 
   // Filter options
   const filterOptions = useMemo(() => ({
@@ -131,12 +136,21 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       'System': item.system,
       'Floor': item.floor,
       'Zone': item.zone,
+      'Symbol': item.symbol,
+      'Estimator': item.estimator,
+      'Material Spec': item.materialSpec,
+      'Item Type': item.itemType,
+      'Report Cat': item.reportCat,
+      'Trade': item.trade,
       'Material Description': item.materialDesc,
       'Item Name': item.itemName,
       'Size': item.size,
       'Quantity': item.quantity,
+      'List Price': item.listPrice,
       'Material $': item.materialDollars,
+      'Weight': item.weight,
       'Labor Hours': item.hours,
+      'Labor $': item.laborDollars,
       'Cost Code': item.costCode || '',
       'Suggested Code': item.suggestedCodes[0]?.code || '',
       'Confidence': item.suggestedCodes[0] ? Math.round(item.suggestedCodes[0].confidence * 100) + '%' : ''
@@ -172,6 +186,55 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
   const openCostCodeModal = (item: EstimateItem) => {
     setSelectedItem(item);
     setShowCostCodeModal(true);
+  };
+
+  // Helper to render cell content based on column key
+  const renderCellContent = (item: EstimateItem, key: string) => {
+    switch (key) {
+      case 'system':
+        return <Badge variant="secondary">{item.system}</Badge>;
+      case 'materialDesc':
+        return (
+          <div className="truncate max-w-xs" title={item.materialDesc}>
+            {item.materialDesc}
+          </div>
+        );
+      case 'quantity':
+      case 'hours':
+        return <span className="font-mono">{(item[key] as number).toFixed(2)}</span>;
+      case 'materialDollars':
+      case 'laborDollars':
+      case 'listPrice':
+        return <span className="font-mono">${(item[key] as number).toFixed(2)}</span>;
+      case 'weight':
+        return <span className="font-mono">{(item[key] as number).toFixed(2)}</span>;
+      case 'costCode':
+        if (item.costCode) {
+          return (
+            <Badge variant="default" className="bg-success text-success-foreground">
+              {item.costCode}
+            </Badge>
+          );
+        } else if (item.suggestedCodes.length > 0) {
+          return (
+            <Button
+              variant="outline" 
+              size="sm"
+              className="text-xs"
+              onClick={() => openCostCodeModal(item)}
+            >
+              {item.suggestedCodes[0].code}
+              <span className="ml-1 text-muted-foreground">
+                ({Math.round(item.suggestedCodes[0].confidence * 100)}%)
+              </span>
+            </Button>
+          );
+        } else {
+          return <span className="text-warning">None</span>;
+        }
+      default:
+        return (item as any)[key] || '';
+    }
   };
 
   return (
@@ -250,19 +313,26 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       </Card>
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3">
-        <Button onClick={applyAutoCostCodes} className="shadow-primary">
-          <Bot className="w-4 h-4 mr-2" />
-          Auto-Assign Cost Codes
-        </Button>
-        <Button variant="secondary" onClick={exportWithCostCodes}>
-          <Download className="w-4 h-4 mr-2" />
-          Export with Cost Codes
-        </Button>
-        <Button variant="outline" onClick={clearFilters}>
-          <RotateCcw className="w-4 h-4 mr-2" />
-          Clear Filters
-        </Button>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={applyAutoCostCodes} className="shadow-primary">
+            <Bot className="w-4 h-4 mr-2" />
+            Auto-Assign Cost Codes
+          </Button>
+          <Button variant="secondary" onClick={exportWithCostCodes}>
+            <Download className="w-4 h-4 mr-2" />
+            Export with Cost Codes
+          </Button>
+          <Button variant="outline" onClick={clearFilters}>
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Clear Filters
+          </Button>
+        </div>
+        <ColumnConfigPanel
+          columns={columns}
+          onToggleColumn={toggleColumn}
+          onReset={resetToDefaults}
+        />
       </div>
 
       {/* Data Table */}
@@ -271,27 +341,15 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
           <table className="w-full">
             <thead className="bg-muted/50">
               <tr>
-                {[
-                  { key: 'drawing', label: 'Drawing' },
-                  { key: 'system', label: 'System' },
-                  { key: 'floor', label: 'Floor' },
-                  { key: 'zone', label: 'Zone' },
-                  { key: 'materialDesc', label: 'Material' },
-                  { key: 'itemName', label: 'Item' },
-                  { key: 'size', label: 'Size' },
-                  { key: 'quantity', label: 'Qty' },
-                  { key: 'materialDollars', label: 'Material $' },
-                  { key: 'hours', label: 'Hours' },
-                  { key: 'costCode', label: 'Cost Code' },
-                ].map(col => (
+                {visibleColumns.map(col => (
                   <th 
                     key={col.key}
-                    className="text-left p-4 font-semibold cursor-pointer hover:bg-muted/70 transition-colors"
-                    onClick={() => handleSort(col.key)}
+                    className="text-left p-4 font-semibold cursor-pointer hover:bg-muted/70 transition-colors whitespace-nowrap"
+                    onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div className="flex items-center gap-2">
                       {col.label}
-                      <ArrowUpDown className="w-3 h-3" />
+                      {col.sortable && <ArrowUpDown className="w-3 h-3" />}
                     </div>
                   </th>
                 ))}
@@ -301,43 +359,11 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             <tbody>
               {filteredData.map((item) => (
                 <tr key={item.id} className="border-b hover:bg-muted/30 transition-colors">
-                  <td className="p-4">{item.drawing}</td>
-                  <td className="p-4">
-                    <Badge variant="secondary">{item.system}</Badge>
-                  </td>
-                  <td className="p-4">{item.floor}</td>
-                  <td className="p-4">{item.zone}</td>
-                  <td className="p-4 max-w-xs">
-                    <div className="truncate" title={item.materialDesc}>
-                      {item.materialDesc}
-                    </div>
-                  </td>
-                  <td className="p-4">{item.itemName}</td>
-                  <td className="p-4">{item.size}</td>
-                  <td className="p-4 font-mono">{item.quantity}</td>
-                  <td className="p-4 font-mono">${item.materialDollars.toFixed(2)}</td>
-                  <td className="p-4 font-mono">{item.hours.toFixed(2)}</td>
-                  <td className="p-4">
-                    {item.costCode ? (
-                      <Badge variant="default" className="bg-success text-success-foreground">
-                        {item.costCode}
-                      </Badge>
-                    ) : item.suggestedCodes.length > 0 ? (
-                      <Button
-                        variant="outline" 
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => openCostCodeModal(item)}
-                      >
-                        {item.suggestedCodes[0].code}
-                        <span className="ml-1 text-muted-foreground">
-                          ({Math.round(item.suggestedCodes[0].confidence * 100)}%)
-                        </span>
-                      </Button>
-                    ) : (
-                      <span className="text-warning">None</span>
-                    )}
-                  </td>
+                  {visibleColumns.map(col => (
+                    <td key={col.key} className="p-4">
+                      {renderCellContent(item, col.key)}
+                    </td>
+                  ))}
                   <td className="p-4">
                     <Button
                       variant="ghost"
