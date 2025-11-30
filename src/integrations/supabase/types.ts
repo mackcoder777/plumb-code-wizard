@@ -219,6 +219,7 @@ export type Database = {
           created_at: string | null
           id: string
           is_verified: boolean | null
+          item_type: string | null
           project_id: string
           system_name: string
           updated_at: string | null
@@ -230,6 +231,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_verified?: boolean | null
+          item_type?: string | null
           project_id: string
           system_name: string
           updated_at?: string | null
@@ -241,6 +243,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_verified?: boolean | null
+          item_type?: string | null
           project_id?: string
           system_name?: string
           updated_at?: string | null

@@ -6,17 +6,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, ChevronDown } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
+import { ItemTypeMappingCard } from './SystemMappingTab/ItemTypeMappingCard';
 import { QuickActions } from './SystemMappingTab/QuickActions';
 import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
-import { suggestCodesForSystem, generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
+import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -36,8 +37,10 @@ type ViewMode = 'cards' | 'table';
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
+  const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
   const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
   const [activeStatusFilter, setActiveStatusFilter] = useState<'all' | 'mapped' | 'partial' | 'unmapped' | null>(null);
   const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
   const [showAllSystems, setShowAllSystems] = useState(false);
@@ -206,11 +209,25 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   const clearAllMappings = () => {
     setMappings({});
+    setItemTypeMappings({});
     setSuggestions({});
     toast({
       title: "All Mappings Cleared",
       description: "All system mappings have been removed",
     });
+  };
+
+  const handleItemTypeMappingChange = (system: string, itemType: string, type: 'materialCode' | 'laborCode', value: string) => {
+    setItemTypeMappings(prev => ({
+      ...prev,
+      [system]: {
+        ...prev[system],
+        [itemType]: {
+          ...prev[system]?.[itemType],
+          [type]: value === 'none' ? undefined : value,
+        }
+      }
+    }));
   };
 
   const handleAutoSuggest = () => {
@@ -254,27 +271,42 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   };
 
   const applyMappings = () => {
-    let appliedCount = 0;
     let itemsAffected = 0;
 
     const updatedData = data.map(item => {
-      const mapping = mappings[item.system];
-      if (mapping && (mapping.materialCode || mapping.laborCode)) {
-        appliedCount++;
+      const systemMapping = mappings[item.system];
+      const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
+      
+      // Priority: Item type mapping > System mapping > Existing code
+      // Labor code takes precedence when both are set
+      let newCostCode = item.costCode;
+      
+      if (itemTypeMapping && (itemTypeMapping.laborCode || itemTypeMapping.materialCode)) {
+        // Use item type-specific mapping
+        newCostCode = itemTypeMapping.laborCode || itemTypeMapping.materialCode || item.costCode;
         itemsAffected++;
-        return {
-          ...item,
-          costCode: mapping.laborCode || mapping.materialCode || item.costCode,
-        };
+      } else if (systemMapping && (systemMapping.laborCode || systemMapping.materialCode)) {
+        // Fall back to system-level mapping
+        newCostCode = systemMapping.laborCode || systemMapping.materialCode || item.costCode;
+        itemsAffected++;
+      }
+      
+      if (newCostCode !== item.costCode) {
+        return { ...item, costCode: newCostCode };
       }
       return item;
     });
 
     onDataUpdate(updatedData);
     
+    const itemTypeMappingCount = Object.values(itemTypeMappings).reduce(
+      (acc, systemItemTypes) => acc + Object.keys(systemItemTypes).length, 
+      0
+    );
+    
     toast({
       title: "Mappings Applied Successfully",
-      description: `Applied ${Object.keys(mappings).length} system mappings to ${itemsAffected} items`,
+      description: `Applied ${Object.keys(mappings).length} system mappings${itemTypeMappingCount > 0 ? ` and ${itemTypeMappingCount} item type overrides` : ''} to ${itemsAffected} items`,
     });
   };
 
@@ -289,7 +321,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   };
 
   const totalItems = data.length;
-  const hasMappings = Object.keys(mappings).length > 0;
+  const hasMappings = Object.keys(mappings).length > 0 || Object.keys(itemTypeMappings).length > 0;
 
   return (
     <div className="space-y-6">
@@ -322,23 +354,36 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                     Assign material and labor codes to each system
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={viewMode === 'cards' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('cards')}
-                  >
-                    <LayoutGrid className="w-4 h-4 mr-2" />
-                    Cards
-                  </Button>
-                  <Button
-                    variant={viewMode === 'table' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setViewMode('table')}
-                  >
-                    <TableIcon className="w-4 h-4 mr-2" />
-                    Table
-                  </Button>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="item-type-mode"
+                      checked={enableItemTypeMappings}
+                      onCheckedChange={setEnableItemTypeMappings}
+                    />
+                    <Label htmlFor="item-type-mode" className="text-sm flex items-center gap-1">
+                      <Layers className="w-4 h-4" />
+                      Item Type Overrides
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={viewMode === 'cards' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setViewMode('cards')}
+                    >
+                      <LayoutGrid className="w-4 h-4 mr-2" />
+                      Cards
+                    </Button>
+                    <Button
+                      variant={viewMode === 'table' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setViewMode('table')}
+                    >
+                      <TableIcon className="w-4 h-4 mr-2" />
+                      Table
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -358,22 +403,39 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
               {viewMode === 'cards' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredSystems.map((sm) => (
-                    <SystemCard
-                      key={sm.system}
-                      system={sm.system}
-                      itemCount={sm.itemCount}
-                      items={sm.items}
-                      materialCode={sm.materialCode}
-                      laborCode={sm.laborCode}
-                      suggestedMaterialCode={sm.suggestedMaterialCode}
-                      suggestedLaborCode={sm.suggestedLaborCode}
-                      onMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
-                      onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                      onClear={() => clearMapping(sm.system)}
-                      onApplySuggestions={() => applySystemSuggestions(sm.system)}
-                      onViewAllItems={onNavigateToEstimates}
-                      importedCostCodes={importedCostCodes}
-                    />
+                    enableItemTypeMappings ? (
+                      <ItemTypeMappingCard
+                        key={sm.system}
+                        system={sm.system}
+                        itemCount={sm.itemCount}
+                        items={sm.items}
+                        systemMaterialCode={sm.materialCode}
+                        systemLaborCode={sm.laborCode}
+                        itemTypeMappings={itemTypeMappings[sm.system] || {}}
+                        onSystemMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
+                        onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                        onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
+                        materialCodes={allMaterialCodes}
+                        laborCodes={allLaborCodes}
+                      />
+                    ) : (
+                      <SystemCard
+                        key={sm.system}
+                        system={sm.system}
+                        itemCount={sm.itemCount}
+                        items={sm.items}
+                        materialCode={sm.materialCode}
+                        laborCode={sm.laborCode}
+                        suggestedMaterialCode={sm.suggestedMaterialCode}
+                        suggestedLaborCode={sm.suggestedLaborCode}
+                        onMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
+                        onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                        onClear={() => clearMapping(sm.system)}
+                        onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                        onViewAllItems={onNavigateToEstimates}
+                        importedCostCodes={importedCostCodes}
+                      />
+                    )
                   ))}
                 </div>
               )}

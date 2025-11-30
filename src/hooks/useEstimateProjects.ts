@@ -15,6 +15,7 @@ export interface SystemMapping {
   id: string;
   project_id: string;
   system_name: string;
+  item_type: string | null;
   cost_head: string;
   is_verified: boolean;
   verified_at: string | null;
