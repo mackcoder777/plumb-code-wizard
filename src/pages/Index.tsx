@@ -738,9 +738,22 @@ const EnhancedCostCodeManager = () => {
               return headerMatches >= 3;
             };
             
-            // Process chunk immediately, filtering out header rows
+            // Helper to detect empty/summary rows (rows with no identifying info - just totals)
+            const isEmptyOrSummaryRow = (row: any): boolean => {
+              const system = String(row['D_1'] || row['System'] || '').trim();
+              const drawing = String(row['D'] || row['Drawing'] || '').trim();
+              const materialDesc = String(row['A'] || row['Material Description'] || '').trim();
+              const itemName = String(row['A_1'] || row['Item Name'] || '').trim();
+              
+              // If ALL key identifier fields are empty, this is a summary/blank row
+              // (even if it has dollar values - those are subtotals)
+              return !system && !drawing && !materialDesc && !itemName;
+            };
+            
+            // Process chunk immediately, filtering out header rows AND summary/empty rows
             const processedChunk = chunk
               .filter((row: any) => !isHeaderRow(row))
+              .filter((row: any) => !isEmptyOrSummaryRow(row))
               .map((row: any, index: number) => ({
                 id: processedItemsCount + index,
                 drawing: String(row['D'] || row['Drawing'] || ''),
