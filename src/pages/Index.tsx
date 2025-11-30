@@ -563,11 +563,19 @@ const EnhancedCostCodeManager = () => {
         system: item.system || '',
         floor: item.floor || '',
         zone: item.zone || '',
+        symbol: item.symbol || '',
+        estimator: item.estimator || '',
+        materialSpec: item.material_spec || '',
+        itemType: item.item_type || '',
+        reportCat: item.report_cat || '',
+        trade: item.trade || '',
         materialDesc: item.material_desc || '',
         itemName: item.item_name || '',
         size: item.size || '',
         quantity: item.quantity || 0,
+        listPrice: item.list_price || 0,
         materialDollars: item.material_dollars || 0,
+        weight: item.weight || 0,
         hours: item.hours || 0,
         laborDollars: item.labor_dollars || 0,
         costCode: item.cost_code || '',
@@ -761,13 +769,6 @@ const EnhancedCostCodeManager = () => {
             };
             
             // Process chunk immediately, filtering out header rows AND summary/empty rows
-            // DEBUG: Log actual data row (not header) to understand Excel structure
-            if (chunkNumber === 1 && chunk.length > 1) {
-              console.log('Excel column keys:', Object.keys(chunk[0]));
-              console.log('Header row (chunk[0]):', chunk[0]);
-              console.log('First DATA row (chunk[1]):', chunk[1]);
-              console.log('Second DATA row (chunk[2]):', chunk[2]);
-            }
             const processedChunk = chunk
               .filter((row: any) => !isHeaderRow(row))
               .filter((row: any) => !isEmptyOrSummaryRow(row))
@@ -798,14 +799,6 @@ const EnhancedCostCodeManager = () => {
                   floor: String(row['D_2'] || row['Floor'] || '')
                 })
               }));
-            
-            // DEBUG: Log first processed item to verify all fields are set
-            if (chunkNumber === 1 && processedChunk.length > 0) {
-              console.log('First PROCESSED item:', processedChunk[0]);
-              console.log('itemType value:', processedChunk[0].itemType);
-              console.log('materialSpec value:', processedChunk[0].materialSpec);
-              console.log('trade value:', processedChunk[0].trade);
-            }
             
             processedData.push(...processedChunk);
             processedItemsCount += processedChunk.length;
@@ -873,11 +866,19 @@ const EnhancedCostCodeManager = () => {
                   system: item.system || '',
                   floor: item.floor || '',
                   zone: item.zone || '',
+                  symbol: item.symbol || '',
+                  estimator: item.estimator || '',
+                  material_spec: item.materialSpec || '',
+                  item_type: item.itemType || '',
+                  report_cat: item.reportCat || '',
+                  trade: item.trade || '',
                   material_desc: item.materialDesc || '',
                   item_name: item.itemName || '',
                   size: item.size || '',
                   quantity: item.quantity || 0,
+                  list_price: item.listPrice || 0,
                   material_dollars: item.materialDollars || 0,
+                  weight: item.weight || 0,
                   hours: item.hours || 0,
                   labor_dollars: item.laborDollars || 0,
                   cost_code: item.costCode || '',
