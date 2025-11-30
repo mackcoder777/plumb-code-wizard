@@ -761,6 +761,11 @@ const EnhancedCostCodeManager = () => {
             };
             
             // Process chunk immediately, filtering out header rows AND summary/empty rows
+            // DEBUG: Log first row's column names to understand Excel structure
+            if (chunkNumber === 1 && chunk.length > 0) {
+              console.log('Excel column keys:', Object.keys(chunk[0]));
+              console.log('First row data:', chunk[0]);
+            }
             const processedChunk = chunk
               .filter((row: any) => !isHeaderRow(row))
               .filter((row: any) => !isEmptyOrSummaryRow(row))
