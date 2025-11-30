@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
 import { ProjectSelector } from '@/components/ProjectSelector';
@@ -13,6 +13,8 @@ import {
 } from '@/hooks/useEstimateProjects';
 import { useAuth } from '@/hooks/useAuth';
 import { Auth } from '@/components/Auth';
+import { useCostCodes } from '@/hooks/useCostCodes';
+import { findBestMatch, findMatchesForSystems } from '@/utils/smartCodeMatcher';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -388,6 +390,9 @@ const EnhancedCostCodeManager = () => {
   const batchSaveMappings = useBatchSaveMappings();
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
+  
+  // Fetch cost codes from database for smart matching
+  const { data: dbCostCodes = [] } = useCostCodes();
 
   // Load saved mappings when project changes
   useEffect(() => {
@@ -459,7 +464,7 @@ const EnhancedCostCodeManager = () => {
 
   const COST_CODES = getAllCodes();
 
-  // Generate cost code with audit trail
+  // Generate cost code with audit trail - uses smart matching against database codes
   const generateCostCode = useCallback((item) => {
     let section = '01';
     const floorText = (item.floor || '').toLowerCase().trim();
@@ -474,40 +479,63 @@ const EnhancedCostCodeManager = () => {
     const activity = '0000';
     const systemLower = (item.system || '').toLowerCase().trim();
 
+    // Priority 1: Check custom mappings (user overrides)
     let costHead = customMappings[systemLower] || null;
     let confidence = costHead ? 1.0 : 0;
     let source = costHead ? 'custom' : '';
+    let matchReason = costHead ? 'Manual mapping' : '';
 
+    // Priority 2: Check hardcoded patterns
     if (!costHead) {
       for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
         if (config.patterns.some(pattern => pattern.test(systemLower))) {
           costHead = code;
           confidence = 0.9;
           source = 'auto-pattern';
+          matchReason = `Pattern match: ${config.description}`;
           break;
         }
       }
     }
 
-    if (!costHead) {
-      costHead = 'SNWV';
-      confidence = 0.5;
-      source = 'default';
+    // Priority 3: Smart matching against database cost codes
+    if (!costHead && dbCostCodes.length > 0) {
+      const match = findBestMatch(item.system, dbCostCodes, 'L'); // Prefer Labor codes
+      if (match && match.confidence >= 0.5) {
+        costHead = match.code;
+        confidence = match.confidence;
+        source = 'smart-match';
+        matchReason = match.matchReason;
+      }
     }
 
+    // Priority 4: No match found - leave unassigned
+    if (!costHead) {
+      costHead = '';
+      confidence = 0;
+      source = 'unassigned';
+      matchReason = 'No confident match found';
+    }
+
+    // Find description from database or hardcoded codes
+    const description = dbCostCodes.find(c => c.code === costHead)?.description ||
+                       DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 
+                       Object.values(STANDARD_COST_CODES).flatMap(cat => 
+                         Object.values(cat).flat()
+                       ).find(c => c.code === costHead)?.description || 
+                       (costHead ? 'Unknown' : 'Unassigned');
+
     return {
-      code: `${section} ${activity} ${costHead}`,
+      code: costHead ? `${section} ${activity} ${costHead}` : '',
       section: section,
       activity: activity,
       costHead: costHead,
       confidence: confidence,
       source: source,
-      description: DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 
-                   Object.values(STANDARD_COST_CODES).flatMap(cat => 
-                     Object.values(cat).flat()
-                   ).find(c => c.code === costHead)?.description || 'Unknown'
+      matchReason: matchReason,
+      description: description
     };
-  }, [customMappings]);
+  }, [customMappings, dbCostCodes]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
