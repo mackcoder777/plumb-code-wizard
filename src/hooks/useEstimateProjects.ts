@@ -59,6 +59,7 @@ export interface EstimateItem {
   hours: number;
   labor_dollars: number;
   cost_code: string;
+  material_cost_code: string;
   created_at: string;
   updated_at: string;
 }
@@ -385,6 +386,7 @@ export const useSaveEstimateItems = () => {
         hours: number;
         labor_dollars: number;
         cost_code: string;
+        material_cost_code?: string;
       }>;
       onProgress?: (progress: number) => void;
     }) => {
@@ -424,6 +426,7 @@ export const useSaveEstimateItems = () => {
           hours: item.hours || 0,
           labor_dollars: item.labor_dollars || 0,
           cost_code: item.cost_code || '',
+          material_cost_code: item.material_cost_code || '',
         }));
 
         const { error } = await supabase
@@ -455,15 +458,21 @@ export const useUpdateItemCostCode = () => {
     mutationFn: async ({ 
       itemId, 
       costCode,
-      projectId
+      projectId,
+      type = 'labor'
     }: { 
       itemId: string; 
       costCode: string;
       projectId: string;
+      type?: 'labor' | 'material';
     }) => {
+      const updateData = type === 'material' 
+        ? { material_cost_code: costCode }
+        : { cost_code: costCode };
+      
       const { data, error } = await supabase
         .from('estimate_items')
-        .update({ cost_code: costCode })
+        .update(updateData)
         .eq('id', itemId)
         .select()
         .single();
@@ -485,19 +494,34 @@ export const useBatchUpdateSystemCostCodes = () => {
     mutationFn: async ({ 
       projectId, 
       system,
-      costCode
+      laborCode,
+      materialCode
     }: { 
       projectId: string; 
       system: string;
-      costCode: string;
+      laborCode?: string;
+      materialCode?: string;
     }) => {
-      // Update all items with matching system that don't have a cost code
+      const updates: { cost_code?: string; material_cost_code?: string } = {};
+      
+      // Build update object based on what's provided
+      if (laborCode) {
+        updates.cost_code = laborCode;
+      }
+      if (materialCode) {
+        updates.material_cost_code = materialCode;
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return [];
+      }
+      
+      // Update all items with matching system
       const { data, error } = await supabase
         .from('estimate_items')
-        .update({ cost_code: costCode })
+        .update(updates)
         .eq('project_id', projectId)
         .ilike('system', system)
-        .eq('cost_code', '')
         .select();
 
       if (error) throw error;

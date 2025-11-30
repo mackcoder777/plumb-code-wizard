@@ -584,6 +584,7 @@ const EnhancedCostCodeManager = () => {
         hours: item.hours || 0,
         laborDollars: item.labor_dollars || 0,
         costCode: item.cost_code || '',
+        materialCostCode: (item as any).material_cost_code || '',
         suggestedCode: generateCostCode({
           system: item.system || '',
           floor: item.floor || ''
@@ -799,6 +800,7 @@ const EnhancedCostCodeManager = () => {
                 hours: Number(row['T_3'] || row['Hours']) || 0,
                 laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
                 costCode: '',
+                materialCostCode: '',
                 suggestedCode: generateCostCode({
                   system: String(row['D_1'] || row['System'] || ''),
                   floor: String(row['D_2'] || row['Floor'] || '')
@@ -887,6 +889,7 @@ const EnhancedCostCodeManager = () => {
                   hours: item.hours || 0,
                   labor_dollars: item.laborDollars || 0,
                   cost_code: item.costCode || '',
+                  material_cost_code: item.materialCostCode || '',
                 }));
                 
                 setLoadingMessage(`Saving ${itemsToSave.length.toLocaleString()} items to database...`);
@@ -1163,7 +1166,7 @@ const EnhancedCostCodeManager = () => {
       batchUpdateSystemCostCodes.mutate({
         projectId: currentProject.id,
         system: system,
-        costCode: costHead
+        laborCode: costHead
       });
     }
     

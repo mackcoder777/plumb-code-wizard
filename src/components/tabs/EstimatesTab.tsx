@@ -151,7 +151,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       'Weight': item.weight,
       'Labor Hours': item.hours,
       'Labor $': item.laborDollars,
-      'Cost Code': item.costCode || '',
+      'Material Cost Code': item.materialCostCode || '',
+      'Labor Cost Code': item.costCode || '',
       'Suggested Code': item.suggestedCodes[0]?.code || '',
       'Confidence': item.suggestedCodes[0] ? Math.round(item.suggestedCodes[0].confidence * 100) + '%' : ''
     }));
@@ -169,16 +170,21 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
     });
   };
 
-  const handleCostCodeAssign = (item: EstimateItem, costCode: string) => {
-    const updatedData = data.map(dataItem => 
-      dataItem.id === item.id 
-        ? { ...dataItem, costCode }
-        : dataItem
-    );
+  const handleCostCodeAssign = (item: EstimateItem, costCode: string, type: 'labor' | 'material' = 'labor') => {
+    const updatedData = data.map(dataItem => {
+      if (dataItem.id === item.id) {
+        if (type === 'material') {
+          return { ...dataItem, materialCostCode: costCode };
+        } else {
+          return { ...dataItem, costCode };
+        }
+      }
+      return dataItem;
+    });
     onDataUpdate(updatedData);
     setShowCostCodeModal(false);
     toast({
-      title: "Cost Code Assigned",
+      title: `${type === 'material' ? 'Material' : 'Labor'} Cost Code Assigned`,
       description: `Assigned ${costCode} to ${item.itemName}`,
     });
   };
@@ -208,6 +214,16 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
         return <span className="font-mono">${(item[key] as number).toFixed(2)}</span>;
       case 'weight':
         return <span className="font-mono">{(item[key] as number).toFixed(2)}</span>;
+      case 'materialCostCode':
+        if (item.materialCostCode) {
+          return (
+            <Badge variant="secondary" className="bg-blue-500/20 text-blue-600 dark:text-blue-400">
+              {item.materialCostCode}
+            </Badge>
+          );
+        } else {
+          return <span className="text-muted-foreground">—</span>;
+        }
       case 'costCode':
         if (item.costCode) {
           return (
@@ -230,7 +246,7 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             </Button>
           );
         } else {
-          return <span className="text-warning">None</span>;
+          return <span className="text-warning">—</span>;
         }
       default:
         return (item as any)[key] || '';

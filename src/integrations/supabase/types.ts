@@ -63,6 +63,7 @@ export type Database = {
           item_type: string | null
           labor_dollars: number | null
           list_price: number | null
+          material_cost_code: string | null
           material_desc: string | null
           material_dollars: number | null
           material_spec: string | null
@@ -90,6 +91,7 @@ export type Database = {
           item_type?: string | null
           labor_dollars?: number | null
           list_price?: number | null
+          material_cost_code?: string | null
           material_desc?: string | null
           material_dollars?: number | null
           material_spec?: string | null
@@ -117,6 +119,7 @@ export type Database = {
           item_type?: string | null
           labor_dollars?: number | null
           list_price?: number | null
+          material_cost_code?: string | null
           material_desc?: string | null
           material_dollars?: number | null
           material_spec?: string | null

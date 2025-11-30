@@ -19,7 +19,8 @@ export interface EstimateItem {
   weight: number;
   hours: number;
   laborDollars: number;
-  costCode: string;
+  costCode: string;           // Labor cost code
+  materialCostCode: string;   // Material cost code
   suggestedCodes: CostCodeSuggestion[];
 }
 

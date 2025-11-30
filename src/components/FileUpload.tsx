@@ -93,6 +93,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         hours: parseFloat(row['T_3'] || row['Hours'] || 0),
         laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
         costCode: '',
+        materialCostCode: '',
         suggestedCodes: []
       };
       
