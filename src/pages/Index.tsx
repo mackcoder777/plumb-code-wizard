@@ -391,7 +391,7 @@ const EnhancedCostCodeManager = () => {
   const fileInputRef = useRef(null);
   
   // Column configuration
-  const { columns, visibleColumns, toggleColumn, resetToDefaults } = useColumnConfig();
+  const { columns, visibleColumns, toggleColumn, resetToDefaults, autoHideEmptyColumns } = useColumnConfig();
   
   // Column filtering and sorting state
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
@@ -1006,6 +1006,13 @@ const EnhancedCostCodeManager = () => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
+
+  // Auto-hide empty columns when data loads
+  useEffect(() => {
+    if (estimateData.length > 0) {
+      autoHideEmptyColumns(estimateData);
+    }
+  }, [estimateData.length]); // Only run when data count changes (new upload)
 
   // Apply filters and sorting
   useEffect(() => {
