@@ -799,6 +799,14 @@ const EnhancedCostCodeManager = () => {
                 })
               }));
             
+            // DEBUG: Log first processed item to verify all fields are set
+            if (chunkNumber === 1 && processedChunk.length > 0) {
+              console.log('First PROCESSED item:', processedChunk[0]);
+              console.log('itemType value:', processedChunk[0].itemType);
+              console.log('materialSpec value:', processedChunk[0].materialSpec);
+              console.log('trade value:', processedChunk[0].trade);
+            }
+            
             processedData.push(...processedChunk);
             processedItemsCount += processedChunk.length;
             expectedTotalRows = totalRows;
