@@ -20,6 +20,7 @@ import { useCostCodes } from '@/hooks/useCostCodes';
 import { findBestMatch, findMatchesForSystems } from '@/utils/smartCodeMatcher';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
+import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { Switch } from '@/components/ui/switch';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
@@ -391,6 +392,10 @@ const EnhancedCostCodeManager = () => {
   
   // Column configuration
   const { columns, visibleColumns, toggleColumn, resetToDefaults } = useColumnConfig();
+  
+  // Column filtering and sorting state
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   
   // Item type mapping state
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
@@ -1002,10 +1007,11 @@ const EnhancedCostCodeManager = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // Apply filters
+  // Apply filters and sorting
   useEffect(() => {
     let filtered = [...estimateData];
 
+    // Apply dropdown filters (legacy)
     if (filters.floor !== 'all') {
       filtered = filtered.filter(item => item.floor === filters.floor);
     }
@@ -1020,14 +1026,75 @@ const EnhancedCostCodeManager = () => {
     if (filters.search) {
       const search = filters.search.toLowerCase();
       filtered = filtered.filter(item => 
-        item.materialDesc.toLowerCase().includes(search) ||
-        item.itemName.toLowerCase().includes(search) ||
-        item.drawing.toLowerCase().includes(search)
+        item.materialDesc?.toLowerCase().includes(search) ||
+        item.itemName?.toLowerCase().includes(search) ||
+        item.drawing?.toLowerCase().includes(search)
       );
     }
 
+    // Apply column-specific filters (Excel-style)
+    Object.entries(columnFilters).forEach(([columnKey, selectedValues]) => {
+      if (selectedValues.size > 0) {
+        filtered = filtered.filter(item => {
+          const val = item[columnKey];
+          const strVal = val !== undefined && val !== null ? String(val).trim() : '';
+          const checkVal = strVal || '(Blanks)';
+          return selectedValues.has(checkVal);
+        });
+      }
+    });
+
+    // Apply sorting
+    if (sortConfig) {
+      filtered.sort((a, b) => {
+        const aVal = a[sortConfig.key];
+        const bVal = b[sortConfig.key];
+        
+        // Handle nulls/undefined
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return sortConfig.direction === 'asc' ? 1 : -1;
+        if (bVal == null) return sortConfig.direction === 'asc' ? -1 : 1;
+        
+        // Handle numbers
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        
+        // Handle strings
+        const aStr = String(aVal).toLowerCase();
+        const bStr = String(bVal).toLowerCase();
+        if (sortConfig.direction === 'asc') {
+          return aStr.localeCompare(bStr);
+        } else {
+          return bStr.localeCompare(aStr);
+        }
+      });
+    }
+
     setFilteredData(filtered);
-  }, [estimateData, filters]);
+  }, [estimateData, filters, columnFilters, sortConfig]);
+
+  // Handlers for column filters
+  const handleColumnFilterChange = useCallback((columnKey: string, selectedValues: Set<string>) => {
+    setColumnFilters(prev => {
+      const newFilters = { ...prev };
+      if (selectedValues.size === 0) {
+        delete newFilters[columnKey];
+      } else {
+        newFilters[columnKey] = selectedValues;
+      }
+      return newFilters;
+    });
+  }, []);
+
+  const handleSortChange = useCallback((columnKey: string, direction: 'asc' | 'desc') => {
+    setSortConfig({ key: columnKey, direction });
+  }, []);
+
+  const clearAllColumnFilters = useCallback(() => {
+    setColumnFilters({});
+    setSortConfig(null);
+  }, []);
 
   // Show auth if not logged in - MUST be after all hooks
   if (authLoading) {
@@ -1495,10 +1562,18 @@ const EnhancedCostCodeManager = () => {
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
-                  onClick={() => setFilters({ floor: 'all', system: 'all', costCode: 'all', search: '' })}
-                  className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                  onClick={() => {
+                    setFilters({ floor: 'all', system: 'all', costCode: 'all', search: '' });
+                    clearAllColumnFilters();
+                  }}
+                  className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
                 >
                   Clear Filters
+                  {Object.keys(columnFilters).length > 0 && (
+                    <span className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                      {Object.keys(columnFilters).length}
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -1541,8 +1616,16 @@ const EnhancedCostCodeManager = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       {visibleColumns.map(col => (
-                        <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                          {col.label}
+                        <th key={col.key} className="px-2 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider min-w-[100px]">
+                          <ColumnFilterDropdown
+                            columnKey={col.key}
+                            columnLabel={col.label}
+                            data={estimateData}
+                            activeFilters={columnFilters}
+                            sortConfig={sortConfig}
+                            onFilterChange={handleColumnFilterChange}
+                            onSortChange={handleSortChange}
+                          />
                         </th>
                       ))}
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Action</th>
@@ -1634,11 +1717,37 @@ const EnhancedCostCodeManager = () => {
                     ))}
                   </tbody>
                 </table>
-                {filteredData.length > 100 && (
-                  <div className="p-4 bg-gray-50 text-center text-sm text-gray-600">
-                    Showing first 100 of {filteredData.length} items
+                <div className="p-3 bg-gray-50 border-t flex items-center justify-between text-sm text-gray-600">
+                  <div className="flex items-center gap-4">
+                    <span>
+                      Showing {Math.min(100, filteredData.length)} of {filteredData.length} filtered items
+                      {filteredData.length !== estimateData.length && (
+                        <span className="text-blue-600 ml-1">
+                          ({estimateData.length} total)
+                        </span>
+                      )}
+                    </span>
+                    {Object.keys(columnFilters).length > 0 && (
+                      <span className="flex items-center gap-1 text-blue-600">
+                        <span className="bg-blue-100 px-2 py-0.5 rounded text-xs">
+                          {Object.keys(columnFilters).length} column filter{Object.keys(columnFilters).length > 1 ? 's' : ''} active
+                        </span>
+                      </span>
+                    )}
+                    {sortConfig && (
+                      <span className="flex items-center gap-1 text-purple-600">
+                        <span className="bg-purple-100 px-2 py-0.5 rounded text-xs">
+                          Sorted by {columns.find(c => c.key === sortConfig.key)?.label || sortConfig.key} ({sortConfig.direction === 'asc' ? 'A→Z' : 'Z→A'})
+                        </span>
+                      </span>
+                    )}
                   </div>
-                )}
+                  {filteredData.length > 100 && (
+                    <span className="text-orange-600 text-xs">
+                      Scroll down or filter to see more items
+                    </span>
+                  )}
+                </div>
               </div>
             </>
           )}
