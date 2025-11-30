@@ -50,6 +50,98 @@ export type Database = {
         }
         Relationships: []
       }
+      estimate_items: {
+        Row: {
+          cost_code: string | null
+          created_at: string | null
+          drawing: string | null
+          estimator: string | null
+          floor: string | null
+          hours: number | null
+          id: string
+          item_name: string | null
+          item_type: string | null
+          labor_dollars: number | null
+          list_price: number | null
+          material_desc: string | null
+          material_dollars: number | null
+          material_spec: string | null
+          project_id: string
+          quantity: number | null
+          report_cat: string | null
+          row_number: number
+          size: string | null
+          symbol: string | null
+          system: string | null
+          trade: string | null
+          updated_at: string | null
+          weight: number | null
+          zone: string | null
+        }
+        Insert: {
+          cost_code?: string | null
+          created_at?: string | null
+          drawing?: string | null
+          estimator?: string | null
+          floor?: string | null
+          hours?: number | null
+          id?: string
+          item_name?: string | null
+          item_type?: string | null
+          labor_dollars?: number | null
+          list_price?: number | null
+          material_desc?: string | null
+          material_dollars?: number | null
+          material_spec?: string | null
+          project_id: string
+          quantity?: number | null
+          report_cat?: string | null
+          row_number: number
+          size?: string | null
+          symbol?: string | null
+          system?: string | null
+          trade?: string | null
+          updated_at?: string | null
+          weight?: number | null
+          zone?: string | null
+        }
+        Update: {
+          cost_code?: string | null
+          created_at?: string | null
+          drawing?: string | null
+          estimator?: string | null
+          floor?: string | null
+          hours?: number | null
+          id?: string
+          item_name?: string | null
+          item_type?: string | null
+          labor_dollars?: number | null
+          list_price?: number | null
+          material_desc?: string | null
+          material_dollars?: number | null
+          material_spec?: string | null
+          project_id?: string
+          quantity?: number | null
+          report_cat?: string | null
+          row_number?: number
+          size?: string | null
+          symbol?: string | null
+          system?: string | null
+          trade?: string | null
+          updated_at?: string | null
+          weight?: number | null
+          zone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_projects: {
         Row: {
           created_at: string | null

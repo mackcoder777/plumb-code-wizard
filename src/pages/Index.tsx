@@ -9,6 +9,9 @@ import {
   useBatchSaveMappings,
   useCreateProject,
   useUpdateProject,
+  useEstimateItems,
+  useSaveEstimateItems,
+  useBatchUpdateSystemCostCodes,
   EstimateProject
 } from '@/hooks/useEstimateProjects';
 import { useAuth } from '@/hooks/useAuth';
@@ -385,11 +388,14 @@ const EnhancedCostCodeManager = () => {
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
+  const { data: savedItems = [], isLoading: itemsLoading } = useEstimateItems(currentProject?.id || null);
   const saveMapping = useSaveMapping();
   const verifyMappingMutation = useVerifyMapping();
   const batchSaveMappings = useBatchSaveMappings();
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
+  const saveEstimateItems = useSaveEstimateItems();
+  const batchUpdateSystemCostCodes = useBatchUpdateSystemCostCodes();
   
   // Fetch cost codes from database for smart matching
   const { data: dbCostCodes = [] } = useCostCodes();
@@ -536,6 +542,36 @@ const EnhancedCostCodeManager = () => {
       description: description
     };
   }, [customMappings, dbCostCodes]);
+
+  // Load saved items when project changes or savedItems updates
+  useEffect(() => {
+    if (savedItems.length > 0 && currentProject?.id) {
+      // Transform database items to the format used by the UI
+      const transformedItems = savedItems.map((item) => ({
+        id: item.id,
+        drawing: item.drawing || '',
+        system: item.system || '',
+        floor: item.floor || '',
+        zone: item.zone || '',
+        materialDesc: item.material_desc || '',
+        itemName: item.item_name || '',
+        size: item.size || '',
+        quantity: item.quantity || 0,
+        materialDollars: item.material_dollars || 0,
+        hours: item.hours || 0,
+        laborDollars: item.labor_dollars || 0,
+        costCode: item.cost_code || '',
+        suggestedCode: generateCostCode({
+          system: item.system || '',
+          floor: item.floor || ''
+        })
+      }));
+      
+      setEstimateData(transformedItems);
+      setFilteredData(transformedItems);
+      setFileName(currentProject.file_name || '');
+    }
+  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
@@ -760,6 +796,41 @@ const EnhancedCostCodeManager = () => {
             setEstimateData(processedData);
             setFilteredData(processedData);
             
+            // Helper to save items to database
+            const saveItemsToDb = async (projectId: string) => {
+              try {
+                const itemsToSave = processedData.map((item, index) => ({
+                  row_number: index,
+                  drawing: item.drawing || '',
+                  system: item.system || '',
+                  floor: item.floor || '',
+                  zone: item.zone || '',
+                  material_desc: item.materialDesc || '',
+                  item_name: item.itemName || '',
+                  size: item.size || '',
+                  quantity: item.quantity || 0,
+                  material_dollars: item.materialDollars || 0,
+                  hours: item.hours || 0,
+                  labor_dollars: item.laborDollars || 0,
+                  cost_code: item.costCode || '',
+                }));
+                
+                setLoadingMessage(`Saving ${itemsToSave.length.toLocaleString()} items to database...`);
+                setLoadingProgress(90);
+                
+                await saveEstimateItems.mutateAsync({
+                  projectId,
+                  items: itemsToSave,
+                  onProgress: (progress) => {
+                    setLoadingProgress(90 + Math.round(progress * 0.08));
+                  }
+                });
+              } catch (error) {
+                console.error('Failed to save items:', error);
+                showNotification('Warning: Items loaded but not saved to database', 'error');
+              }
+            };
+            
             // Auto-create project if user is logged in and no project selected
             if (user && !currentProject) {
               const projectName = fileName.replace(/\.[^/.]+$/, '') || `Estimate ${new Date().toLocaleDateString()}`;
@@ -768,8 +839,10 @@ const EnhancedCostCodeManager = () => {
                 fileName: fileName,
                 totalItems: processedData.length
               }, {
-                onSuccess: (newProject) => {
+                onSuccess: async (newProject) => {
                   setCurrentProject(newProject);
+                  // Save items to database
+                  await saveItemsToDb(newProject.id);
                   // Save initial mappings to database
                   if (Object.keys(mappings).length > 0) {
                     const mappingsToSave = Object.entries(mappings).map(([systemName, costHead]) => ({
@@ -784,12 +857,13 @@ const EnhancedCostCodeManager = () => {
                 }
               });
             } else if (currentProject) {
-              // Update existing project
+              // Update existing project and save items
               updateProject.mutate({
                 id: currentProject.id,
                 file_name: fileName,
                 total_items: processedData.length
               });
+              await saveItemsToDb(currentProject.id);
             }
             
             const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
@@ -940,6 +1014,16 @@ const EnhancedCostCodeManager = () => {
     });
 
     setEstimateData(updated);
+    
+    // Persist to database if project exists
+    if (currentProject?.id && assigned > 0) {
+      batchUpdateSystemCostCodes.mutate({
+        projectId: currentProject.id,
+        system: system,
+        costCode: costHead
+      });
+    }
+    
     showNotification(`Applied ${costHead} to ${assigned} items in ${system}`, 'success');
   };
 

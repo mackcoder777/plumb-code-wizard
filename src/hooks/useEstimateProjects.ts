@@ -34,6 +34,34 @@ export interface MappingHistoryEntry {
   created_at: string;
 }
 
+export interface EstimateItem {
+  id: string;
+  project_id: string;
+  row_number: number;
+  drawing: string;
+  system: string;
+  floor: string;
+  zone: string;
+  symbol: string;
+  estimator: string;
+  material_spec: string;
+  item_type: string;
+  report_cat: string;
+  trade: string;
+  material_desc: string;
+  item_name: string;
+  size: string;
+  quantity: number;
+  list_price: number;
+  material_dollars: number;
+  weight: number;
+  hours: number;
+  labor_dollars: number;
+  cost_code: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // Fetch all projects for current user
 export const useEstimateProjects = () => {
   return useQuery({
@@ -300,6 +328,182 @@ export const useBatchSaveMappings = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['system_mappings', variables.projectId] });
+    },
+  });
+};
+
+// Fetch estimate items for a project
+export const useEstimateItems = (projectId: string | null) => {
+  return useQuery({
+    queryKey: ['estimate_items', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const { data, error } = await supabase
+        .from('estimate_items')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('row_number', { ascending: true });
+
+      if (error) throw error;
+      return data as EstimateItem[];
+    },
+    enabled: !!projectId,
+  });
+};
+
+// Save estimate items in batches
+export const useSaveEstimateItems = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      items,
+      onProgress
+    }: { 
+      projectId: string; 
+      items: Array<{
+        row_number: number;
+        drawing: string;
+        system: string;
+        floor: string;
+        zone: string;
+        symbol?: string;
+        estimator?: string;
+        material_spec?: string;
+        item_type?: string;
+        report_cat?: string;
+        trade?: string;
+        material_desc: string;
+        item_name: string;
+        size: string;
+        quantity: number;
+        list_price?: number;
+        material_dollars: number;
+        weight?: number;
+        hours: number;
+        labor_dollars: number;
+        cost_code: string;
+      }>;
+      onProgress?: (progress: number) => void;
+    }) => {
+      // First, delete existing items for this project
+      const { error: deleteError } = await supabase
+        .from('estimate_items')
+        .delete()
+        .eq('project_id', projectId);
+      
+      if (deleteError) throw deleteError;
+
+      // Insert in batches of 100
+      const BATCH_SIZE = 100;
+      const totalBatches = Math.ceil(items.length / BATCH_SIZE);
+      
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE).map(item => ({
+          project_id: projectId,
+          row_number: item.row_number,
+          drawing: item.drawing || '',
+          system: item.system || '',
+          floor: item.floor || '',
+          zone: item.zone || '',
+          symbol: item.symbol || '',
+          estimator: item.estimator || '',
+          material_spec: item.material_spec || '',
+          item_type: item.item_type || '',
+          report_cat: item.report_cat || '',
+          trade: item.trade || '',
+          material_desc: item.material_desc || '',
+          item_name: item.item_name || '',
+          size: item.size || '',
+          quantity: item.quantity || 0,
+          list_price: item.list_price || 0,
+          material_dollars: item.material_dollars || 0,
+          weight: item.weight || 0,
+          hours: item.hours || 0,
+          labor_dollars: item.labor_dollars || 0,
+          cost_code: item.cost_code || '',
+        }));
+
+        const { error } = await supabase
+          .from('estimate_items')
+          .insert(batch);
+
+        if (error) throw error;
+
+        // Report progress
+        if (onProgress) {
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          onProgress(Math.round((batchNum / totalBatches) * 100));
+        }
+      }
+
+      return { success: true, count: items.length };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+    },
+  });
+};
+
+// Update a single item's cost code
+export const useUpdateItemCostCode = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      itemId, 
+      costCode,
+      projectId
+    }: { 
+      itemId: string; 
+      costCode: string;
+      projectId: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('estimate_items')
+        .update({ cost_code: costCode })
+        .eq('id', itemId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as EstimateItem;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+    },
+  });
+};
+
+// Batch update cost codes for items matching a system
+export const useBatchUpdateSystemCostCodes = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      system,
+      costCode
+    }: { 
+      projectId: string; 
+      system: string;
+      costCode: string;
+    }) => {
+      // Update all items with matching system that don't have a cost code
+      const { data, error } = await supabase
+        .from('estimate_items')
+        .update({ cost_code: costCode })
+        .eq('project_id', projectId)
+        .ilike('system', system)
+        .eq('cost_code', '')
+        .select();
+
+      if (error) throw error;
+      return data as EstimateItem[];
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
     },
   });
 };
