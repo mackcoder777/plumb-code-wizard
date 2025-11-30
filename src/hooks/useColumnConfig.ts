@@ -64,6 +64,33 @@ export const useColumnConfig = () => {
     setColumns(DEFAULT_COLUMNS);
   };
 
+  // Auto-hide columns that have no data
+  const autoHideEmptyColumns = (data: any[]) => {
+    if (!data || data.length === 0) return;
+
+    // Keys that should always remain visible regardless of data
+    const alwaysVisibleKeys = ['costCode', 'materialDesc', 'itemName', 'quantity', 'materialDollars', 'hours'];
+    
+    setColumns(prev => prev.map(col => {
+      // Skip columns that should always be visible
+      if (alwaysVisibleKeys.includes(col.key)) {
+        return col;
+      }
+      
+      // Check if any row has non-empty data for this column
+      const hasData = data.some(item => {
+        const val = item[col.key];
+        if (val === undefined || val === null) return false;
+        if (typeof val === 'string') return val.trim() !== '';
+        if (typeof val === 'number') return val !== 0;
+        return true;
+      });
+      
+      // Auto-hide if no data, show if has data
+      return { ...col, visible: hasData };
+    }));
+  };
+
   const visibleColumns = columns.filter(col => col.visible);
 
   return {
@@ -71,5 +98,6 @@ export const useColumnConfig = () => {
     visibleColumns,
     toggleColumn,
     resetToDefaults,
+    autoHideEmptyColumns,
   };
 };
