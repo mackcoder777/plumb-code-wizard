@@ -18,6 +18,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Auth } from '@/components/Auth';
 import { useCostCodes } from '@/hooks/useCostCodes';
 import { findBestMatch, findMatchesForSystems } from '@/utils/smartCodeMatcher';
+import { useColumnConfig } from '@/hooks/useColumnConfig';
+import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
+import { Switch } from '@/components/ui/switch';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -385,6 +388,13 @@ const EnhancedCostCodeManager = () => {
   const [showMissingCodes, setShowMissingCodes] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+  
+  // Column configuration
+  const { columns, visibleColumns, toggleColumn, resetToDefaults } = useColumnConfig();
+  
+  // Item type mapping state
+  const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
+  const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -1469,7 +1479,7 @@ const EnhancedCostCodeManager = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 mb-6 flex-wrap">
+              <div className="flex gap-3 mb-6 flex-wrap items-center">
                 <button
                   onClick={autoAssignCostCodes}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all flex items-center gap-2 font-medium"
@@ -1494,6 +1504,11 @@ const EnhancedCostCodeManager = () => {
                 >
                   📁 New File
                 </button>
+                <ColumnConfigPanel
+                  columns={columns}
+                  onToggleColumn={toggleColumn}
+                  onReset={resetToDefaults}
+                />
               </div>
 
               {/* Data Table */}
@@ -1501,57 +1516,81 @@ const EnhancedCostCodeManager = () => {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Drawing</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">System</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Floor</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Item</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Hours</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cost Code</th>
+                      {visibleColumns.map(col => (
+                        <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                          {col.label}
+                        </th>
+                      ))}
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredData.slice(0, 100).map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm">{item.drawing}</td>
-                        <td className="px-4 py-3 text-sm">{item.system}</td>
-                        <td className="px-4 py-3 text-sm">{item.floor}</td>
-                        <td className="px-4 py-3 text-sm" title={item.materialDesc}>
-                          {item.materialDesc.substring(0, 40)}{item.materialDesc.length > 40 ? '...' : ''}
-                        </td>
-                        <td className="px-4 py-3 text-sm">{item.itemName}</td>
-                        <td className="px-4 py-3 text-sm font-semibold">{item.hours.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {item.costCode ? (
-                            <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-mono font-semibold">
-                              {item.costCode}
-                            </span>
-                          ) : item.suggestedCode ? (
-                            <span 
-                              className={`px-2 py-1 text-xs rounded font-mono cursor-pointer transition-all hover:scale-105 ${
-                                item.suggestedCode.confidence >= 0.8 
-                                  ? 'bg-green-100 text-green-800'
-                                  : item.suggestedCode.confidence >= 0.6
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}
-                              onClick={() => {
-                                const updated = estimateData.map(e => 
-                                  e.id === item.id ? {...e, costCode: item.suggestedCode.code} : e
-                                );
-                                setEstimateData(updated);
-                              }}
-                            >
-                              {item.suggestedCode.code}
-                              <span className="ml-1 text-xs opacity-75">
-                                ({Math.round(item.suggestedCode.confidence * 100)}%)
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-red-500 text-xs">No match</span>
-                          )}
-                        </td>
+                        {visibleColumns.map(col => {
+                          const value = item[col.key];
+                          // Special rendering for cost code column
+                          if (col.key === 'costCode') {
+                            return (
+                              <td key={col.key} className="px-4 py-3 text-sm">
+                                {item.costCode ? (
+                                  <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-mono font-semibold">
+                                    {item.costCode}
+                                  </span>
+                                ) : item.suggestedCode ? (
+                                  <span 
+                                    className={`px-2 py-1 text-xs rounded font-mono cursor-pointer transition-all hover:scale-105 ${
+                                      item.suggestedCode.confidence >= 0.8 
+                                        ? 'bg-green-100 text-green-800'
+                                        : item.suggestedCode.confidence >= 0.6
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : 'bg-red-100 text-red-800'
+                                    }`}
+                                    onClick={() => {
+                                      const updated = estimateData.map(e => 
+                                        e.id === item.id ? {...e, costCode: item.suggestedCode.code} : e
+                                      );
+                                      setEstimateData(updated);
+                                    }}
+                                  >
+                                    {item.suggestedCode.code}
+                                    <span className="ml-1 text-xs opacity-75">
+                                      ({Math.round(item.suggestedCode.confidence * 100)}%)
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="text-red-500 text-xs">No match</span>
+                                )}
+                              </td>
+                            );
+                          }
+                          // Format numbers
+                          if (['quantity', 'hours', 'materialDollars', 'laborDollars', 'listPrice', 'weight'].includes(col.key)) {
+                            const numVal = typeof value === 'number' ? value : 0;
+                            return (
+                              <td key={col.key} className="px-4 py-3 text-sm font-semibold tabular-nums">
+                                {['materialDollars', 'laborDollars', 'listPrice'].includes(col.key) 
+                                  ? `$${numVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                                  : numVal.toFixed(2)}
+                              </td>
+                            );
+                          }
+                          // Truncate long text for material desc
+                          if (col.key === 'materialDesc') {
+                            const strVal = String(value || '');
+                            return (
+                              <td key={col.key} className="px-4 py-3 text-sm" title={strVal}>
+                                {strVal.substring(0, 40)}{strVal.length > 40 ? '...' : ''}
+                              </td>
+                            );
+                          }
+                          // Default rendering
+                          return (
+                            <td key={col.key} className="px-4 py-3 text-sm">
+                              {value ?? '-'}
+                            </td>
+                          );
+                        })}
                         <td className="px-4 py-3 text-sm">
                           {!item.costCode && item.suggestedCode && (
                             <button
@@ -1585,11 +1624,20 @@ const EnhancedCostCodeManager = () => {
             <div className="space-y-6">
               {/* System Audit Trail Section */}
               <div className="bg-white rounded-lg border shadow-sm">
-                <div className="px-6 py-4 border-b">
-                  <h3 className="text-lg font-semibold text-gray-900">System Mapping Audit Trail</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Track all system mappings and their change history
-                  </p>
+                <div className="px-6 py-4 border-b flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">System Mapping Audit Trail</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Track all system mappings and their change history
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm text-gray-600">Item Type Overrides</label>
+                    <Switch
+                      checked={enableItemTypeMappings}
+                      onCheckedChange={setEnableItemTypeMappings}
+                    />
+                  </div>
                 </div>
                 <div className="p-6">
                   <div className="space-y-4">
@@ -1699,6 +1747,78 @@ const EnhancedCostCodeManager = () => {
                               </span>
                             )}
                           </div>
+
+                          {/* Item Type Breakdown - shown when toggle is enabled */}
+                          {enableItemTypeMappings && (() => {
+                            const itemTypeGroups = systemItems.reduce((acc: Record<string, any[]>, item) => {
+                              const itemType = item.itemType || 'Other';
+                              if (!acc[itemType]) acc[itemType] = [];
+                              acc[itemType].push(item);
+                              return acc;
+                            }, {});
+                            
+                            const itemTypes = Object.keys(itemTypeGroups);
+                            if (itemTypes.length <= 1) return null;
+                            
+                            return (
+                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="text-sm font-medium text-blue-900 mb-2">
+                                  📋 Item Type Overrides ({itemTypes.length} types)
+                                </div>
+                                <div className="space-y-2">
+                                  {itemTypes.map(itemType => {
+                                    const items = itemTypeGroups[itemType];
+                                    const currentOverride = itemTypeMappings[system]?.[itemType];
+                                    return (
+                                      <div key={itemType} className="flex items-center justify-between bg-white p-2 rounded border">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-medium text-gray-700">{itemType}</span>
+                                          <span className="text-xs text-gray-500">({items.length} items)</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <MappingCombobox
+                                            value={currentOverride?.laborCode || ''}
+                                            onChange={(value) => {
+                                              setItemTypeMappings(prev => ({
+                                                ...prev,
+                                                [system]: {
+                                                  ...prev[system],
+                                                  [itemType]: {
+                                                    ...prev[system]?.[itemType],
+                                                    laborCode: value
+                                                  }
+                                                }
+                                              }));
+                                            }}
+                                            className="min-w-[180px]"
+                                          />
+                                          {currentOverride?.laborCode && (
+                                            <button
+                                              onClick={() => {
+                                                // Apply this item type override
+                                                const updated = estimateData.map(e => {
+                                                  if ((e.system || 'Unknown') === system && (e.itemType || 'Other') === itemType && !e.costCode) {
+                                                    return { ...e, costCode: currentOverride.laborCode };
+                                                  }
+                                                  return e;
+                                                });
+                                                setEstimateData(updated);
+                                                setNotification({ type: 'success', message: `Applied ${currentOverride.laborCode} to ${items.length} ${itemType} items in ${system}` });
+                                                setTimeout(() => setNotification(null), 3000);
+                                              }}
+                                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                            >
+                                              Apply
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* Item Preview Section */}
                           <details className="mt-3">
