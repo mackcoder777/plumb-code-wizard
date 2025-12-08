@@ -614,3 +614,52 @@ export const useBatchUpdateAppliedStatus = () => {
     },
   });
 };
+
+// Upsert mapping AND apply status in one operation - ensures auto-detected mappings get persisted
+export const useUpsertAndApplyMapping = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      systemName, 
+      costHead, 
+      itemCount
+    }: { 
+      projectId: string; 
+      systemName: string; 
+      costHead: string;
+      itemCount: number;
+    }) => {
+      const normalizedSystem = systemName.toLowerCase().trim();
+      const now = new Date().toISOString();
+      
+      const { data, error } = await supabase
+        .from('system_mappings')
+        .upsert({
+          project_id: projectId,
+          system_name: normalizedSystem,
+          cost_head: costHead,
+          applied_at: now,
+          applied_item_count: itemCount,
+          is_verified: true,
+          verified_at: now,
+          verified_by: 'user',
+        }, {
+          onConflict: 'project_id,system_name'
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as SystemMapping;
+    },
+    onSuccess: () => {
+      // Don't invalidate queries immediately - let the calling code handle state
+      // This prevents the race condition where other applied systems get reset
+    },
+    onError: (error) => {
+      console.error('Error upserting and applying mapping:', error);
+    }
+  });
+};
