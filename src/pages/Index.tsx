@@ -403,6 +403,15 @@ const EnhancedCostCodeManager = () => {
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }>>({});
+  
+  // Overwrite confirmation dialog state
+  const [overwriteConfirm, setOverwriteConfirm] = useState<{
+    isOpen: boolean;
+    systemName: string;
+    newCode: string;
+    existingCode: string;
+    itemCount: number;
+  } | null>(null);
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -1166,11 +1175,46 @@ const EnhancedCostCodeManager = () => {
   // Apply mapping to all items of a specific system (also marks as verified)
   const applyMappingToSystem = (system: string, costHead: string) => {
     const systemLower = system.toLowerCase().trim();
-    let assigned = 0;
     
+    // Find ALL items in this system (not just ones without cost codes)
+    const systemItems = estimateData.filter(
+      item => item.system?.toLowerCase().trim() === systemLower
+    );
+    
+    if (systemItems.length === 0) {
+      showNotification(`No items found for system: ${system}`, 'error');
+      return;
+    }
+    
+    // Check if any items already have a DIFFERENT cost code assigned
+    const itemsWithDifferentCode = systemItems.filter(
+      item => item.costCode && item.costCode !== costHead
+    );
+    
+    // If items have different codes, show confirmation dialog
+    if (itemsWithDifferentCode.length > 0) {
+      const existingCode = itemsWithDifferentCode[0].costCode;
+      setOverwriteConfirm({
+        isOpen: true,
+        systemName: system,
+        newCode: costHead,
+        existingCode: existingCode || 'various',
+        itemCount: itemsWithDifferentCode.length
+      });
+      return;
+    }
+    
+    // No conflicts - apply directly
+    executeApplyMapping(system, costHead, systemItems.length);
+  };
+
+  // Execute the actual apply logic (called directly or after confirmation)
+  const executeApplyMapping = (system: string, costHead: string, itemCount: number) => {
+    const systemLower = system.toLowerCase().trim();
+    
+    // Update ALL items in this system (overwrite existing codes)
     const updated = estimateData.map(item => {
-      if (item.system.toLowerCase().trim() === systemLower && !item.costCode) {
-        assigned++;
+      if (item.system?.toLowerCase().trim() === systemLower) {
         return { 
           ...item, 
           costCode: costHead,
@@ -1192,7 +1236,7 @@ const EnhancedCostCodeManager = () => {
       ...prev,
       [systemLower]: {
         appliedAt: new Date(),
-        itemCount: assigned,
+        itemCount: itemCount,
         appliedCode: costHead
       }
     }));
@@ -1209,26 +1253,42 @@ const EnhancedCostCodeManager = () => {
     
     // Persist to database if project exists
     if (currentProject?.id) {
-      // Update cost codes on estimate items
-      if (assigned > 0) {
-        batchUpdateSystemCostCodes.mutate({
-          projectId: currentProject.id,
-          system: system,
-          laborCode: costHead
-        });
-      }
+      // Update cost codes on estimate items (always update since we're overwriting)
+      batchUpdateSystemCostCodes.mutate({
+        projectId: currentProject.id,
+        system: system,
+        laborCode: costHead
+      });
       
       // UPSERT the mapping with applied status - this creates the record if it doesn't exist
-      // (fixes issue where auto-detected mappings weren't persisted, causing applied status to reset)
       upsertAndApplyMapping.mutate({
         projectId: currentProject.id,
         systemName: system,
         costHead: costHead,
-        itemCount: assigned
+        itemCount: itemCount
       });
     }
     
-    showNotification(`Applied & verified ${costHead} to ${assigned} items in ${system}`, 'success');
+    showNotification(`Applied & verified ${costHead} to ${itemCount} items in ${system}`, 'success');
+  };
+
+  // Handle overwrite confirmation
+  const handleOverwriteConfirm = () => {
+    if (!overwriteConfirm) return;
+    
+    const { systemName, newCode } = overwriteConfirm;
+    const systemLower = systemName.toLowerCase().trim();
+    
+    const itemCount = estimateData.filter(
+      item => item.system?.toLowerCase().trim() === systemLower
+    ).length;
+    
+    setOverwriteConfirm(null);
+    executeApplyMapping(systemName, newCode, itemCount);
+  };
+
+  const handleOverwriteCancel = () => {
+    setOverwriteConfirm(null);
   };
 
   // Verify/confirm a system mapping
@@ -2378,6 +2438,43 @@ const EnhancedCostCodeManager = () => {
                       to ensure accurate project cost tracking and reporting.
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Overwrite Confirmation Dialog */}
+          {overwriteConfirm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-card border border-border rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                    <span className="text-yellow-500 text-xl">⚠️</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground">Overwrite Existing Codes?</h3>
+                </div>
+                
+                <p className="text-muted-foreground mb-4">
+                  <strong className="text-foreground">{overwriteConfirm.itemCount}</strong> items in <strong className="text-foreground">{overwriteConfirm.systemName}</strong> already have cost code <strong className="text-red-400">{overwriteConfirm.existingCode}</strong> assigned.
+                </p>
+                
+                <p className="text-muted-foreground mb-6">
+                  Do you want to overwrite them with <strong className="text-green-400">{overwriteConfirm.newCode}</strong>?
+                </p>
+                
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={handleOverwriteCancel}
+                    className="px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleOverwriteConfirm}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+                  >
+                    Overwrite All
+                  </button>
                 </div>
               </div>
             </div>
