@@ -27,6 +27,9 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { Switch } from '@/components/ui/switch';
+import AddFileDialog from '@/components/AddFileDialog';
+import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
+import { useQueryClient } from '@tanstack/react-query';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -422,6 +425,11 @@ const EnhancedCostCodeManager = () => {
     existingCode: string;
     itemCount: number;
   } | null>(null);
+  
+  // Multi-file support state
+  const [showAddFileDialog, setShowAddFileDialog] = useState(false);
+  const appendEstimateItems = useAppendEstimateItems();
+  const queryClient = useQueryClient();
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -1519,6 +1527,77 @@ const EnhancedCostCodeManager = () => {
     return allCodes;
   };
 
+  // Multi-file support handlers
+  const handleAppendData = async (items: any[], fileName: string) => {
+    if (!currentProject) return;
+    
+    await appendEstimateItems.mutateAsync({
+      projectId: currentProject.id,
+      items: items,
+      sourceFile: fileName
+    });
+    
+    // Refresh the items from database
+    queryClient.invalidateQueries({ queryKey: ['estimate-items', currentProject.id] });
+    
+    showNotification(`Added ${items.length.toLocaleString()} items from ${fileName}`, 'success');
+  };
+
+  const handleReplaceData = async (items: any[], fileName: string) => {
+    if (!currentProject) return;
+    
+    // Transform items to match expected format
+    const transformedItems = items.map((item, index) => ({
+      ...item,
+      id: index,
+      suggestedCode: generateCostCode(item)
+    }));
+    
+    setEstimateData(transformedItems);
+    setFilteredData(transformedItems);
+    
+    // Save to database using the mutation
+    const itemsToSave = transformedItems.map((item, index) => ({
+      row_number: index + 1,
+      drawing: item.drawing || '',
+      system: item.system || '',
+      floor: item.floor || '',
+      zone: item.zone || '',
+      symbol: item.symbol || '',
+      estimator: item.estimator || '',
+      material_spec: item.materialSpec || '',
+      item_type: item.itemType || '',
+      report_cat: item.reportCat || '',
+      trade: item.trade || '',
+      material_desc: item.materialDesc || '',
+      item_name: item.itemName || '',
+      size: item.size || '',
+      quantity: item.quantity || 0,
+      list_price: item.listPrice || 0,
+      material_dollars: item.materialDollars || 0,
+      weight: item.weight || 0,
+      hours: item.hours || 0,
+      labor_dollars: item.laborDollars || 0,
+      cost_code: item.costCode || '',
+      material_cost_code: item.materialCostCode || '',
+      source_file: fileName
+    }));
+    
+    await saveEstimateItems.mutateAsync({
+      projectId: currentProject.id,
+      items: itemsToSave
+    });
+    
+    // Update project file name
+    updateProject.mutate({
+      id: currentProject.id,
+      file_name: fileName,
+      total_items: transformedItems.length
+    });
+    
+    showNotification(`Replaced data with ${items.length.toLocaleString()} items from ${fileName}`, 'success');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
       <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
@@ -1594,7 +1673,7 @@ const EnhancedCostCodeManager = () => {
         />
 
         {/* Tabs */}
-        <div className="flex border-b bg-gray-50">
+        <div className="flex border-b bg-gray-50 items-center">
           {['upload', 'estimates', 'mapping', 'material-mapping', 'rules'].map((tab) => (
             <button
               key={tab}
@@ -1612,6 +1691,17 @@ const EnhancedCostCodeManager = () => {
               {tab === 'rules' && '🤖 Rules'}
             </button>
           ))}
+          
+          {/* Add File Button - only show when project has data */}
+          {currentProject && estimateData.length > 0 && (
+            <button
+              onClick={() => setShowAddFileDialog(true)}
+              className="ml-auto mr-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm font-medium transition-all"
+            >
+              <span>➕</span>
+              Add File
+            </button>
+          )}
         </div>
 
         {/* Tab Content */}
@@ -2698,6 +2788,20 @@ const EnhancedCostCodeManager = () => {
               </div>
             </div>
           )}
+          
+          {/* Add File Dialog */}
+          <AddFileDialog
+            isOpen={showAddFileDialog}
+            onClose={() => setShowAddFileDialog(false)}
+            currentProject={{
+              id: currentProject?.id || '',
+              name: currentProject?.name || '',
+              totalItems: estimateData.length,
+              sourceFiles: (currentProject as any)?.source_files || []
+            }}
+            onAppendData={handleAppendData}
+            onReplaceData={handleReplaceData}
+          />
         </div>
       </div>
     </div>
