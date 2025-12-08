@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
+import { DualCodeSelector } from '@/components/DualCodeSelector';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { 
   useSystemMappings, 
@@ -381,7 +382,7 @@ const EnhancedCostCodeManager = () => {
   });
   const [customMappings, setCustomMappings] = useState({});
   const [mappingHistory, setMappingHistory] = useState({});
-  const [verifiedSystems, setVerifiedSystems] = useState<Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }>>({});
+  const [verifiedSystems, setVerifiedSystems] = useState<Record<string, { verifiedAt: string; verifiedBy: string; materialCode?: string; laborCode?: string }>>({});
   const [showCostCodeBrowser, setShowCostCodeBrowser] = useState(false);
   const [browserSearchTerm, setBrowserSearchTerm] = useState('');
   const [browserDescSearch, setBrowserDescSearch] = useState('');
@@ -406,7 +407,7 @@ const EnhancedCostCodeManager = () => {
   // Item type mapping state
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
-  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }>>({});
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string }>>({});
   
   // Auto-suggestions state - stores the original auto-suggested codes per system
   const [systemAutoSuggestions, setSystemAutoSuggestions] = useState<Record<string, string>>({});
@@ -1191,7 +1192,8 @@ const EnhancedCostCodeManager = () => {
   };
 
   // Apply mapping to all items of a specific system (also marks as verified)
-  const applyMappingToSystem = (system: string, costHead: string) => {
+  // Now supports dual codes: materialCode and laborCode
+  const applyMappingToSystem = (system: string, materialCode?: string, laborCode?: string) => {
     const systemLower = system.toLowerCase().trim();
     
     // Find ALL items in this system (not just ones without cost codes)
@@ -1204,42 +1206,36 @@ const EnhancedCostCodeManager = () => {
       return;
     }
     
-    // Check if any items already have a DIFFERENT cost code assigned
-    const itemsWithDifferentCode = systemItems.filter(
-      item => item.costCode && item.costCode !== costHead
+    // Check if any items already have DIFFERENT codes assigned
+    const hasConflict = systemItems.some(
+      item => (laborCode && item.costCode && item.costCode !== laborCode) ||
+              (materialCode && item.materialCostCode && item.materialCostCode !== materialCode)
     );
     
-    // If items have different codes, show confirmation dialog
-    if (itemsWithDifferentCode.length > 0) {
-      const existingCode = itemsWithDifferentCode[0].costCode;
-      setOverwriteConfirm({
-        isOpen: true,
-        systemName: system,
-        newCode: costHead,
-        existingCode: existingCode || 'various',
-        itemCount: itemsWithDifferentCode.length
-      });
-      return;
-    }
-    
-    // No conflicts - apply directly
-    executeApplyMapping(system, costHead, systemItems.length);
+    // For now, apply directly (skip complex confirmation for dual codes)
+    executeApplyDualCodes(system, materialCode, laborCode, systemItems.length);
   };
 
-  // Execute the actual apply logic (called directly or after confirmation)
-  const executeApplyMapping = (system: string, costHead: string, itemCount: number) => {
+  // Execute the actual apply logic with BOTH material and labor codes
+  const executeApplyDualCodes = (system: string, materialCode?: string, laborCode?: string, itemCount?: number) => {
     const systemLower = system.toLowerCase().trim();
     
-    // Update ALL items in this system (overwrite existing codes)
+    const systemItems = estimateData.filter(
+      item => item.system?.toLowerCase().trim() === systemLower
+    );
+    const count = itemCount || systemItems.length;
+    
+    // Update ALL items in this system with BOTH codes
     const updated = estimateData.map(item => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         return { 
           ...item, 
-          costCode: costHead,
+          costCode: laborCode || item.costCode,
+          materialCostCode: materialCode || item.materialCostCode,
           suggestedCode: {
             ...item.suggestedCode,
-            code: costHead,
-            costHead: costHead,
+            code: laborCode || item.costCode,
+            costHead: laborCode || item.costCode,
             source: 'system-mapping'
           }
         };
@@ -1249,13 +1245,14 @@ const EnhancedCostCodeManager = () => {
 
     setEstimateData(updated);
     
-    // Track applied status locally (with the applied code for change detection)
+    // Track applied status locally with BOTH codes
     setAppliedSystems(prev => ({
       ...prev,
       [systemLower]: {
         appliedAt: new Date(),
-        itemCount: itemCount,
-        appliedCode: costHead
+        itemCount: count,
+        appliedMaterialCode: materialCode,
+        appliedLaborCode: laborCode
       }
     }));
     
@@ -1265,29 +1262,31 @@ const EnhancedCostCodeManager = () => {
       [systemLower]: {
         verifiedAt: new Date().toISOString(),
         verifiedBy: 'user',
-        costHead: costHead
+        materialCode: materialCode,
+        laborCode: laborCode
       }
     }));
     
     // Persist to database if project exists
     if (currentProject?.id) {
-      const systemLower = system.toLowerCase().trim();
       // Get the original auto-suggestion for persistence
       const originalAutoSuggested = systemAutoSuggestions[systemLower] || generateCostCode({ system }).costHead;
       
-      // Update cost codes on estimate items (always update since we're overwriting)
+      // Update cost codes on estimate items with BOTH material and labor codes
       batchUpdateSystemCostCodes.mutate({
         projectId: currentProject.id,
         system: system,
-        laborCode: costHead
+        laborCode: laborCode,
+        materialCode: materialCode
       });
       
-      // UPSERT the mapping with applied status - this creates the record if it doesn't exist
+      // UPSERT the mapping with applied status - store both codes in cost_head as "material|labor"
+      const combinedCostHead = `${materialCode || ''}|${laborCode || ''}`;
       upsertAndApplyMapping.mutate({
         projectId: currentProject.id,
         systemName: system,
-        costHead: costHead,
-        itemCount: itemCount,
+        costHead: combinedCostHead,
+        itemCount: count,
         autoSuggested: originalAutoSuggested
       });
       
@@ -1300,7 +1299,17 @@ const EnhancedCostCodeManager = () => {
       }
     }
     
-    showNotification(`Applied & verified ${costHead} to ${itemCount} items in ${system}`, 'success');
+    const codesApplied = [
+      materialCode && `Material: ${materialCode}`,
+      laborCode && `Labor: ${laborCode}`
+    ].filter(Boolean).join(', ');
+    
+    showNotification(`Applied ${codesApplied || 'codes'} to ${count} items in ${system}`, 'success');
+  };
+
+  // Legacy single-code apply for backward compatibility
+  const executeApplyMapping = (system: string, costHead: string, itemCount: number) => {
+    executeApplyDualCodes(system, undefined, costHead, itemCount);
   };
 
   // Handle overwrite confirmation
@@ -2065,9 +2074,11 @@ const EnhancedCostCodeManager = () => {
                         const system = item.system || 'Unknown';
                         if (!acc[system]) {
                           const systemLower = system.toLowerCase().trim();
+                          const mapping = customMappings[systemLower] || {};
                           acc[system] = {
                             count: 0,
-                            currentMapping: item.suggestedCode?.costHead || 'SNWV',
+                            materialCode: mapping.materialCode || '',
+                            laborCode: mapping.laborCode || item.suggestedCode?.costHead || '',
                             autoDetected: !customMappings[systemLower],
                             lastChanged: new Date().toISOString(),
                             changeHistory: mappingHistory[systemLower] || [],
@@ -2080,6 +2091,7 @@ const EnhancedCostCodeManager = () => {
                         return acc;
                       }, {})
                     ).map(([system, data]: [string, any]) => {
+                      const systemLower = system.toLowerCase().trim();
                       const systemItems = estimateData.filter(item => (item.system || 'Unknown') === system);
                       return (
                       <div key={system} className={`border rounded-lg p-4 ${data.isVerified ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
@@ -2108,7 +2120,10 @@ const EnhancedCostCodeManager = () => {
                           <div className="flex items-center space-x-2">
                             {/* Contextual Apply Button */}
                             {(() => {
-                              const hasChangedSinceApplied = data.appliedInfo && data.appliedInfo.appliedCode !== data.currentMapping;
+                              const hasChangedSinceApplied = data.appliedInfo && (
+                                data.appliedInfo.appliedMaterialCode !== data.materialCode ||
+                                data.appliedInfo.appliedLaborCode !== data.laborCode
+                              );
                               
                               if (data.appliedInfo && !hasChangedSinceApplied) {
                                 // Already applied and no changes - show static applied state
@@ -2119,10 +2134,16 @@ const EnhancedCostCodeManager = () => {
                                 );
                               } else {
                                 // Not applied yet OR mapping has changed - show apply button
+                                const hasAnyCode = data.materialCode || data.laborCode;
                                 return (
                                   <button
-                                    onClick={() => applyMappingToSystem(system, data.currentMapping)}
-                                    className="px-3 py-1 text-xs rounded font-medium bg-green-600 text-white hover:bg-green-700"
+                                    onClick={() => applyMappingToSystem(system, data.materialCode, data.laborCode)}
+                                    disabled={!hasAnyCode}
+                                    className={`px-3 py-1 text-xs rounded font-medium transition ${
+                                      hasAnyCode 
+                                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
                                   >
                                     {hasChangedSinceApplied ? `Apply Changes (${data.count})` : `Apply to System (${data.count})`}
                                   </button>
@@ -2130,32 +2151,55 @@ const EnhancedCostCodeManager = () => {
                               }
                             })()}
                             <button
-                              onClick={() => updateMapping(system, 'none')}
+                              onClick={() => {
+                                setCustomMappings(prev => {
+                                  const updated = { ...prev };
+                                  delete updated[systemLower];
+                                  return updated;
+                                });
+                              }}
                               className="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
                             >
-                              Reset to Auto
+                              Reset
                             </button>
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2 text-sm">
-                            <span className="text-gray-600">Current mapping:</span>
-                            <MappingCombobox
-                              value={data.currentMapping}
-                              onChange={(value) => updateMapping(system, value)}
-                              className="min-w-[250px]"
-                            />
-                          </div>
+                        {/* Dual Code Selector */}
+                        <div className="mt-3">
+                          <DualCodeSelector
+                            materialCode={data.materialCode}
+                            laborCode={data.laborCode}
+                            onMaterialCodeChange={(value) => {
+                              setCustomMappings(prev => ({
+                                ...prev,
+                                [systemLower]: {
+                                  ...prev[systemLower],
+                                  materialCode: value
+                                }
+                              }));
+                            }}
+                            onLaborCodeChange={(value) => {
+                              setCustomMappings(prev => ({
+                                ...prev,
+                                [systemLower]: {
+                                  ...prev[systemLower],
+                                  laborCode: value
+                                }
+                              }));
+                            }}
+                          />
+                        </div>
                           
-                          <div className="text-xs text-gray-500">
-                            Last modified: {new Date(data.lastChanged).toLocaleString()}
-                            {data.appliedInfo && (
-                              <span className="ml-3 text-emerald-600 font-medium">
-                                • Applied & verified: {data.appliedInfo.appliedAt.toLocaleString()} ({data.appliedInfo.itemCount} items)
-                              </span>
-                            )}
-                          </div>
+                        <div className="mt-2 text-xs text-gray-500">
+                          Last modified: {new Date(data.lastChanged).toLocaleString()}
+                          {data.appliedInfo && (
+                            <span className="ml-3 text-emerald-600 font-medium">
+                              • Applied: {data.appliedInfo.appliedAt.toLocaleString()} ({data.appliedInfo.itemCount} items)
+                              {data.appliedInfo.appliedMaterialCode && ` | Material: ${data.appliedInfo.appliedMaterialCode}`}
+                              {data.appliedInfo.appliedLaborCode && ` | Labor: ${data.appliedInfo.appliedLaborCode}`}
+                            </span>
+                          )}
                           
                           {/* Breadcrumb trail - uses stored auto-suggestion */}
                           <div className="text-xs text-gray-600 bg-white p-2 rounded border">
