@@ -126,7 +126,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
 
   const getStatusBadge = () => {
     if (appliedInfo) {
-      return <Badge className="bg-success text-success-foreground"><CheckCircle className="w-3 h-3 mr-1" /> Applied</Badge>;
+      return <Badge className="bg-success text-success-foreground"><CheckCircle className="w-3 h-3 mr-1" /> Applied & Verified</Badge>;
     }
     if (isMapped) {
       return <Badge className="bg-success text-success-foreground">Fully Mapped</Badge>;
@@ -330,13 +330,10 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             {appliedInfo && (
               <div className="flex items-center gap-1 text-success font-medium">
                 <CheckCircle className="w-3 h-3" />
-                Applied to {appliedInfo.itemCount} items at {appliedInfo.appliedAt.toLocaleTimeString()}
+                Applied & verified: {appliedInfo.itemCount} items at {appliedInfo.appliedAt.toLocaleTimeString()}
               </div>
             )}
             <div>Last modified: {new Date().toLocaleString()}</div>
-            {(suggestedMaterialCode || suggestedLaborCode) && (
-              <div>Change trail: Auto-suggested: {suggestedMaterialCode || suggestedLaborCode}</div>
-            )}
           </div>
         )}
 

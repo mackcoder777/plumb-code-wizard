@@ -535,7 +535,7 @@ export const useBatchUpdateSystemCostCodes = () => {
   });
 };
 
-// Update applied status for a system mapping
+// Update applied status for a system mapping (also marks as verified)
 export const useUpdateAppliedStatus = () => {
   const queryClient = useQueryClient();
 
@@ -549,11 +549,16 @@ export const useUpdateAppliedStatus = () => {
       systemName: string; 
       appliedItemCount: number;
     }) => {
+      const now = new Date().toISOString();
       const { data, error } = await supabase
         .from('system_mappings')
         .update({
-          applied_at: new Date().toISOString(),
+          applied_at: now,
           applied_item_count: appliedItemCount,
+          // Also mark as verified when applying
+          is_verified: true,
+          verified_at: now,
+          verified_by: 'user',
         })
         .eq('project_id', projectId)
         .eq('system_name', systemName.toLowerCase().trim())
@@ -569,7 +574,7 @@ export const useUpdateAppliedStatus = () => {
   });
 };
 
-// Batch update applied status for multiple system mappings
+// Batch update applied status for multiple system mappings (also marks as verified)
 export const useBatchUpdateAppliedStatus = () => {
   const queryClient = useQueryClient();
 
@@ -583,13 +588,17 @@ export const useBatchUpdateAppliedStatus = () => {
     }) => {
       const now = new Date().toISOString();
       
-      // Update each system's applied status
+      // Update each system's applied status and mark as verified
       const updates = systems.map(async ({ systemName, appliedItemCount }) => {
         const { error } = await supabase
           .from('system_mappings')
           .update({
             applied_at: now,
             applied_item_count: appliedItemCount,
+            // Also mark as verified when applying
+            is_verified: true,
+            verified_at: now,
+            verified_by: 'user',
           })
           .eq('project_id', projectId)
           .eq('system_name', systemName.toLowerCase().trim());
