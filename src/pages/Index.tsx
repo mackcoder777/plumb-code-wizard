@@ -12,6 +12,7 @@ import {
   useEstimateItems,
   useSaveEstimateItems,
   useBatchUpdateSystemCostCodes,
+  useUpdateAppliedStatus,
   EstimateProject
 } from '@/hooks/useEstimateProjects';
 import { useAuth } from '@/hooks/useAuth';
@@ -400,6 +401,7 @@ const EnhancedCostCodeManager = () => {
   // Item type mapping state
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number }>>({});
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -411,6 +413,7 @@ const EnhancedCostCodeManager = () => {
   const updateProject = useUpdateProject();
   const saveEstimateItems = useSaveEstimateItems();
   const batchUpdateSystemCostCodes = useBatchUpdateSystemCostCodes();
+  const updateAppliedStatus = useUpdateAppliedStatus();
   
   // Fetch cost codes from database for smart matching
   const { data: dbCostCodes = [] } = useCostCodes();
@@ -420,6 +423,7 @@ const EnhancedCostCodeManager = () => {
     if (savedMappings.length > 0) {
       const mappings: Record<string, string> = {};
       const verified: Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }> = {};
+      const applied: Record<string, { appliedAt: Date; itemCount: number }> = {};
       
       savedMappings.forEach(m => {
         mappings[m.system_name] = m.cost_head;
@@ -430,10 +434,17 @@ const EnhancedCostCodeManager = () => {
             costHead: m.cost_head
           };
         }
+        if (m.applied_at) {
+          applied[m.system_name] = {
+            appliedAt: new Date(m.applied_at),
+            itemCount: m.applied_item_count || 0
+          };
+        }
       });
       
       setCustomMappings(mappings);
       setVerifiedSystems(verified);
+      setAppliedSystems(applied);
     }
   }, [savedMappings]);
 
@@ -1161,12 +1172,30 @@ const EnhancedCostCodeManager = () => {
 
     setEstimateData(updated);
     
+    // Track applied status locally
+    setAppliedSystems(prev => ({
+      ...prev,
+      [systemLower]: {
+        appliedAt: new Date(),
+        itemCount: assigned
+      }
+    }));
+    
     // Persist to database if project exists
-    if (currentProject?.id && assigned > 0) {
-      batchUpdateSystemCostCodes.mutate({
+    if (currentProject?.id) {
+      if (assigned > 0) {
+        batchUpdateSystemCostCodes.mutate({
+          projectId: currentProject.id,
+          system: system,
+          laborCode: costHead
+        });
+      }
+      
+      // Persist applied status
+      updateAppliedStatus.mutate({
         projectId: currentProject.id,
-        system: system,
-        laborCode: costHead
+        systemName: system,
+        appliedItemCount: assigned
       });
     }
     
@@ -1796,7 +1825,8 @@ const EnhancedCostCodeManager = () => {
                             lastChanged: new Date().toISOString(),
                             changeHistory: mappingHistory[systemLower] || [],
                             isVerified: !!verifiedSystems[systemLower],
-                            verifiedAt: verifiedSystems[systemLower]?.verifiedAt
+                            verifiedAt: verifiedSystems[systemLower]?.verifiedAt,
+                            appliedInfo: appliedSystems[systemLower]
                           };
                         }
                         acc[system].count++;
@@ -1827,6 +1857,11 @@ const EnhancedCostCodeManager = () => {
                                 ✓ Verified
                               </span>
                             )}
+                            {data.appliedInfo && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-emerald-500 text-white font-medium">
+                                ✓ Applied ({data.appliedInfo.itemCount})
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center space-x-2">
                             {data.isVerified ? (
@@ -1846,9 +1881,13 @@ const EnhancedCostCodeManager = () => {
                             )}
                             <button
                               onClick={() => applyMappingToSystem(system, data.currentMapping)}
-                              className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 font-medium"
+                              className={`px-3 py-1 text-xs rounded font-medium ${
+                                data.appliedInfo 
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200' 
+                                  : 'bg-green-600 text-white hover:bg-green-700'
+                              }`}
                             >
-                              Apply to System ({data.count})
+                              {data.appliedInfo ? `✓ Re-apply (${data.count})` : `Apply to System (${data.count})`}
                             </button>
                             <button
                               onClick={() => updateMapping(system, 'none')}
@@ -1874,6 +1913,11 @@ const EnhancedCostCodeManager = () => {
                             {data.isVerified && (
                               <span className="ml-3 text-green-600">
                                 • Verified: {new Date(data.verifiedAt).toLocaleString()}
+                              </span>
+                            )}
+                            {data.appliedInfo && (
+                              <span className="ml-3 text-emerald-600 font-medium">
+                                • Applied: {data.appliedInfo.appliedAt.toLocaleString()} ({data.appliedInfo.itemCount} items)
                               </span>
                             )}
                           </div>

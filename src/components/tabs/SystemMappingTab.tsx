@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useMaterialCodes, useLaborCodes } from '@/hooks/useCostCodes';
+import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus } from '@/hooks/useEstimateProjects';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
   onNavigateToEstimates?: (systemFilter: string) => void;
+  projectId?: string | null;
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -34,7 +36,7 @@ interface SystemMappingTabProps {
 
 type ViewMode = 'cards' | 'table';
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, importedCostCodes = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
@@ -46,6 +48,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number }>>({});
+
+  // Load system mappings from database to get applied status
+  const { data: dbMappings = [] } = useSystemMappings(projectId);
+  const updateAppliedStatus = useUpdateAppliedStatus();
+  const batchUpdateAppliedStatus = useBatchUpdateAppliedStatus();
+
+  // Initialize appliedSystems from database on load
+  useEffect(() => {
+    if (dbMappings.length > 0) {
+      const appliedFromDb: Record<string, { appliedAt: Date; itemCount: number }> = {};
+      dbMappings.forEach(mapping => {
+        if (mapping.applied_at) {
+          appliedFromDb[mapping.system_name] = {
+            appliedAt: new Date(mapping.applied_at),
+            itemCount: mapping.applied_item_count || 0,
+          };
+        }
+      });
+      setAppliedSystems(prev => ({ ...appliedFromDb, ...prev }));
+    }
+  }, [dbMappings]);
 
   // Load cost codes from database
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
@@ -318,15 +341,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
     // Track which systems were applied
     const newAppliedSystems: Record<string, { appliedAt: Date; itemCount: number }> = {};
+    const systemsToUpdate: Array<{ systemName: string; appliedItemCount: number }> = [];
+    
     Object.keys(mappings).forEach(system => {
       if (systemItemCounts[system] || mappings[system]?.laborCode || mappings[system]?.materialCode) {
         newAppliedSystems[system] = {
           appliedAt: new Date(),
           itemCount: systemItemCounts[system] || 0,
         };
+        systemsToUpdate.push({
+          systemName: system,
+          appliedItemCount: systemItemCounts[system] || 0,
+        });
       }
     });
     setAppliedSystems(prev => ({ ...prev, ...newAppliedSystems }));
+
+    // Persist to database if we have a project
+    if (projectId && systemsToUpdate.length > 0) {
+      batchUpdateAppliedStatus.mutate({ projectId, systems: systemsToUpdate });
+    }
 
     onDataUpdate(updatedData);
     
@@ -377,6 +411,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         itemCount: itemsAffected,
       }
     }));
+
+    // Persist to database if we have a project
+    if (projectId) {
+      updateAppliedStatus.mutate({ 
+        projectId, 
+        systemName: system, 
+        appliedItemCount: itemsAffected 
+      });
+    }
 
     onDataUpdate(updatedData);
     

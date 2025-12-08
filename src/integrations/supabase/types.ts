@@ -218,6 +218,8 @@ export type Database = {
       }
       system_mappings: {
         Row: {
+          applied_at: string | null
+          applied_item_count: number | null
           cost_head: string
           created_at: string | null
           id: string
@@ -230,6 +232,8 @@ export type Database = {
           verified_by: string | null
         }
         Insert: {
+          applied_at?: string | null
+          applied_item_count?: number | null
           cost_head: string
           created_at?: string | null
           id?: string
@@ -242,6 +246,8 @@ export type Database = {
           verified_by?: string | null
         }
         Update: {
+          applied_at?: string | null
+          applied_item_count?: number | null
           cost_head?: string
           created_at?: string | null
           id?: string
