@@ -4,27 +4,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
 import { 
   Package, 
   Search, 
-  Plus, 
-  Trash2, 
-  Edit2, 
   Check, 
-  Play, 
-  ArrowUpDown,
-  Eye,
-  Zap,
-  GripVertical
+  AlertCircle,
+  ChevronRight,
+  ChevronDown,
+  Filter,
+  Hash,
+  DollarSign,
+  Layers
 } from 'lucide-react';
-import { useMaterialCodeRules, useCreateMaterialCodeRule, useUpdateMaterialCodeRule, useDeleteMaterialCodeRule, MaterialCodeRule, applyRulesToItems } from '@/hooks/useMaterialCodeRules';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
-
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
@@ -32,36 +30,39 @@ interface MaterialMappingTabProps {
   projectId?: string | null;
 }
 
+interface MaterialGroup {
+  materialSpec: string;
+  itemCount: number;
+  totalMaterial: number;
+  totalHours: number;
+  assignedCode: string | null;
+  subGroups: ItemTypeGroup[];
+}
+
+interface ItemTypeGroup {
+  itemType: string;
+  itemCount: number;
+  totalMaterial: number;
+  totalHours: number;
+  assignedCode: string | null;
+  items: EstimateItem[];
+}
+
 export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({ 
   data, 
   onDataUpdate,
   projectId 
 }) => {
+  const [expandedSpecs, setExpandedSpecs] = useState<Set<string>>(new Set());
+  const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
+  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<MaterialCodeRule | null>(null);
-  const [previewResults, setPreviewResults] = useState<Record<string, string> | null>(null);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned'>('all');
+  const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
 
-  // Form state for new/edit rule
-  const [formData, setFormData] = useState({
-    name: '',
-    priority: 100,
-    material_spec_contains: '',
-    item_type_equals: '',
-    item_type_contains: '',
-    material_desc_contains: '',
-    item_name_contains: '',
-    material_cost_code: '',
-  });
-
-  // Load rules and material codes
-  const { data: rules = [], isLoading: rulesLoading } = useMaterialCodeRules(projectId);
-  const createRule = useCreateMaterialCodeRule();
-  const updateRule = useUpdateMaterialCodeRule();
-  const deleteRule = useDeleteMaterialCodeRule();
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
 
-  // Use only database material codes (no hardcoded fallback)
+  // Material codes list
   const allMaterialCodes = useMemo(() => {
     return dbMaterialCodes.map(c => ({
       code: c.code,
@@ -69,172 +70,228 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     })).sort((a, b) => a.description.localeCompare(b.description));
   }, [dbMaterialCodes]);
 
-  // Get unique item types and material specs from data for suggestions
-  const uniqueItemTypes = useMemo(() => {
-    const types = new Set<string>();
+  // Group items by Material Spec → Item Type
+  const groups = useMemo(() => {
+    const specMap = new Map<string, MaterialGroup>();
+
     data.forEach(item => {
-      if (item.itemType) types.add(item.itemType);
+      const spec = item.materialSpec || 'Unknown';
+      const type = item.itemType || 'Unknown';
+
+      if (!specMap.has(spec)) {
+        specMap.set(spec, {
+          materialSpec: spec,
+          itemCount: 0,
+          totalMaterial: 0,
+          totalHours: 0,
+          assignedCode: null,
+          subGroups: [],
+        });
+      }
+
+      const specGroup = specMap.get(spec)!;
+      specGroup.itemCount++;
+      specGroup.totalMaterial += item.materialDollars || 0;
+      specGroup.totalHours += item.hours || 0;
+
+      // Find or create item type subgroup
+      let typeGroup = specGroup.subGroups.find(g => g.itemType === type);
+      if (!typeGroup) {
+        typeGroup = {
+          itemType: type,
+          itemCount: 0,
+          totalMaterial: 0,
+          totalHours: 0,
+          assignedCode: null,
+          items: [],
+        };
+        specGroup.subGroups.push(typeGroup);
+      }
+
+      typeGroup.itemCount++;
+      typeGroup.totalMaterial += item.materialDollars || 0;
+      typeGroup.totalHours += item.hours || 0;
+      typeGroup.items.push(item);
+
+      // Determine assigned code (if all items have same code)
+      const codes = new Set(typeGroup.items.map(i => i.materialCostCode).filter(Boolean));
+      typeGroup.assignedCode = codes.size === 1 ? [...codes][0]! : codes.size > 1 ? 'MIXED' : null;
     });
-    return Array.from(types).sort();
+
+    // Determine spec-level assigned code
+    specMap.forEach(specGroup => {
+      const codes = new Set(specGroup.subGroups.map(g => g.assignedCode).filter(c => c && c !== 'MIXED'));
+      specGroup.assignedCode = codes.size === 1 ? [...codes][0]! : codes.size > 1 ? 'MIXED' : null;
+    });
+
+    return Array.from(specMap.values()).sort((a, b) => b.totalMaterial - a.totalMaterial);
   }, [data]);
 
-  const uniqueMaterialSpecs = useMemo(() => {
-    const specs = new Set<string>();
-    data.forEach(item => {
-      if (item.materialSpec) specs.add(item.materialSpec);
+  // Filter groups
+  const filteredGroups = useMemo(() => {
+    return groups.filter(group => {
+      if (searchTerm && !group.materialSpec.toLowerCase().includes(searchTerm.toLowerCase())) {
+        return false;
+      }
+      if (filterStatus === 'assigned' && !group.assignedCode) return false;
+      if (filterStatus === 'unassigned' && group.assignedCode) return false;
+      return true;
     });
-    return Array.from(specs).sort();
-  }, [data]);
+  }, [groups, searchTerm, filterStatus]);
 
   // Stats
   const stats = useMemo(() => {
     const total = data.length;
-    const coded = data.filter(i => i.materialCostCode).length;
-    const uncoded = total - coded;
-    const totalDollars = data.reduce((sum, i) => sum + (i.materialDollars || 0), 0);
-    const codedDollars = data.filter(i => i.materialCostCode).reduce((sum, i) => sum + (i.materialDollars || 0), 0);
-    
-    return { total, coded, uncoded, totalDollars, codedDollars };
+    const assigned = data.filter(i => i.materialCostCode).length;
+    const totalMaterial = data.reduce((sum, i) => sum + (i.materialDollars || 0), 0);
+    const assignedMaterial = data.filter(i => i.materialCostCode).reduce((sum, i) => sum + (i.materialDollars || 0), 0);
+    return { total, assigned, unassigned: total - assigned, totalMaterial, assignedMaterial };
   }, [data]);
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      priority: 100,
-      material_spec_contains: '',
-      item_type_equals: '',
-      item_type_contains: '',
-      material_desc_contains: '',
-      item_name_contains: '',
-      material_cost_code: '',
-    });
-    setEditingRule(null);
-  };
-
-  const handleOpenAddDialog = () => {
-    resetForm();
-    setIsAddDialogOpen(true);
-  };
-
-  const handleOpenEditDialog = (rule: MaterialCodeRule) => {
-    setFormData({
-      name: rule.name,
-      priority: rule.priority,
-      material_spec_contains: rule.material_spec_contains || '',
-      item_type_equals: rule.item_type_equals || '',
-      item_type_contains: rule.item_type_contains || '',
-      material_desc_contains: rule.material_desc_contains || '',
-      item_name_contains: rule.item_name_contains || '',
-      material_cost_code: rule.material_cost_code,
-    });
-    setEditingRule(rule);
-    setIsAddDialogOpen(true);
-  };
-
-  const handleSaveRule = async () => {
-    if (!formData.name || !formData.material_cost_code) {
-      toast({ title: 'Error', description: 'Name and Material Code are required', variant: 'destructive' });
-      return;
-    }
-
-    // Check that at least one condition is set
-    const hasCondition = formData.material_spec_contains || formData.item_type_equals || 
-                        formData.item_type_contains || formData.material_desc_contains || 
-                        formData.item_name_contains;
-    
-    if (!hasCondition) {
-      toast({ title: 'Error', description: 'At least one condition must be set', variant: 'destructive' });
-      return;
-    }
-
-    try {
-      const ruleData = {
-        project_id: projectId || null,
-        name: formData.name,
-        priority: formData.priority,
-        material_spec_contains: formData.material_spec_contains || null,
-        item_type_equals: formData.item_type_equals || null,
-        item_type_contains: formData.item_type_contains || null,
-        material_desc_contains: formData.material_desc_contains || null,
-        item_name_contains: formData.item_name_contains || null,
-        material_cost_code: formData.material_cost_code,
-      };
-
-      if (editingRule) {
-        await updateRule.mutateAsync({ id: editingRule.id, ...ruleData });
-        toast({ title: 'Rule Updated', description: `Updated rule "${formData.name}"` });
-      } else {
-        await createRule.mutateAsync(ruleData);
-        toast({ title: 'Rule Created', description: `Created rule "${formData.name}"` });
-      }
-
-      setIsAddDialogOpen(false);
-      resetForm();
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to save rule', variant: 'destructive' });
-    }
-  };
-
-  const handleDeleteRule = async (rule: MaterialCodeRule) => {
-    if (!confirm(`Delete rule "${rule.name}"?`)) return;
-    
-    try {
-      await deleteRule.mutateAsync(rule.id);
-      toast({ title: 'Rule Deleted', description: `Deleted rule "${rule.name}"` });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to delete rule', variant: 'destructive' });
-    }
-  };
-
-  const handlePreviewRules = () => {
-    const mappings = applyRulesToItems(data, rules, false);
-    setPreviewResults(mappings);
-    toast({ 
-      title: 'Preview Ready', 
-      description: `${Object.keys(mappings).length} items would be assigned material codes` 
+  // Toggle expand
+  const toggleSpec = (spec: string) => {
+    setExpandedSpecs(prev => {
+      const next = new Set(prev);
+      if (next.has(spec)) next.delete(spec);
+      else next.add(spec);
+      return next;
     });
   };
 
-  const handleApplyRules = () => {
-    const mappings = applyRulesToItems(data, rules, false);
-    
-    if (Object.keys(mappings).length === 0) {
-      toast({ title: 'No Changes', description: 'No items matched the rules or all items already have codes' });
-      return;
+  const toggleType = (spec: string, type: string) => {
+    const key = `${spec}|${type}`;
+    setExpandedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Assign code to group
+  const handleAssignCode = (groupKey: string, code: string) => {
+    const [spec, type] = groupKey.split('|');
+    let targetItems: EstimateItem[] = [];
+
+    if (type) {
+      // Item type level
+      const specGroup = groups.find(g => g.materialSpec === spec);
+      const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
+      targetItems = typeGroup?.items || [];
+    } else {
+      // Material spec level
+      const specGroup = groups.find(g => g.materialSpec === spec);
+      targetItems = specGroup?.subGroups.flatMap(g => g.items) || [];
     }
 
     const updatedData = data.map(item => {
-      if (mappings[String(item.id)]) {
-        return { ...item, materialCostCode: mappings[String(item.id)] };
+      if (targetItems.some(t => t.id === item.id)) {
+        return { ...item, materialCostCode: code };
       }
       return item;
     });
 
     onDataUpdate(updatedData);
-    setPreviewResults(null);
-    toast({ 
-      title: 'Rules Applied', 
-      description: `Applied material codes to ${Object.keys(mappings).length} items` 
+    setOpenCodePicker(null);
+    toast({
+      title: 'Code Assigned',
+      description: `Applied ${code} to ${targetItems.length} items`,
     });
   };
 
-  const getCodeDescription = (code: string) => {
-    const found = allMaterialCodes.find(c => c.code === code);
-    return found?.description || code;
+  // Bulk assign to selected groups
+  const handleBulkAssign = (code: string) => {
+    const allItemIds: number[] = [];
+    
+    selectedGroups.forEach(groupKey => {
+      const [spec, type] = groupKey.split('|');
+      if (type) {
+        const specGroup = groups.find(g => g.materialSpec === spec);
+        const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
+        typeGroup?.items.forEach(i => allItemIds.push(i.id));
+      } else {
+        const specGroup = groups.find(g => g.materialSpec === spec);
+        specGroup?.subGroups.forEach(tg => tg.items.forEach(i => allItemIds.push(i.id)));
+      }
+    });
+
+    const updatedData = data.map(item => {
+      if (allItemIds.includes(item.id)) {
+        return { ...item, materialCostCode: code };
+      }
+      return item;
+    });
+
+    onDataUpdate(updatedData);
+    setSelectedGroups(new Set());
+    setOpenCodePicker(null);
+    toast({
+      title: 'Bulk Code Assigned',
+      description: `Applied ${code} to ${allItemIds.length} items across ${selectedGroups.size} groups`,
+    });
   };
 
-  // Count how many items each rule would affect
-  const getRuleMatchCount = (rule: MaterialCodeRule) => {
-    return data.filter(item => {
-      // Check each condition
-      if (rule.material_spec_contains && !item.materialSpec?.toLowerCase().includes(rule.material_spec_contains.toLowerCase())) return false;
-      if (rule.item_type_equals && item.itemType?.toLowerCase() !== rule.item_type_equals.toLowerCase()) return false;
-      if (rule.item_type_contains && !item.itemType?.toLowerCase().includes(rule.item_type_contains.toLowerCase())) return false;
-      if (rule.material_desc_contains && !item.materialDesc?.toLowerCase().includes(rule.material_desc_contains.toLowerCase())) return false;
-      if (rule.item_name_contains && !item.itemName?.toLowerCase().includes(rule.item_name_contains.toLowerCase())) return false;
-      return true;
-    }).length;
+  // Toggle group selection
+  const toggleGroupSelection = (groupKey: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
   };
+
+  // Render status badge
+  const renderStatusBadge = (code: string | null) => {
+    if (!code) {
+      return (
+        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Unassigned
+        </Badge>
+      );
+    }
+    if (code === 'MIXED') {
+      return (
+        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+          <Layers className="h-3 w-3 mr-1" />
+          Mixed
+        </Badge>
+      );
+    }
+    const codeInfo = allMaterialCodes.find(c => c.code === code);
+    return (
+      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono">
+        <Check className="h-3 w-3 mr-1" />
+        {code}
+        {codeInfo && <span className="ml-1 font-normal opacity-75 truncate max-w-32">- {codeInfo.description}</span>}
+      </Badge>
+    );
+  };
+
+  // Code picker component
+  const CodePicker = ({ groupKey, onSelect }: { groupKey: string; onSelect: (code: string) => void }) => (
+    <Command className="rounded-lg border shadow-md">
+      <CommandInput placeholder="Search material codes..." />
+      <CommandList>
+        <CommandEmpty>No codes found.</CommandEmpty>
+        <CommandGroup>
+          {allMaterialCodes.map(code => (
+            <CommandItem
+              key={code.code}
+              value={`${code.code} ${code.description}`}
+              onSelect={() => onSelect(code.code)}
+              className="cursor-pointer"
+            >
+              <span className="font-mono font-semibold text-primary">{code.code}</span>
+              <span className="ml-2 text-muted-foreground truncate">{code.description}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
 
   return (
     <div className="space-y-6">
@@ -245,334 +302,290 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-green-600" />
-                Material Code Rules
+                Material Code Assignment
               </CardTitle>
               <CardDescription>
-                Create conditional rules to assign material codes by Item Type, Material Spec, etc.
+                Click on any group to assign a material code. Use checkboxes for bulk assignment.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={handlePreviewRules} disabled={rules.length === 0}>
-                <Eye className="w-4 h-4 mr-2" />
-                Preview
-              </Button>
-              <Button onClick={handleApplyRules} disabled={rules.length === 0} className="bg-green-600 hover:bg-green-700">
-                <Play className="w-4 h-4 mr-2" />
-                Apply All Rules
-              </Button>
-            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {/* Stats */}
+          {/* Stats Cards */}
           <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="bg-muted/50 rounded-lg p-3">
-              <div className="text-2xl font-bold text-foreground">{stats.total}</div>
-              <div className="text-sm text-muted-foreground">Total Items</div>
+            <div className="bg-muted/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                <Hash className="h-4 w-4" />
+                Total Items
+              </div>
+              <div className="text-2xl font-bold text-foreground">{stats.total.toLocaleString()}</div>
             </div>
-            <div className="bg-green-500/10 rounded-lg p-3">
-              <div className="text-2xl font-bold text-green-600">{stats.coded}</div>
-              <div className="text-sm text-muted-foreground">Material Coded</div>
+            <div className="bg-green-500/10 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
+                <Check className="h-4 w-4" />
+                Assigned
+              </div>
+              <div className="text-2xl font-bold text-green-600">{stats.assigned.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">{stats.total > 0 ? ((stats.assigned / stats.total) * 100).toFixed(1) : 0}%</div>
             </div>
-            <div className="bg-orange-500/10 rounded-lg p-3">
-              <div className="text-2xl font-bold text-orange-600">{stats.uncoded}</div>
-              <div className="text-sm text-muted-foreground">Needs Material Code</div>
+            <div className="bg-destructive/10 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-destructive text-sm mb-1">
+                <AlertCircle className="h-4 w-4" />
+                Unassigned
+              </div>
+              <div className="text-2xl font-bold text-destructive">{stats.unassigned.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">{stats.total > 0 ? ((stats.unassigned / stats.total) * 100).toFixed(1) : 0}%</div>
             </div>
-            <div className="bg-blue-500/10 rounded-lg p-3">
-              <div className="text-2xl font-bold text-blue-600">{rules.length}</div>
-              <div className="text-sm text-muted-foreground">Active Rules</div>
+            <div className="bg-blue-500/10 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
+                <DollarSign className="h-4 w-4" />
+                Total Material
+              </div>
+              <div className="text-2xl font-bold text-blue-600">${stats.totalMaterial.toLocaleString()}</div>
             </div>
           </div>
 
-          {/* How it works */}
-          <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
-            <h4 className="font-medium text-green-800 dark:text-green-200 mb-2">How Material Code Rules Work</h4>
-            <ul className="text-sm text-green-700 dark:text-green-300 space-y-1 list-disc list-inside">
-              <li><strong>Rules are applied in priority order</strong> (lower number = higher priority)</li>
-              <li><strong>First matching rule wins</strong> - once an item matches a rule, it gets that code</li>
-              <li><strong>All conditions in a rule must match</strong> (AND logic)</li>
-              <li><strong>Example:</strong> IF Material Spec CONTAINS "Copper" AND Item Type = "Fittings" → COPR</li>
-            </ul>
+          {/* Progress Bar */}
+          <div className="bg-muted/30 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-foreground">Assignment Progress</span>
+              <span className="text-sm text-muted-foreground">{stats.assigned} / {stats.total} items</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-3">
+              <div 
+                className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-500"
+                style={{ width: `${stats.total > 0 ? (stats.assigned / stats.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Filters & Actions */}
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search material specs..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Groups</SelectItem>
+                    <SelectItem value="unassigned">Unassigned Only</SelectItem>
+                    <SelectItem value="assigned">Assigned Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {selectedGroups.size > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">{selectedGroups.size} selected</span>
+                <Popover open={openCodePicker === 'bulk'} onOpenChange={(open) => setOpenCodePicker(open ? 'bulk' : null)}>
+                  <PopoverTrigger asChild>
+                    <Button className="bg-primary hover:bg-primary/90">
+                      Assign to Selected
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="end">
+                    <CodePicker groupKey="bulk" onSelect={handleBulkAssign} />
+                  </PopoverContent>
+                </Popover>
+                <Button variant="ghost" onClick={() => setSelectedGroups(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Rules List */}
+      {/* Groups List */}
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Rules ({rules.length})</CardTitle>
-            <Button onClick={handleOpenAddDialog}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Rule
-            </Button>
+        <CardContent className="p-0">
+          {/* Header */}
+          <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <div className="col-span-1"></div>
+            <div className="col-span-4">Material Spec / Item Type</div>
+            <div className="col-span-2 text-right">Items</div>
+            <div className="col-span-2 text-right">Material $</div>
+            <div className="col-span-3">Material Code</div>
           </div>
-        </CardHeader>
-        <CardContent>
-          {rules.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No Rules Yet</h3>
-              <p className="mb-4">Create your first rule to automatically assign material codes</p>
-              <Button onClick={handleOpenAddDialog}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create First Rule
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {rules.map((rule, index) => {
-                const matchCount = getRuleMatchCount(rule);
-                return (
-                  <div 
-                    key={rule.id} 
-                    className={`border rounded-lg p-4 transition-colors ${
-                      rule.is_active ? 'bg-card' : 'bg-muted/50 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className="flex items-center justify-center w-8 h-8 bg-primary/10 text-primary rounded-full text-sm font-bold">
-                          {rule.priority}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold">{rule.name}</span>
-                            {!rule.is_active && <Badge variant="secondary">Disabled</Badge>}
-                            <Badge variant="outline" className="ml-auto">
-                              {matchCount} items match
-                            </Badge>
-                          </div>
-                          
-                          {/* Conditions */}
-                          <div className="flex flex-wrap gap-2 text-sm">
-                            <span className="text-muted-foreground">IF</span>
-                            {rule.material_spec_contains && (
-                              <Badge variant="secondary">Material Spec CONTAINS "{rule.material_spec_contains}"</Badge>
-                            )}
-                            {rule.item_type_equals && (
-                              <Badge variant="secondary">Item Type = "{rule.item_type_equals}"</Badge>
-                            )}
-                            {rule.item_type_contains && (
-                              <Badge variant="secondary">Item Type CONTAINS "{rule.item_type_contains}"</Badge>
-                            )}
-                            {rule.material_desc_contains && (
-                              <Badge variant="secondary">Material Desc CONTAINS "{rule.material_desc_contains}"</Badge>
-                            )}
-                            {rule.item_name_contains && (
-                              <Badge variant="secondary">Item Name CONTAINS "{rule.item_name_contains}"</Badge>
-                            )}
-                            <span className="text-muted-foreground">→</span>
-                            <Badge className="bg-green-600">
-                              {rule.material_cost_code} - {getCodeDescription(rule.material_cost_code)}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(rule)}>
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRule(rule)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
+          {/* Groups */}
+          <ScrollArea className="h-[600px]">
+            <div className="divide-y divide-border">
+              {filteredGroups.map(group => (
+                <div key={group.materialSpec}>
+                  {/* Material Spec Row */}
+                  <div 
+                    className={`grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer hover:bg-muted/50 transition-colors ${
+                      selectedGroups.has(group.materialSpec) ? 'bg-primary/5' : ''
+                    }`}
+                    onClick={() => toggleSpec(group.materialSpec)}
+                  >
+                    <div className="col-span-1 flex items-center gap-2">
+                      <Checkbox
+                        checked={selectedGroups.has(group.materialSpec)}
+                        onClick={e => toggleGroupSelection(group.materialSpec, e)}
+                      />
+                      {expandedSpecs.has(group.materialSpec) ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="col-span-4">
+                      <span className="font-medium text-foreground">{group.materialSpec}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">({group.subGroups.length} types)</span>
+                    </div>
+                    <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
+                      {group.itemCount.toLocaleString()}
+                    </div>
+                    <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
+                      ${group.totalMaterial.toLocaleString()}
+                    </div>
+                    <div className="col-span-3">
+                      <Popover 
+                        open={openCodePicker === group.materialSpec} 
+                        onOpenChange={(open) => setOpenCodePicker(open ? group.materialSpec : null)}
+                      >
+                        <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
+                          <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
+                            {renderStatusBadge(group.assignedCode)}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          <CodePicker 
+                            groupKey={group.materialSpec} 
+                            onSelect={(code) => handleAssignCode(group.materialSpec, code)} 
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Preview Results */}
-      {previewResults && Object.keys(previewResults).length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Eye className="w-5 h-5" />
-              Preview: {Object.keys(previewResults).length} Items Would Be Updated
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-64 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted sticky top-0">
-                  <tr>
-                    <th className="text-left p-2">Material Spec</th>
-                    <th className="text-left p-2">Item Type</th>
-                    <th className="text-left p-2">Material Desc</th>
-                    <th className="text-left p-2">Assigned Code</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {Object.entries(previewResults).slice(0, 50).map(([itemId, code]) => {
-                    const item = data.find(i => String(i.id) === itemId);
-                    if (!item) return null;
-                    return (
-                      <tr key={itemId} className="hover:bg-muted/50">
-                        <td className="p-2 truncate max-w-32">{item.materialSpec || '-'}</td>
-                        <td className="p-2">{item.itemType || '-'}</td>
-                        <td className="p-2 truncate max-w-48">{item.materialDesc || '-'}</td>
-                        <td className="p-2">
-                          <Badge className="bg-green-600">{code}</Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {Object.keys(previewResults).length > 50 && (
-                <div className="text-center text-sm text-muted-foreground py-2">
-                  Showing 50 of {Object.keys(previewResults).length} items
+                  {/* Expanded Item Types */}
+                  {expandedSpecs.has(group.materialSpec) && (
+                    <div className="bg-muted/20">
+                      {group.subGroups.map(typeGroup => (
+                        <div key={`${group.materialSpec}|${typeGroup.itemType}`}>
+                          {/* Item Type Row */}
+                          <div 
+                            className={`grid grid-cols-12 gap-4 px-4 py-2 items-center cursor-pointer hover:bg-muted/50 transition-colors pl-12 ${
+                              selectedGroups.has(`${group.materialSpec}|${typeGroup.itemType}`) ? 'bg-primary/5' : ''
+                            }`}
+                            onClick={() => toggleType(group.materialSpec, typeGroup.itemType)}
+                          >
+                            <div className="col-span-1 flex items-center gap-2">
+                              <Checkbox
+                                checked={selectedGroups.has(`${group.materialSpec}|${typeGroup.itemType}`)}
+                                onClick={e => toggleGroupSelection(`${group.materialSpec}|${typeGroup.itemType}`, e)}
+                              />
+                              {expandedTypes.has(`${group.materialSpec}|${typeGroup.itemType}`) ? (
+                                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="col-span-4">
+                              <span className="text-sm text-foreground">{typeGroup.itemType}</span>
+                            </div>
+                            <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
+                              {typeGroup.itemCount.toLocaleString()}
+                            </div>
+                            <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
+                              ${typeGroup.totalMaterial.toLocaleString()}
+                            </div>
+                            <div className="col-span-3">
+                              <Popover 
+                                open={openCodePicker === `${group.materialSpec}|${typeGroup.itemType}`} 
+                                onOpenChange={(open) => setOpenCodePicker(open ? `${group.materialSpec}|${typeGroup.itemType}` : null)}
+                              >
+                                <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
+                                  <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
+                                    {renderStatusBadge(typeGroup.assignedCode)}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 p-0" align="start">
+                                  <CodePicker 
+                                    groupKey={`${group.materialSpec}|${typeGroup.itemType}`} 
+                                    onSelect={(code) => handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code)} 
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+
+                          {/* Expanded Items */}
+                          {expandedTypes.has(`${group.materialSpec}|${typeGroup.itemType}`) && (
+                            <div className="bg-background border-l-2 border-primary/20 ml-16">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/50">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Description</th>
+                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Size</th>
+                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
+                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Material $</th>
+                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Code</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                  {typeGroup.items.slice(0, 10).map(item => (
+                                    <tr key={item.id} className="hover:bg-muted/30">
+                                      <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
+                                      <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
+                                      <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
+                                      <td className="px-3 py-2 text-right font-mono text-muted-foreground">${(item.materialDollars || 0).toLocaleString()}</td>
+                                      <td className="px-3 py-2">
+                                        {item.materialCostCode ? (
+                                          <span className="font-mono text-green-600">{item.materialCostCode}</span>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  {typeGroup.items.length > 10 && (
+                                    <tr>
+                                      <td colSpan={5} className="px-3 py-2 text-center text-muted-foreground">
+                                        + {typeGroup.items.length - 10} more items
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {filteredGroups.length === 0 && (
+                <div className="px-4 py-12 text-center text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                  <p className="font-medium">No material groups found</p>
+                  <p className="text-sm">Try adjusting your search or filter</p>
                 </div>
               )}
             </div>
-            <div className="flex justify-end mt-4 pt-4 border-t">
-              <Button onClick={() => setPreviewResults(null)} variant="outline" className="mr-2">
-                Close Preview
-              </Button>
-              <Button onClick={handleApplyRules} className="bg-green-600 hover:bg-green-700">
-                <Check className="w-4 h-4 mr-2" />
-                Apply to {Object.keys(previewResults).length} Items
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Add/Edit Rule Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingRule ? 'Edit Rule' : 'Create Material Code Rule'}</DialogTitle>
-            <DialogDescription>
-              Define conditions to automatically assign material codes to items
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {/* Rule Name & Priority */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Rule Name *</Label>
-                <Input 
-                  placeholder="e.g., Copper Fittings to COPR"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Priority (lower = higher priority)</Label>
-                <Input 
-                  type="number"
-                  value={formData.priority}
-                  onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 100 })}
-                />
-              </div>
-            </div>
-
-            {/* Conditions */}
-            <div className="space-y-4 pt-4 border-t">
-              <h4 className="font-medium">Conditions (at least one required)</h4>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Material Spec CONTAINS</Label>
-                  <Input 
-                    placeholder="e.g., Copper, SS, Cast Iron"
-                    value={formData.material_spec_contains}
-                    onChange={(e) => setFormData({ ...formData, material_spec_contains: e.target.value })}
-                    list="material-specs"
-                  />
-                  <datalist id="material-specs">
-                    {uniqueMaterialSpecs.map(spec => (
-                      <option key={spec} value={spec} />
-                    ))}
-                  </datalist>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Item Type EQUALS</Label>
-                  <Select 
-                    value={formData.item_type_equals} 
-                    onValueChange={(v) => setFormData({ ...formData, item_type_equals: v === 'none' ? '' : v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select item type..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">-- Any --</SelectItem>
-                      {uniqueItemTypes.map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Item Type CONTAINS</Label>
-                  <Input 
-                    placeholder="e.g., Fitting, Pipe, Valve"
-                    value={formData.item_type_contains}
-                    onChange={(e) => setFormData({ ...formData, item_type_contains: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Material Desc CONTAINS</Label>
-                  <Input 
-                    placeholder="e.g., Hanger, Support"
-                    value={formData.material_desc_contains}
-                    onChange={(e) => setFormData({ ...formData, material_desc_contains: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2 col-span-2">
-                  <Label>Item Name CONTAINS</Label>
-                  <Input 
-                    placeholder="e.g., Valve, Flange"
-                    value={formData.item_name_contains}
-                    onChange={(e) => setFormData({ ...formData, item_name_contains: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Result */}
-            <div className="space-y-2 pt-4 border-t">
-              <Label>THEN Assign Material Code *</Label>
-              <Select 
-                value={formData.material_cost_code} 
-                onValueChange={(v) => setFormData({ ...formData, material_cost_code: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select material code..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {allMaterialCodes.map(code => (
-                    <SelectItem key={code.code} value={code.code}>
-                      <span className="font-mono text-xs bg-green-100 dark:bg-green-900 px-1 rounded mr-2">{code.code}</span>
-                      {code.description}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveRule} className="bg-green-600 hover:bg-green-700">
-              {editingRule ? 'Update Rule' : 'Create Rule'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 };
+
+export default MaterialMappingTab;
