@@ -13,6 +13,7 @@ import {
   useSaveEstimateItems,
   useBatchUpdateSystemCostCodes,
   useUpdateAppliedStatus,
+  useUpsertAndApplyMapping,
   EstimateProject
 } from '@/hooks/useEstimateProjects';
 import { useAuth } from '@/hooks/useAuth';
@@ -414,16 +415,16 @@ const EnhancedCostCodeManager = () => {
   const saveEstimateItems = useSaveEstimateItems();
   const batchUpdateSystemCostCodes = useBatchUpdateSystemCostCodes();
   const updateAppliedStatus = useUpdateAppliedStatus();
+  const upsertAndApplyMapping = useUpsertAndApplyMapping();
   
   // Fetch cost codes from database for smart matching
   const { data: dbCostCodes = [] } = useCostCodes();
 
-  // Load saved mappings when project changes
+  // Load saved mappings when project changes - MERGE with existing local state to prevent reset
   useEffect(() => {
     if (savedMappings.length > 0) {
       const mappings: Record<string, string> = {};
       const verified: Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }> = {};
-      const applied: Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }> = {};
       
       savedMappings.forEach(m => {
         mappings[m.system_name] = m.cost_head;
@@ -434,18 +435,31 @@ const EnhancedCostCodeManager = () => {
             costHead: m.cost_head
           };
         }
-        if (m.applied_at) {
-          applied[m.system_name] = {
-            appliedAt: new Date(m.applied_at),
-            itemCount: m.applied_item_count || 0,
-            appliedCode: m.cost_head
-          };
-        }
       });
       
       setCustomMappings(mappings);
       setVerifiedSystems(verified);
-      setAppliedSystems(applied);
+      
+      // MERGE applied systems - DB state takes precedence but preserve local state
+      setAppliedSystems(prevApplied => {
+        const dbApplied: Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }> = {};
+        
+        savedMappings.forEach(m => {
+          if (m.applied_at && m.cost_head) {
+            dbApplied[m.system_name] = {
+              appliedAt: new Date(m.applied_at),
+              itemCount: m.applied_item_count || 0,
+              appliedCode: m.cost_head
+            };
+          }
+        });
+        
+        // Merge: DB state takes precedence, but preserve local state for systems not yet in DB
+        return {
+          ...prevApplied,
+          ...dbApplied
+        };
+      });
     }
   }, [savedMappings]);
 
@@ -1195,6 +1209,7 @@ const EnhancedCostCodeManager = () => {
     
     // Persist to database if project exists
     if (currentProject?.id) {
+      // Update cost codes on estimate items
       if (assigned > 0) {
         batchUpdateSystemCostCodes.mutate({
           projectId: currentProject.id,
@@ -1203,11 +1218,13 @@ const EnhancedCostCodeManager = () => {
         });
       }
       
-      // Persist applied status (which now also sets verified in the hook)
-      updateAppliedStatus.mutate({
+      // UPSERT the mapping with applied status - this creates the record if it doesn't exist
+      // (fixes issue where auto-detected mappings weren't persisted, causing applied status to reset)
+      upsertAndApplyMapping.mutate({
         projectId: currentProject.id,
         systemName: system,
-        appliedItemCount: assigned
+        costHead: costHead,
+        itemCount: assigned
       });
     }
     
