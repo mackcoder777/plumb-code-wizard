@@ -1455,13 +1455,13 @@ const EnhancedCostCodeManager = () => {
     showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? originalAutoSuggested : costHead}`, 'success');
   };
 
-  // Create project info for export
-  const getProjectInfo = useCallback((): ProjectInfo => ({
+  // Create project info for export - defined as a regular function (not a hook) since it's after conditional returns
+  const getProjectInfo = (): ProjectInfo => ({
     jobNumber: currentProject?.name || 'Estimate',
     jobName: currentProject?.name || 'Estimate',
     date: new Date(),
     preparedBy: user?.email || 'User',
-  }), [currentProject?.name, user?.email]);
+  });
 
   // Calculate stats
   const stats = {
