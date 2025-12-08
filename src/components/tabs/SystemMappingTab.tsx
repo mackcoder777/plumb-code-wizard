@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
-import { useMaterialCodes, useLaborCodes } from '@/hooks/useCostCodes';
+import { useLaborCodes } from '@/hooks/useCostCodes';
 import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus } from '@/hooks/useEstimateProjects';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,8 +38,8 @@ type ViewMode = 'cards' | 'table';
 
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [mappings, setMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
-  const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
+  const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
+  const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
   const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
@@ -47,7 +47,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
-  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string }>>({});
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedLaborCode?: string }>>({});
 
   // Load system mappings from database to get applied status
   const { data: dbMappings = [] } = useSystemMappings(projectId);
@@ -57,16 +57,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Initialize appliedSystems from database on load
   useEffect(() => {
     if (dbMappings.length > 0) {
-      const appliedFromDb: Record<string, { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string }> = {};
+      const appliedFromDb: Record<string, { appliedAt: Date; itemCount: number; appliedLaborCode?: string }> = {};
       dbMappings.forEach(mapping => {
         if (mapping.applied_at) {
-          // Parse cost_head which may contain both codes in format "material|labor"
-          const codes = mapping.cost_head.split('|');
           appliedFromDb[mapping.system_name] = {
             appliedAt: new Date(mapping.applied_at),
             itemCount: mapping.applied_item_count || 0,
-            appliedMaterialCode: codes[0] || undefined,
-            appliedLaborCode: codes[1] || codes[0] || undefined,
+            appliedLaborCode: mapping.cost_head || undefined,
           };
         }
       });
@@ -75,36 +72,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [dbMappings]);
 
   // Load cost codes from database
-  const { data: dbMaterialCodes = [] } = useMaterialCodes();
   const { data: dbLaborCodes = [] } = useLaborCodes();
 
   // Merge database codes with hardcoded codes and imported codes
-  const allMaterialCodes = useMemo(() => {
-    const hardcoded = COST_CODES_DB.material;
-    const imported = importedCostCodes
-      .filter(c => c.category === 'M')
-      .map(c => ({
-        code: c.code,
-        description: c.description,
-        category: 'M' as const,
-        keywords: [],
-      }));
-    const dbCodes = dbMaterialCodes.map(c => ({
-      code: c.code,
-      description: c.description,
-      category: 'M' as const,
-      keywords: [],
-    }));
-    
-    // Combine all sources and deduplicate by code
-    const combined = [...hardcoded, ...imported, ...dbCodes];
-    const uniqueCodes = Array.from(
-      new Map(combined.map(c => [c.code, c])).values()
-    );
-    
-    return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
-  }, [importedCostCodes, dbMaterialCodes]);
-
   const allLaborCodes = useMemo(() => {
     const hardcoded = COST_CODES_DB.fieldLabor;
     const imported = importedCostCodes
@@ -150,9 +120,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         system,
         itemCount: count,
         items,
-        materialCode: mappings[system]?.materialCode,
         laborCode: mappings[system]?.laborCode,
-        suggestedMaterialCode: suggestions[system]?.materialCode,
         suggestedLaborCode: suggestions[system]?.laborCode,
         appliedInfo: appliedSystems[system],
       }))
@@ -173,13 +141,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Apply status filter
     if (activeStatusFilter && activeStatusFilter !== 'all') {
       if (activeStatusFilter === 'mapped') {
-        filtered = filtered.filter(sm => sm.materialCode && sm.laborCode);
-      } else if (activeStatusFilter === 'partial') {
-        filtered = filtered.filter(sm => 
-          (sm.materialCode || sm.laborCode) && !(sm.materialCode && sm.laborCode)
-        );
+        filtered = filtered.filter(sm => sm.laborCode);
       } else if (activeStatusFilter === 'unmapped') {
-        filtered = filtered.filter(sm => !sm.materialCode && !sm.laborCode);
+        filtered = filtered.filter(sm => !sm.laborCode);
       }
     }
 
@@ -194,13 +158,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Statistics
   const stats = useMemo(() => {
     const total = systemMappings.length;
-    const mapped = systemMappings.filter(sm => sm.materialCode && sm.laborCode).length;
-    const partial = systemMappings.filter(sm => 
-      (sm.materialCode || sm.laborCode) && !(sm.materialCode && sm.laborCode)
-    ).length;
-    const unmapped = total - mapped - partial;
+    const mapped = systemMappings.filter(sm => sm.laborCode).length;
+    const unmapped = total - mapped;
 
-    return { total, mapped, partial, unmapped };
+    return { total, mapped, partial: 0, unmapped };
   }, [systemMappings]);
 
   // Top systems for filter cards
@@ -208,13 +169,11 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return systemMappings.map(sm => ({
       system: sm.system,
       itemCount: sm.itemCount,
-      status: (sm.materialCode && sm.laborCode) ? 'mapped' as const 
-            : (sm.materialCode || sm.laborCode) ? 'partial' as const 
-            : 'unmapped' as const,
+      status: sm.laborCode ? 'mapped' as const : 'unmapped' as const,
     }));
   }, [systemMappings]);
 
-  const handleMappingChange = (system: string, type: 'materialCode' | 'laborCode', value: string) => {
+  const handleMappingChange = (system: string, type: 'laborCode', value: string) => {
     setMappings(prev => ({
       ...prev,
       [system]: {
@@ -246,7 +205,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   };
 
-  const handleItemTypeMappingChange = (system: string, itemType: string, type: 'materialCode' | 'laborCode', value: string) => {
+  const handleItemTypeMappingChange = (system: string, itemType: string, type: 'laborCode', value: string) => {
     setItemTypeMappings(prev => ({
       ...prev,
       [system]: {
@@ -265,7 +224,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Simulate processing time for better UX
     setTimeout(() => {
       const systemNames = systemMappings
-        .filter(sm => !sm.materialCode && !sm.laborCode) // Only suggest for unmapped systems
+        .filter(sm => !sm.laborCode) // Only suggest for unmapped systems
         .map(sm => sm.system);
       
       const newSuggestions = generateAllSuggestions(systemNames);
@@ -288,14 +247,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     setMappings(prev => ({
       ...prev,
       [system]: {
-        materialCode: suggestion.materialCode || prev[system]?.materialCode,
         laborCode: suggestion.laborCode || prev[system]?.laborCode,
       }
     }));
 
     toast({
-      title: "Suggestions Applied",
-      description: `Applied smart suggestions for ${system}`,
+      title: "Suggestion Applied",
+      description: `Applied smart suggestion for ${system}`,
     });
   };
 
@@ -308,37 +266,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
       
       // Priority: Item type mapping > System mapping > Existing code
-      // Now we assign BOTH labor and material codes separately
       let newLaborCode = item.costCode;
-      let newMaterialCode = item.materialCostCode || '';
       let changed = false;
       
-      if (itemTypeMapping) {
-        // Use item type-specific mapping
-        if (itemTypeMapping.laborCode && !item.costCode) {
-          newLaborCode = itemTypeMapping.laborCode;
-          changed = true;
-        }
-        if (itemTypeMapping.materialCode && !item.materialCostCode) {
-          newMaterialCode = itemTypeMapping.materialCode;
-          changed = true;
-        }
-      } else if (systemMapping) {
-        // Fall back to system-level mapping
-        if (systemMapping.laborCode && !item.costCode) {
-          newLaborCode = systemMapping.laborCode;
-          changed = true;
-        }
-        if (systemMapping.materialCode && !item.materialCostCode) {
-          newMaterialCode = systemMapping.materialCode;
-          changed = true;
-        }
+      if (itemTypeMapping?.laborCode && !item.costCode) {
+        newLaborCode = itemTypeMapping.laborCode;
+        changed = true;
+      } else if (systemMapping?.laborCode && !item.costCode) {
+        newLaborCode = systemMapping.laborCode;
+        changed = true;
       }
       
       if (changed) {
         itemsAffected++;
         systemItemCounts[item.system] = (systemItemCounts[item.system] || 0) + 1;
-        return { ...item, costCode: newLaborCode, materialCostCode: newMaterialCode };
+        return { ...item, costCode: newLaborCode };
       }
       return item;
     });
@@ -348,7 +290,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemsToUpdate: Array<{ systemName: string; appliedItemCount: number }> = [];
     
     Object.keys(mappings).forEach(system => {
-      if (systemItemCounts[system] || mappings[system]?.laborCode || mappings[system]?.materialCode) {
+      if (systemItemCounts[system] || mappings[system]?.laborCode) {
         newAppliedSystems[system] = {
           appliedAt: new Date(),
           itemCount: systemItemCounts[system] || 0,
@@ -388,32 +330,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       if (item.system !== system) return item;
       
       let newLaborCode = item.costCode;
-      let newMaterialCode = item.materialCostCode || '';
       let changed = false;
       
       if (systemMapping.laborCode && !item.costCode) {
         newLaborCode = systemMapping.laborCode;
         changed = true;
       }
-      if (systemMapping.materialCode && !item.materialCostCode) {
-        newMaterialCode = systemMapping.materialCode;
-        changed = true;
-      }
       
       if (changed) {
         itemsAffected++;
-        return { ...item, costCode: newLaborCode, materialCostCode: newMaterialCode };
+        return { ...item, costCode: newLaborCode };
       }
       return item;
     });
 
-    // Track this system as applied with the codes that were applied
+    // Track this system as applied
     setAppliedSystems(prev => ({
       ...prev,
       [system]: {
         appliedAt: new Date(),
         itemCount: itemsAffected,
-        appliedMaterialCode: systemMapping.materialCode,
         appliedLaborCode: systemMapping.laborCode,
       }
     }));
@@ -431,18 +367,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     
     toast({
       title: "Mapping Applied",
-      description: `Applied mapping for "${system}" to ${itemsAffected} items`,
+      description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
   };
 
   const getStatusBadge = (sm: typeof systemMappings[0]) => {
-    if (sm.materialCode && sm.laborCode) {
+    if (sm.laborCode) {
       return <Badge className="bg-success text-success-foreground"><Check className="w-3 h-3 mr-1" /> Mapped</Badge>;
-    } else if (sm.materialCode || sm.laborCode) {
-      return <Badge variant="secondary" className="bg-warning text-warning-foreground"><AlertCircle className="w-3 h-3 mr-1" /> Partial</Badge>;
-    } else {
-      return <Badge variant="outline">Unmapped</Badge>;
     }
+    return <Badge variant="outline">Unmapped</Badge>;
   };
 
   const totalItems = data.length;
@@ -474,9 +407,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle>System Mappings</CardTitle>
+                  <CardTitle>Labor Code Mapping</CardTitle>
                   <CardDescription>
-                    Assign material and labor codes to each system
+                    Assign labor codes to each system (Material codes are assigned separately by Item Type)
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-4">
@@ -534,13 +467,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                         system={sm.system}
                         itemCount={sm.itemCount}
                         items={sm.items}
-                        systemMaterialCode={sm.materialCode}
                         systemLaborCode={sm.laborCode}
                         itemTypeMappings={itemTypeMappings[sm.system] || {}}
-                        onSystemMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
                         onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
                         onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
-                        materialCodes={allMaterialCodes}
                         laborCodes={allLaborCodes}
                       />
                     ) : (
@@ -549,12 +479,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                         system={sm.system}
                         itemCount={sm.itemCount}
                         items={sm.items}
-                        materialCode={sm.materialCode}
                         laborCode={sm.laborCode}
-                        suggestedMaterialCode={sm.suggestedMaterialCode}
                         suggestedLaborCode={sm.suggestedLaborCode}
                         appliedInfo={sm.appliedInfo}
-                        onMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
                         onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
                         onClear={() => clearMapping(sm.system)}
                         onApplySuggestions={() => applySystemSuggestions(sm.system)}
@@ -575,7 +502,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                       <thead className="bg-muted/50 sticky top-0">
                         <tr>
                           <th className="text-left p-3 font-medium">System</th>
-                          <th className="text-left p-3 font-medium">Material Code</th>
                           <th className="text-left p-3 font-medium">Labor Code</th>
                           <th className="text-right p-3 font-medium">Items</th>
                           <th className="text-center p-3 font-medium">Status</th>
@@ -589,15 +515,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             
                             <td className="p-3">
                               <TableRowCombobox
-                                value={sm.materialCode}
-                                options={allMaterialCodes}
-                                placeholder="Select material code..."
-                                onValueChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
-                              />
-                            </td>
-                            
-                            <td className="p-3">
-                              <TableRowCombobox
                                 value={sm.laborCode}
                                 options={allLaborCodes}
                                 placeholder="Select labor code..."
@@ -608,7 +525,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             <td className="p-3 text-right tabular-nums font-medium">{sm.itemCount}</td>
                             <td className="p-3 text-center">{getStatusBadge(sm)}</td>
                             <td className="p-3 text-center">
-                              {(sm.materialCode || sm.laborCode) && (
+                              {sm.laborCode && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
