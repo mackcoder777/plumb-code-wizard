@@ -220,6 +220,7 @@ export type Database = {
         Row: {
           applied_at: string | null
           applied_item_count: number | null
+          auto_suggested: string | null
           cost_head: string
           created_at: string | null
           id: string
@@ -234,6 +235,7 @@ export type Database = {
         Insert: {
           applied_at?: string | null
           applied_item_count?: number | null
+          auto_suggested?: string | null
           cost_head: string
           created_at?: string | null
           id?: string
@@ -248,6 +250,7 @@ export type Database = {
         Update: {
           applied_at?: string | null
           applied_item_count?: number | null
+          auto_suggested?: string | null
           cost_head?: string
           created_at?: string | null
           id?: string

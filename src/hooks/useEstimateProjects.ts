@@ -22,6 +22,7 @@ export interface SystemMapping {
   verified_by: string | null;
   applied_at: string | null;
   applied_item_count: number;
+  auto_suggested: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -220,7 +221,8 @@ export const useSaveMapping = () => {
       costHead,
       isVerified = false,
       verifiedAt = null,
-      previousCode = null 
+      previousCode = null,
+      autoSuggested = null
     }: { 
       projectId: string; 
       systemName: string; 
@@ -228,17 +230,32 @@ export const useSaveMapping = () => {
       isVerified?: boolean;
       verifiedAt?: string | null;
       previousCode?: string | null;
+      autoSuggested?: string | null;
     }) => {
-      // Upsert the mapping
+      const normalizedSystem = systemName.toLowerCase().trim();
+      
+      // First check if record exists to preserve auto_suggested
+      const { data: existing } = await supabase
+        .from('system_mappings')
+        .select('id, auto_suggested')
+        .eq('project_id', projectId)
+        .eq('system_name', normalizedSystem)
+        .single();
+      
+      const upsertData = {
+        project_id: projectId,
+        system_name: normalizedSystem,
+        cost_head: costHead,
+        is_verified: isVerified,
+        verified_at: verifiedAt,
+        updated_at: new Date().toISOString(),
+        // Only set auto_suggested if it's a new record OR if not yet set
+        ...(!existing || !existing.auto_suggested ? { auto_suggested: autoSuggested || costHead } : {})
+      };
+      
       const { data, error } = await supabase
         .from('system_mappings')
-        .upsert({
-          project_id: projectId,
-          system_name: systemName.toLowerCase().trim(),
-          cost_head: costHead,
-          is_verified: isVerified,
-          verified_at: verifiedAt,
-        }, {
+        .upsert([upsertData], {
           onConflict: 'project_id,system_name'
         })
         .select()
@@ -250,7 +267,7 @@ export const useSaveMapping = () => {
       if (previousCode && previousCode !== costHead) {
         await supabase.from('mapping_history').insert({
           project_id: projectId,
-          system_name: systemName.toLowerCase().trim(),
+          system_name: normalizedSystem,
           from_code: previousCode,
           to_code: costHead,
           change_reason: 'Manual change',
@@ -624,28 +641,43 @@ export const useUpsertAndApplyMapping = () => {
       projectId, 
       systemName, 
       costHead, 
-      itemCount
+      itemCount,
+      autoSuggested = null
     }: { 
       projectId: string; 
       systemName: string; 
       costHead: string;
       itemCount: number;
+      autoSuggested?: string | null;
     }) => {
       const normalizedSystem = systemName.toLowerCase().trim();
       const now = new Date().toISOString();
       
+      // First check if record exists to preserve auto_suggested
+      const { data: existing } = await supabase
+        .from('system_mappings')
+        .select('id, auto_suggested')
+        .eq('project_id', projectId)
+        .eq('system_name', normalizedSystem)
+        .single();
+      
+      const upsertData = {
+        project_id: projectId,
+        system_name: normalizedSystem,
+        cost_head: costHead,
+        applied_at: now,
+        applied_item_count: itemCount,
+        is_verified: true,
+        verified_at: now,
+        verified_by: 'user',
+        updated_at: now,
+        // Only set auto_suggested if it's a new record OR not yet set
+        ...(!existing || !existing.auto_suggested ? { auto_suggested: autoSuggested || costHead } : {})
+      };
+      
       const { data, error } = await supabase
         .from('system_mappings')
-        .upsert({
-          project_id: projectId,
-          system_name: normalizedSystem,
-          cost_head: costHead,
-          applied_at: now,
-          applied_item_count: itemCount,
-          is_verified: true,
-          verified_at: now,
-          verified_by: 'user',
-        }, {
+        .upsert([upsertData], {
           onConflict: 'project_id,system_name'
         })
         .select()
