@@ -13,13 +13,23 @@ import {
   Search,
   ArrowUpDown,
   Edit,
-  Plus
+  Plus,
+  ChevronDown,
+  FileSpreadsheet,
+  ClipboardList
 } from 'lucide-react';
 import { CostCodeModal } from '../CostCodeModal';
 import { ColumnConfigPanel } from '../ColumnConfigPanel';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { toast } from '@/components/ui/use-toast';
-import * as XLSX from 'xlsx';
+import { exportBudgetPacket, exportAuditReport } from '@/utils/exportUtils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface EstimatesTabProps {
   data: EstimateItem[];
@@ -130,43 +140,19 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
     });
   };
 
-  const exportWithCostCodes = () => {
-    const exportData = filteredData.map(item => ({
-      'Drawing': item.drawing,
-      'System': item.system,
-      'Floor': item.floor,
-      'Zone': item.zone,
-      'Symbol': item.symbol,
-      'Estimator': item.estimator,
-      'Material Spec': item.materialSpec,
-      'Item Type': item.itemType,
-      'Report Cat': item.reportCat,
-      'Trade': item.trade,
-      'Material Description': item.materialDesc,
-      'Item Name': item.itemName,
-      'Size': item.size,
-      'Quantity': item.quantity,
-      'List Price': item.listPrice,
-      'Material $': item.materialDollars,
-      'Weight': item.weight,
-      'Labor Hours': item.hours,
-      'Labor $': item.laborDollars,
-      'Material Cost Code': item.materialCostCode || '',
-      'Labor Cost Code': item.costCode || '',
-      'Suggested Code': item.suggestedCodes[0]?.code || '',
-      'Confidence': item.suggestedCodes[0] ? Math.round(item.suggestedCodes[0].confidence * 100) + '%' : ''
-    }));
-    
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Estimate with Cost Codes');
-    
-    const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `estimate_cost_codes_${date}.xlsx`);
-    
+  const handleExportBudgetPacket = () => {
+    const result = exportBudgetPacket(filteredData, 'Estimate', 'User');
     toast({
-      title: "Export Complete",
-      description: "File downloaded successfully",
+      title: "Budget Packet Exported",
+      description: `Exported ${result.laborCodes} labor codes and ${result.materialCodes} material codes. Grand Total: $${result.grandTotal.toLocaleString()}`,
+    });
+  };
+
+  const handleExportAuditReport = () => {
+    const result = exportAuditReport(filteredData, 'Estimate');
+    toast({
+      title: "Audit Report Exported",
+      description: `Exported ${result.totalItems} items with Labor and Material tabs`,
     });
   };
 
@@ -335,10 +321,32 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             <Bot className="w-4 h-4 mr-2" />
             Auto-Assign Cost Codes
           </Button>
-          <Button variant="secondary" onClick={exportWithCostCodes}>
-            <Download className="w-4 h-4 mr-2" />
-            Export with Cost Codes
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={handleExportBudgetPacket}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                <div className="flex flex-col">
+                  <span className="font-medium">Budget Packet</span>
+                  <span className="text-xs text-muted-foreground">Aggregated by cost code</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportAuditReport}>
+                <ClipboardList className="w-4 h-4 mr-2" />
+                <div className="flex flex-col">
+                  <span className="font-medium">Audit Report</span>
+                  <span className="text-xs text-muted-foreground">Detailed Labor + Material tabs</span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={clearFilters}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Clear Filters
