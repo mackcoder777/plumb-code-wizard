@@ -72,6 +72,7 @@ export type Database = {
           report_cat: string | null
           row_number: number
           size: string | null
+          source_file: string | null
           symbol: string | null
           system: string | null
           trade: string | null
@@ -100,6 +101,7 @@ export type Database = {
           report_cat?: string | null
           row_number: number
           size?: string | null
+          source_file?: string | null
           symbol?: string | null
           system?: string | null
           trade?: string | null
@@ -128,6 +130,7 @@ export type Database = {
           report_cat?: string | null
           row_number?: number
           size?: string | null
+          source_file?: string | null
           symbol?: string | null
           system?: string | null
           trade?: string | null
@@ -151,6 +154,7 @@ export type Database = {
           file_name: string | null
           id: string
           name: string
+          source_files: string[] | null
           total_items: number | null
           updated_at: string | null
           user_id: string
@@ -160,6 +164,7 @@ export type Database = {
           file_name?: string | null
           id?: string
           name: string
+          source_files?: string[] | null
           total_items?: number | null
           updated_at?: string | null
           user_id: string
@@ -169,6 +174,7 @@ export type Database = {
           file_name?: string | null
           id?: string
           name?: string
+          source_files?: string[] | null
           total_items?: number | null
           updated_at?: string | null
           user_id?: string
