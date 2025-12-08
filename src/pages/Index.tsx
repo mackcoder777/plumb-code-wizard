@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
 import { MaterialMappingTab } from '@/components/tabs/MaterialMappingTab';
+import { PdfImportTab } from '@/components/tabs/PdfImportTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo } from '@/utils/budgetExportSystem';
@@ -2485,6 +2486,13 @@ const EnhancedCostCodeManager = () => {
                 </p>
               </div>
             )
+          )}
+
+          {/* PDF Import Tab */}
+          {activeTab === 'pdf-import' && (
+            <PdfImportTab 
+              projectName={currentProject?.name}
+            />
           )}
 
           {/* Rules Tab */}

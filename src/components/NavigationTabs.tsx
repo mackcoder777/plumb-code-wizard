@@ -8,7 +8,8 @@ import {
   TrendingUp, 
   LayoutDashboard,
   Map,
-  Package
+  Package,
+  FileText
 } from 'lucide-react';
 
 interface NavigationTabsProps {
@@ -20,6 +21,7 @@ const tabs = [
   { id: 'estimates', label: 'Estimates', icon: BarChart3 },
   { id: 'mapping', label: 'Labor Mapping', icon: Map },
   { id: 'material-mapping', label: 'Material Mapping', icon: Package },
+  { id: 'pdf-import', label: 'PDF Import', icon: FileText },
   { id: 'costcodes', label: 'Cost Codes', icon: DollarSign },
   { id: 'automation', label: 'Auto-Assignment', icon: Bot },
   { id: 'buyout', label: 'Buyout Reports', icon: ShoppingCart },
