@@ -1,5 +1,5 @@
 export interface EstimateItem {
-  id: number;
+  id: number | string;  // number for freshly uploaded, string (UUID) for database items
   drawing: string;
   system: string;
   floor: string;

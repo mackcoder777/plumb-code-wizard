@@ -632,6 +632,48 @@ export const useBatchUpdateAppliedStatus = () => {
   });
 };
 
+// Batch update material cost codes for multiple items
+export const useBatchUpdateMaterialCostCodes = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      itemIds,
+      materialCode
+    }: { 
+      projectId: string; 
+      itemIds: string[];
+      materialCode: string;
+    }) => {
+      if (itemIds.length === 0) return [];
+      
+      // Update in batches of 100
+      const BATCH_SIZE = 100;
+      const results: EstimateItem[] = [];
+      
+      for (let i = 0; i < itemIds.length; i += BATCH_SIZE) {
+        const batchIds = itemIds.slice(i, i + BATCH_SIZE);
+        
+        const { data, error } = await supabase
+          .from('estimate_items')
+          .update({ material_cost_code: materialCode })
+          .eq('project_id', projectId)
+          .in('id', batchIds)
+          .select();
+
+        if (error) throw error;
+        if (data) results.push(...(data as EstimateItem[]));
+      }
+      
+      return results;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+    },
+  });
+};
+
 // Upsert mapping AND apply status in one operation - ensures auto-detected mappings get persisted
 export const useUpsertAndApplyMapping = () => {
   const queryClient = useQueryClient();

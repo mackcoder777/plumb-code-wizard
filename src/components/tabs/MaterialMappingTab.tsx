@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,9 +16,12 @@ import {
   Filter,
   Hash,
   DollarSign,
-  Layers
+  Layers,
+  Loader2,
+  Save
 } from 'lucide-react';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
+import { useBatchUpdateMaterialCostCodes } from '@/hooks/useEstimateProjects';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -59,8 +62,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
+  const batchUpdateMaterialCodes = useBatchUpdateMaterialCostCodes();
 
   // Get parent checkbox state (checked, unchecked, or indeterminate)
   const getParentCheckState = (spec: string, group: MaterialGroup): 'checked' | 'unchecked' | 'indeterminate' => {
@@ -242,8 +247,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     });
   };
 
-  // Assign code to group
-  const handleAssignCode = (groupKey: string, code: string) => {
+  // Assign code to group with auto-save to database
+  const handleAssignCode = useCallback(async (groupKey: string, code: string) => {
     const [spec, type] = groupKey.split('|');
     let targetItems: EstimateItem[] = [];
 
@@ -258,6 +263,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       targetItems = specGroup?.subGroups.flatMap(g => g.items) || [];
     }
 
+    if (targetItems.length === 0) return;
+
+    // Update local state immediately
     const updatedData = data.map(item => {
       if (targetItems.some(t => t.id === item.id)) {
         return { ...item, materialCostCode: code };
@@ -267,29 +275,60 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
     onDataUpdate(updatedData);
     setOpenCodePicker(null);
-    toast({
-      title: 'Code Assigned',
-      description: `Applied ${code} to ${targetItems.length} items`,
-    });
-  };
 
-  // Bulk assign to selected groups - only process child keys to avoid double-counting
-  const handleBulkAssign = (code: string) => {
-    const allItemIds: number[] = [];
+    // Persist to database if projectId is available
+    if (projectId) {
+      setIsSaving(true);
+      try {
+        const itemIds = targetItems.map(item => String(item.id));
+        await batchUpdateMaterialCodes.mutateAsync({
+          projectId,
+          itemIds,
+          materialCode: code
+        });
+        toast({
+          title: 'Code Saved',
+          description: `Applied ${code} to ${targetItems.length} items and saved to database`,
+        });
+      } catch (error) {
+        console.error('Failed to save material codes:', error);
+        toast({
+          title: 'Save Failed',
+          description: 'Changes applied locally but failed to save to database. Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      toast({
+        title: 'Code Assigned',
+        description: `Applied ${code} to ${targetItems.length} items (not saved - no project selected)`,
+      });
+    }
+  }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
+
+  // Bulk assign to selected groups with auto-save - only process child keys to avoid double-counting
+  const handleBulkAssign = useCallback(async (code: string) => {
+    const targetItems: EstimateItem[] = [];
     
     selectedGroups.forEach(groupKey => {
       if (groupKey.includes('|')) {
         const [spec, type] = groupKey.split('|');
         const specGroup = groups.find(g => g.materialSpec === spec);
         const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
-        typeGroup?.items.forEach(i => allItemIds.push(i.id));
+        if (typeGroup) {
+          targetItems.push(...typeGroup.items);
+        }
       }
     });
 
-    if (allItemIds.length === 0) return;
+    if (targetItems.length === 0) return;
 
+    // Update local state immediately
+    const itemIdSet = new Set(targetItems.map(i => i.id));
     const updatedData = data.map(item => {
-      if (allItemIds.includes(item.id)) {
+      if (itemIdSet.has(item.id)) {
         return { ...item, materialCostCode: code };
       }
       return item;
@@ -298,11 +337,38 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     onDataUpdate(updatedData);
     setSelectedGroups(new Set());
     setOpenCodePicker(null);
-    toast({
-      title: 'Bulk Code Assigned',
-      description: `Applied ${code} to ${allItemIds.length} items`,
-    });
-  };
+
+    // Persist to database if projectId is available
+    if (projectId) {
+      setIsSaving(true);
+      try {
+        const itemIds = targetItems.map(item => String(item.id));
+        await batchUpdateMaterialCodes.mutateAsync({
+          projectId,
+          itemIds,
+          materialCode: code
+        });
+        toast({
+          title: 'Bulk Codes Saved',
+          description: `Applied ${code} to ${targetItems.length} items and saved to database`,
+        });
+      } catch (error) {
+        console.error('Failed to save material codes:', error);
+        toast({
+          title: 'Save Failed',
+          description: 'Changes applied locally but failed to save to database. Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      toast({
+        title: 'Bulk Code Assigned',
+        description: `Applied ${code} to ${targetItems.length} items (not saved - no project selected)`,
+      });
+    }
+  }, [selectedGroups, groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
 
   // Select all visible groups
   const selectAllVisible = () => {
@@ -377,9 +443,24 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               <CardTitle className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-green-600" />
                 Material Code Assignment
+                {isSaving && (
+                  <Badge variant="outline" className="ml-2 bg-primary/10 text-primary">
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Saving...
+                  </Badge>
+                )}
+                {!isSaving && projectId && (
+                  <Badge variant="outline" className="ml-2 bg-green-500/10 text-green-600 border-green-500/30">
+                    <Save className="h-3 w-3 mr-1" />
+                    Auto-save enabled
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 Click on any group to assign a material code. Use checkboxes for bulk assignment.
+                {!projectId && (
+                  <span className="text-yellow-600 ml-2">(Select a project to enable auto-save)</span>
+                )}
               </CardDescription>
             </div>
           </div>
