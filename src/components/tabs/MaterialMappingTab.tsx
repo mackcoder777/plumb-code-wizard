@@ -859,6 +859,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                               <table className="w-full text-xs">
                                 <thead className="bg-muted/50">
                                   <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">System</th>
                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground">Description</th>
                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground">Size</th>
                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
@@ -869,6 +870,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                 <tbody className="divide-y divide-border">
                                   {typeGroup.items.slice(0, 10).map(item => (
                                     <tr key={item.id} className="hover:bg-muted/30">
+                                      <td className="px-3 py-2 text-foreground font-medium">{item.system || '—'}</td>
                                       <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
                                       <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
                                       <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
@@ -884,7 +886,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                   ))}
                                   {typeGroup.items.length > 10 && (
                                     <tr>
-                                      <td colSpan={5} className="px-3 py-2 text-center text-muted-foreground">
+                                      <td colSpan={6} className="px-3 py-2 text-center text-muted-foreground">
                                         + {typeGroup.items.length - 10} more items
                                       </td>
                                     </tr>
