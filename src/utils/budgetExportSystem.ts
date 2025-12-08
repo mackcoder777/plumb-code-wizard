@@ -1,6 +1,6 @@
 // Murray Company Budget Export System
 // Provides two export types:
-// 1. Budget Packet - Aggregated by cost code for accounting submission
+// 1. Budget Packet - Aggregated by cost code with Excel formulas
 // 2. Audit Report - Detailed line items for internal backup
 
 import * as XLSX from 'xlsx';
@@ -151,163 +151,12 @@ export function aggregateMaterialByCostCode(items: ExportEstimateItem[]): Aggreg
 }
 
 // ============================================
-// BUDGET PACKET EXPORT (Aggregated Format)
+// BUDGET PACKET EXPORT (Exact Template Match with Formulas)
 // ============================================
 
 /**
- * Builds the Budget Packet worksheet as array of arrays
- */
-function buildBudgetWorksheetData(
-  items: ExportEstimateItem[],
-  projectInfo: ProjectInfo,
-  laborRate: number = 0
-): any[][] {
-  const laborSummary = aggregateLaborByCostCode(items);
-  const materialSummary = aggregateMaterialByCostCode(items);
-
-  const data: any[][] = [];
-
-  // ===== HEADER SECTION =====
-  data.push([]); // Row 1
-  data.push([null, null, null, '  NEW JOB / CHANGE ORDER']); // Row 2
-  data.push([null, null, null, null, '   WORKSHEET']); // Row 3
-  data.push([]); // Row 4
-  data.push([]); // Row 5
-  
-  // Job Info
-  data.push([null, 'JOB #:', projectInfo.jobNumber, null, null, null, null, '  Pending Change Order (MPCO)']); // Row 6
-  data.push([null, 'JOB NAME:', projectInfo.jobName, null, null, null, null, ' MCE # (s)', 'Initial Budget']); // Row 7
-  data.push([null, 'DATE:', projectInfo.date.toLocaleDateString()]); // Row 8
-  data.push([null, 'BY:', projectInfo.preparedBy, null, null, null, ' ', '  Change Order  (CO)']); // Row 9
-  data.push([null, null, null, null, null, null, null, ' (if PCO transfer to CO, see page 2)']); // Row 10
-  data.push([null, null, null, null, null, null, null, '     CO # ']); // Row 11
-  data.push([]); // Row 12
-  data.push([null, 'Client Change Reference:', null, projectInfo.clientReference || '', null, null, 'X', 'Original Budget']); // Row 13
-  data.push([]); // Row 14
-  data.push([]); // Row 15
-  data.push([null, null, null, null, null, null, null, 'APPROVAL:']); // Row 16
-
-  // ===== LABOR SECTION =====
-  data.push([null, 'LABOR BREAKDOWN']); // Row 17
-  data.push([null, 'Cost Code', null, 'DESCRIPTION', null, null, null, ' # of HOURS', 'RATE', 'TOTAL COST']); // Row 18
-  data.push([]); // Row 19 - empty before data
-
-  const laborStartRow = data.length + 1; // Excel is 1-indexed
-  let totalLaborHours = 0;
-  let totalLaborDollars = 0;
-
-  // Labor data rows
-  laborSummary.forEach(item => {
-    const totalCost = laborRate > 0 ? item.hours * laborRate : item.laborDollars;
-    data.push([
-      null,
-      item.costCode, // Cost Code
-      null,
-      item.description, // Description
-      null, null, null,
-      Math.round(item.hours * 10) / 10, // Hours (rounded to 1 decimal)
-      laborRate || '', // Rate
-      Math.round(totalCost * 100) / 100 // Total Cost (rounded to cents)
-    ]);
-    totalLaborHours += item.hours;
-    totalLaborDollars += totalCost;
-  });
-
-  // Add empty rows to reach minimum 15 labor rows
-  const minLaborRows = 15;
-  while (data.length - laborStartRow + 1 < minLaborRows) {
-    data.push([null, '', null, '', null, null, null, null, null, 0]);
-  }
-
-  // Labor subtotal row
-  data.push([]);
-  data.push([
-    null, null, null, null, null, null,
-    'LABOR SUBTOTAL:',
-    Math.round(totalLaborHours * 10) / 10,
-    null,
-    Math.round(totalLaborDollars * 100) / 100
-  ]);
-
-  // ===== NON-LABOR (MATERIAL) SECTION =====
-  data.push([]); // Spacer
-  data.push([null, 'NON LABOR']); // Section header
-  data.push([null, 'Cost Code', null, null, 'Description', null, null, null, null, null, 'Total Cost']); // Column headers
-
-  const materialStartRow = data.length + 1;
-  let totalMaterialDollars = 0;
-
-  // Material data rows
-  materialSummary.forEach(item => {
-    data.push([
-      null,
-      item.costCode, // Cost Code
-      null, null,
-      item.description, // Description
-      null, null, null, null, null,
-      Math.round(item.materialDollars * 100) / 100 // Total Cost
-    ]);
-    totalMaterialDollars += item.materialDollars;
-  });
-
-  // Add empty rows to reach minimum 10 material rows
-  const minMaterialRows = 10;
-  while (data.length - materialStartRow + 1 < minMaterialRows) {
-    data.push([null, '', null, null, '', null, null, null, null, null, 0]);
-  }
-
-  // ===== SUMMARY SECTION =====
-  data.push([]); // Spacer
-  data.push([]); // Spacer
-
-  const grandTotal = totalLaborDollars + totalMaterialDollars;
-
-  // Summary totals
-  data.push([
-    null, null, null, null, null, null, null, null, null,
-    'TOTAL COST',
-    Math.round(grandTotal * 100) / 100
-  ]);
-
-  data.push([
-    null, null, null, null,
-    'Labor Hours Total', null,
-    Math.round(totalLaborHours * 10) / 10,
-    null, null,
-    'PLUS'
-  ]);
-
-  data.push([
-    null, null, null, null,
-    'Labor $$ Total', null,
-    Math.round(totalLaborDollars * 100) / 100,
-    0, // Placeholder for rate
-    null,
-    'MARKUP',
-    0 // Markup amount
-  ]);
-
-  data.push([
-    null, null, null, null,
-    'Material Total', null,
-    Math.round(totalMaterialDollars * 100) / 100,
-    0,
-    null,
-    'MARGIN %',
-    0
-  ]);
-
-  data.push([
-    null, null, null, null, null, null, null, null, null,
-    'TOTAL',
-    Math.round(grandTotal * 100) / 100
-  ]);
-
-  return data;
-}
-
-/**
- * Exports Budget Packet in Murray Company format
+ * Exports Budget Packet matching Murray Company Budget_Packet.xls format
+ * Includes proper cell positions and Excel formulas
  */
 export function exportBudgetPacket(
   items: ExportEstimateItem[],
@@ -315,37 +164,212 @@ export function exportBudgetPacket(
   laborRate: number = 0
 ): { laborCodes: number; materialCodes: number; totalLaborHours: number; totalLaborDollars: number; totalMaterialDollars: number; grandTotal: number } {
   const wb = XLSX.utils.book_new();
+  const ws: XLSX.WorkSheet = {};
 
-  // Build worksheet data
-  const worksheetData = buildBudgetWorksheetData(items, projectInfo, laborRate);
-  const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+  const laborSummary = aggregateLaborByCostCode(items);
+  const materialSummary = aggregateMaterialByCostCode(items);
 
+  // ===== HEADER SECTION (Rows 1-16) =====
+  // Row 2: Title
+  ws['D2'] = { t: 's', v: '  NEW JOB / CHANGE ORDER' };
+  
+  // Row 3: Title continued
+  ws['E3'] = { t: 's', v: '   WORKSHEET' };
+  
+  // Row 6: Job #
+  ws['B6'] = { t: 's', v: 'JOB #:' };
+  ws['C6'] = { t: 's', v: projectInfo.jobNumber };
+  ws['H6'] = { t: 's', v: '  Pending Change Order (MPCO)' };
+  
+  // Row 7: Job Name
+  ws['B7'] = { t: 's', v: 'JOB NAME:' };
+  ws['C7'] = { t: 's', v: projectInfo.jobName };
+  ws['H7'] = { t: 's', v: ' MCE # (s)' };
+  ws['I7'] = { t: 's', v: 'Initial Budget' };
+  
+  // Row 8: Date
+  ws['B8'] = { t: 's', v: 'DATE:' };
+  ws['C8'] = { t: 's', v: projectInfo.date.toLocaleDateString() };
+  
+  // Row 9: By
+  ws['B9'] = { t: 's', v: 'BY:' };
+  ws['C9'] = { t: 's', v: projectInfo.preparedBy };
+  ws['H9'] = { t: 's', v: '  Change Order  (CO)' };
+  
+  // Row 10
+  ws['H10'] = { t: 's', v: ' (if PCO transfer to CO, see page 2)' };
+  
+  // Row 11
+  ws['H11'] = { t: 's', v: '     CO # ' };
+  
+  // Row 13: Client Change Reference
+  ws['B13'] = { t: 's', v: 'Client Change Reference:' };
+  ws['D13'] = { t: 's', v: projectInfo.clientReference || '' };
+  ws['G13'] = { t: 's', v: 'X' };
+  ws['H13'] = { t: 's', v: 'Original Budget' };
+  
+  // Row 16: Approval
+  ws['H16'] = { t: 's', v: 'APPROVAL:' };
+
+  // ===== LABOR BREAKDOWN SECTION (Rows 17-36) =====
+  // Row 17: Section header
+  ws['B17'] = { t: 's', v: 'LABOR BREAKDOWN' };
+  
+  // Row 18: Column headers
+  ws['B18'] = { t: 's', v: 'Cost Code' };
+  ws['D18'] = { t: 's', v: 'DESCRIPTION' };
+  ws['H18'] = { t: 's', v: ' # of HOURS' };
+  ws['I18'] = { t: 's', v: 'RATE' };
+  ws['J18'] = { t: 's', v: 'TOTAL COST' };
+
+  // Labor data starts at row 20, max 16 rows (20-35)
+  const LABOR_START_ROW = 20;
+  const LABOR_END_ROW = 35;
+  
+  laborSummary.forEach((item, index) => {
+    if (index >= 16) return; // Max 16 labor items
+    
+    const row = LABOR_START_ROW + index;
+    
+    // Cost Code (column B)
+    ws[`B${row}`] = { t: 's', v: item.costCode };
+    
+    // Description (column D)
+    ws[`D${row}`] = { t: 's', v: item.description };
+    
+    // Hours (column H)
+    ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
+    
+    // Rate (column I) - Leave empty for user to fill, or use provided rate
+    if (laborRate > 0) {
+      ws[`I${row}`] = { t: 'n', v: laborRate, z: '#,##0.00' };
+    }
+    
+    // Total Cost formula (column J): =I{row}*H{row}
+    ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
+  });
+
+  // Fill remaining labor rows with empty structure and formulas
+  for (let row = LABOR_START_ROW + laborSummary.length; row <= LABOR_END_ROW; row++) {
+    ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
+  }
+
+  // Row 36: Labor Subtotals with SUM formulas
+  ws['G36'] = { t: 's', v: 'LABOR SUBTOTAL:' };
+  ws['H36'] = { t: 'n', f: `SUM(H${LABOR_START_ROW}:H${LABOR_END_ROW})`, v: 0, z: '#,##0.0' };
+  ws['J36'] = { t: 'n', f: `SUM(J${LABOR_START_ROW}:J${LABOR_END_ROW})`, v: 0, z: '#,##0' };
+
+  // ===== NON LABOR SECTION (Rows 38-49) =====
+  const NON_LABOR_HEADER_ROW = 38;
+  const NON_LABOR_COLS_ROW = 39;
+  const NON_LABOR_START_ROW = 40;
+  const NON_LABOR_END_ROW = 49; // Max 10 material rows
+  
+  // Row 38: Section header
+  ws[`B${NON_LABOR_HEADER_ROW}`] = { t: 's', v: 'NON LABOR' };
+  
+  // Row 39: Column headers
+  ws[`B${NON_LABOR_COLS_ROW}`] = { t: 's', v: 'Cost Code' };
+  ws[`E${NON_LABOR_COLS_ROW}`] = { t: 's', v: 'Description' };
+  ws[`J${NON_LABOR_COLS_ROW}`] = { t: 's', v: 'Total Cost' };
+
+  // Material data
+  materialSummary.forEach((item, index) => {
+    if (index >= 10) return; // Max 10 material items
+    
+    const row = NON_LABOR_START_ROW + index;
+    
+    // Cost Code (column B)
+    ws[`B${row}`] = { t: 's', v: item.costCode };
+    
+    // Description (column E)
+    ws[`E${row}`] = { t: 's', v: item.description };
+    
+    // Total Cost (column J)
+    ws[`J${row}`] = { t: 'n', v: Math.round(item.materialDollars * 100) / 100, z: '#,##0.00' };
+  });
+
+  // Fill remaining material rows with 0
+  for (let row = NON_LABOR_START_ROW + materialSummary.length; row <= NON_LABOR_END_ROW; row++) {
+    ws[`J${row}`] = { t: 'n', v: 0, z: '#,##0' };
+  }
+
+  // ===== SUMMARY SECTION (Rows 52-56) =====
+  const SUMMARY_START = 52;
+  
+  // Row 52: TOTAL COST (Labor + Material)
+  ws[`J${SUMMARY_START}`] = { t: 's', v: 'TOTAL COST' };
+  ws[`K${SUMMARY_START}`] = { 
+    t: 'n', 
+    f: `J36+SUM(J${NON_LABOR_START_ROW}:J${NON_LABOR_END_ROW})`,
+    v: 0,
+    z: '#,##0.00'
+  };
+  
+  // Row 53: Labor Hours Total
+  ws[`E${SUMMARY_START + 1}`] = { t: 's', v: 'Labor Hours Total' };
+  ws[`G${SUMMARY_START + 1}`] = { t: 'n', f: 'H36', v: 0, z: '#,##0.0' };
+  ws[`J${SUMMARY_START + 1}`] = { t: 's', v: 'PLUS' };
+  
+  // Row 54: Labor $$ Total
+  ws[`E${SUMMARY_START + 2}`] = { t: 's', v: 'Labor $$ Total' };
+  ws[`G${SUMMARY_START + 2}`] = { t: 'n', f: 'J36', v: 0, z: '#,##0' };
+  ws[`H${SUMMARY_START + 2}`] = { t: 'n', v: 0, z: '0%' };
+  ws[`J${SUMMARY_START + 2}`] = { t: 's', v: 'MARKUP' };
+  ws[`K${SUMMARY_START + 2}`] = { t: 'n', v: 0, z: '#,##0' };
+  
+  // Row 55: Material Total
+  ws[`E${SUMMARY_START + 3}`] = { t: 's', v: 'Material Total' };
+  ws[`G${SUMMARY_START + 3}`] = { 
+    t: 'n', 
+    f: `SUM(J${NON_LABOR_START_ROW}:J${NON_LABOR_END_ROW})`,
+    v: 0,
+    z: '#,##0.00'
+  };
+  ws[`H${SUMMARY_START + 3}`] = { t: 'n', v: 0, z: '0%' };
+  ws[`J${SUMMARY_START + 3}`] = { t: 's', v: 'MARGIN %' };
+  ws[`K${SUMMARY_START + 3}`] = { t: 'n', v: 0, z: '0%' };
+  
+  // Row 56: TOTAL (with formula)
+  ws[`J${SUMMARY_START + 4}`] = { t: 's', v: 'TOTAL' };
+  ws[`K${SUMMARY_START + 4}`] = { 
+    t: 'n', 
+    f: `K${SUMMARY_START}+K${SUMMARY_START + 2}`,
+    v: 0,
+    z: '#,##0.00'
+  };
+
+  // ===== WORKSHEET CONFIGURATION =====
+  
   // Set column widths
   ws['!cols'] = [
     { wch: 3 },   // A
     { wch: 14 },  // B - Cost Code
-    { wch: 6 },   // C
-    { wch: 20 },  // D - Description
-    { wch: 12 },  // E
-    { wch: 10 },  // F
-    { wch: 12 },  // G
+    { wch: 18 },  // C - Job info values
+    { wch: 25 },  // D - Description
+    { wch: 20 },  // E - Description (non-labor)
+    { wch: 8 },   // F
+    { wch: 16 },  // G - Subtotal labels
     { wch: 12 },  // H - Hours
     { wch: 10 },  // I - Rate
     { wch: 14 },  // J - Total Cost
-    { wch: 14 },  // K
+    { wch: 14 },  // K - Summary values
   ];
 
+  // Set print area / used range
+  ws['!ref'] = `A1:K${SUMMARY_START + 5}`;
+
+  // Add worksheet to workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Initial Budget');
 
-  // Generate filename with date
+  // ===== GENERATE FILENAME AND DOWNLOAD =====
   const dateStr = projectInfo.date.toISOString().split('T')[0];
-  const filename = `Budget_Packet_${projectInfo.jobNumber.replace(/\s+/g, '_')}_${dateStr}.xlsx`;
+  const safeName = projectInfo.jobNumber.replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Budget_Packet_${safeName}_${dateStr}.xlsx`;
 
   XLSX.writeFile(wb, filename);
 
   // Calculate stats for return
-  const laborSummary = aggregateLaborByCostCode(items);
-  const materialSummary = aggregateMaterialByCostCode(items);
   const totalLaborHours = laborSummary.reduce((s, l) => s + l.hours, 0);
   const totalLaborDollars = laborSummary.reduce((s, l) => s + l.laborDollars, 0);
   const totalMaterialDollars = materialSummary.reduce((s, m) => s + m.materialDollars, 0);
