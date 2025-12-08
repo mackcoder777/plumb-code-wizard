@@ -404,6 +404,9 @@ const EnhancedCostCodeManager = () => {
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }>>({});
   
+  // Auto-suggestions state - stores the original auto-suggested codes per system
+  const [systemAutoSuggestions, setSystemAutoSuggestions] = useState<Record<string, string>>({});
+  
   // Overwrite confirmation dialog state
   const [overwriteConfirm, setOverwriteConfirm] = useState<{
     isOpen: boolean;
@@ -434,6 +437,7 @@ const EnhancedCostCodeManager = () => {
     if (savedMappings.length > 0) {
       const mappings: Record<string, string> = {};
       const verified: Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }> = {};
+      const autoSuggestions: Record<string, string> = {};
       
       savedMappings.forEach(m => {
         mappings[m.system_name] = m.cost_head;
@@ -444,10 +448,15 @@ const EnhancedCostCodeManager = () => {
             costHead: m.cost_head
           };
         }
+        // Load stored auto-suggestions
+        if (m.auto_suggested) {
+          autoSuggestions[m.system_name] = m.auto_suggested;
+        }
       });
       
       setCustomMappings(mappings);
       setVerifiedSystems(verified);
+      setSystemAutoSuggestions(prev => ({ ...prev, ...autoSuggestions }));
       
       // MERGE applied systems - DB state takes precedence but preserve local state
       setAppliedSystems(prevApplied => {
@@ -1253,6 +1262,10 @@ const EnhancedCostCodeManager = () => {
     
     // Persist to database if project exists
     if (currentProject?.id) {
+      const systemLower = system.toLowerCase().trim();
+      // Get the original auto-suggestion for persistence
+      const originalAutoSuggested = systemAutoSuggestions[systemLower] || generateCostCode({ system }).costHead;
+      
       // Update cost codes on estimate items (always update since we're overwriting)
       batchUpdateSystemCostCodes.mutate({
         projectId: currentProject.id,
@@ -1265,8 +1278,17 @@ const EnhancedCostCodeManager = () => {
         projectId: currentProject.id,
         systemName: system,
         costHead: costHead,
-        itemCount: itemCount
+        itemCount: itemCount,
+        autoSuggested: originalAutoSuggested
       });
+      
+      // Store auto-suggestion locally if not already set
+      if (!systemAutoSuggestions[systemLower]) {
+        setSystemAutoSuggestions(prev => ({
+          ...prev,
+          [systemLower]: originalAutoSuggested
+        }));
+      }
     }
     
     showNotification(`Applied & verified ${costHead} to ${itemCount} items in ${system}`, 'success');
@@ -1341,7 +1363,9 @@ const EnhancedCostCodeManager = () => {
     const systemLower = system.toLowerCase().trim();
     const history = mappingHistory[systemLower] || [];
     const currentMapping = customMappings[systemLower];
-    const autoSuggestion = generateCostCode({ system }).costHead;
+    
+    // Get the original auto-suggestion (from state or generate fresh)
+    const originalAutoSuggested = systemAutoSuggestions[systemLower] || generateCostCode({ system }).costHead;
 
     const newMappings = { ...customMappings };
     const newHistory = { ...mappingHistory };
@@ -1353,20 +1377,29 @@ const EnhancedCostCodeManager = () => {
         {
           timestamp: new Date().toISOString(),
           user: userName,
-          from: currentMapping || autoSuggestion,
+          from: currentMapping || originalAutoSuggested,
           to: costHead,
           reason: currentMapping ? 'Manual change' : 'Initial assignment'
         }
       ];
       
-      // Persist to database if project exists
+      // Persist to database if project exists (with auto-suggestion preserved)
       if (currentProject?.id) {
         saveMapping.mutate({
           projectId: currentProject.id,
           systemName: system,
           costHead: costHead,
-          previousCode: currentMapping
+          previousCode: currentMapping,
+          autoSuggested: originalAutoSuggested
         });
+      }
+      
+      // Store auto-suggestion locally if not already set
+      if (!systemAutoSuggestions[systemLower]) {
+        setSystemAutoSuggestions(prev => ({
+          ...prev,
+          [systemLower]: originalAutoSuggested
+        }));
       }
     } else {
       delete newMappings[systemLower];
@@ -1375,8 +1408,8 @@ const EnhancedCostCodeManager = () => {
         {
           timestamp: new Date().toISOString(),
           user: userName,
-          from: currentMapping || autoSuggestion,
-          to: autoSuggestion,
+          from: currentMapping || originalAutoSuggested,
+          to: originalAutoSuggested,
           reason: 'Reset to auto-detection'
         }
       ];
@@ -1384,7 +1417,7 @@ const EnhancedCostCodeManager = () => {
 
     setCustomMappings(newMappings);
     setMappingHistory(newHistory);
-    showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? autoSuggestion : costHead}`, 'success');
+    showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? originalAutoSuggested : costHead}`, 'success');
   };
 
   // Export with cost codes
@@ -1999,17 +2032,25 @@ const EnhancedCostCodeManager = () => {
                             )}
                           </div>
                           
-                          {/* Breadcrumb trail */}
+                          {/* Breadcrumb trail - uses stored auto-suggestion */}
                           <div className="text-xs text-gray-600 bg-white p-2 rounded border">
                             <span className="font-medium">Change trail:</span>
-                            {data.autoDetected ? (
-                              <span className="ml-2">Auto-suggested: {data.currentMapping}</span>
-                            ) : (
-                              <span className="ml-2">
-                                Auto-suggested: {autoDetectCostCode(system)} → 
-                                <span className="text-blue-600 font-medium"> Changed by user to: {data.currentMapping}</span>
-                              </span>
-                            )}
+                            {(() => {
+                              const systemLower = system.toLowerCase().trim();
+                              // Get stored auto-suggestion or generate fresh
+                              const storedAutoSuggestion = systemAutoSuggestions[systemLower];
+                              const autoSuggested = storedAutoSuggestion || generateCostCode({ system }).costHead;
+                              
+                              if (data.currentMapping === autoSuggested) {
+                                return <span className="ml-2">Auto-suggested: {autoSuggested}</span>;
+                              }
+                              return (
+                                <span className="ml-2">
+                                  Auto-suggested: {autoSuggested} → 
+                                  <span className="text-blue-600 font-medium"> Changed by user to: {data.currentMapping}</span>
+                                </span>
+                              );
+                            })()}
                           </div>
 
                           {/* Item Type Breakdown - shown when toggle is enabled */}
