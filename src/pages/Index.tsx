@@ -2381,12 +2381,27 @@ const EnhancedCostCodeManager = () => {
           )}
 
           {/* Material Mapping Tab */}
-          {activeTab === 'material-mapping' && estimateData.length > 0 && (
-            <MaterialMappingTab
-              data={estimateData}
-              onDataUpdate={setEstimateData}
-              projectId={currentProject?.id}
-            />
+          {activeTab === 'material-mapping' && (
+            estimateData.length > 0 ? (
+              <MaterialMappingTab
+                data={estimateData}
+                onDataUpdate={setEstimateData}
+                projectId={currentProject?.id}
+              />
+            ) : (
+              <div className="bg-card border border-border rounded-lg p-12 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                  <span className="text-3xl">📦</span>
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">No Estimate Data Loaded</h3>
+                <p className="text-muted-foreground mb-4">
+                  Upload an estimate file first to configure material code rules.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Material codes are assigned by Item Type + Material Spec combinations (not by system like labor codes).
+                </p>
+              </div>
+            )
           )}
 
           {/* Rules Tab */}
