@@ -7,29 +7,18 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { 
   Bot, 
-  Download, 
-  FileText, 
   RotateCcw, 
-  Search,
   ArrowUpDown,
   Edit,
   Plus,
-  ChevronDown,
-  FileSpreadsheet,
-  ClipboardList
+  Search,
 } from 'lucide-react';
 import { CostCodeModal } from '../CostCodeModal';
 import { ColumnConfigPanel } from '../ColumnConfigPanel';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { toast } from '@/components/ui/use-toast';
-import { exportBudgetPacket, exportAuditReport } from '@/utils/exportUtils';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { ProjectInfo } from '@/utils/budgetExportSystem';
 
 interface EstimatesTabProps {
   data: EstimateItem[];
@@ -140,21 +129,13 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
     });
   };
 
-  const handleExportBudgetPacket = () => {
-    const result = exportBudgetPacket(filteredData, 'Estimate', 'User');
-    toast({
-      title: "Budget Packet Exported",
-      description: `Exported ${result.laborCodes} labor codes and ${result.materialCodes} material codes. Grand Total: $${result.grandTotal.toLocaleString()}`,
-    });
-  };
-
-  const handleExportAuditReport = () => {
-    const result = exportAuditReport(filteredData, 'Estimate');
-    toast({
-      title: "Audit Report Exported",
-      description: `Exported ${result.totalItems} items with Labor and Material tabs`,
-    });
-  };
+  // Create project info for export
+  const getProjectInfo = (): ProjectInfo => ({
+    jobNumber: 'Estimate',
+    jobName: 'Estimate',
+    date: new Date(),
+    preparedBy: 'User',
+  });
 
   const handleCostCodeAssign = (item: EstimateItem, costCode: string, type: 'labor' | 'material' = 'labor') => {
     const updatedData = data.map(dataItem => {
@@ -321,32 +302,11 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             <Bot className="w-4 h-4 mr-2" />
             Auto-Assign Cost Codes
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-                <ChevronDown className="w-4 h-4 ml-2" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem onClick={handleExportBudgetPacket}>
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                <div className="flex flex-col">
-                  <span className="font-medium">Budget Packet</span>
-                  <span className="text-xs text-muted-foreground">Aggregated by cost code</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleExportAuditReport}>
-                <ClipboardList className="w-4 h-4 mr-2" />
-                <div className="flex flex-col">
-                  <span className="font-medium">Audit Report</span>
-                  <span className="text-xs text-muted-foreground">Detailed Labor + Material tabs</span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExportDropdown
+            items={filteredData}
+            projectInfo={getProjectInfo()}
+            disabled={filteredData.length === 0}
+          />
           <Button variant="outline" onClick={clearFilters}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Clear Filters

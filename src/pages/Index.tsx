@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
 import { MaterialMappingTab } from '@/components/tabs/MaterialMappingTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { ProjectInfo } from '@/utils/budgetExportSystem';
 import { 
   useSystemMappings, 
   useSaveMapping, 
@@ -25,14 +27,6 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { Switch } from '@/components/ui/switch';
-import { exportBudgetPacket, exportAuditReport } from '@/utils/exportUtils';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -1461,19 +1455,13 @@ const EnhancedCostCodeManager = () => {
     showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? originalAutoSuggested : costHead}`, 'success');
   };
 
-  // Export Budget Packet (aggregated by cost code)
-  const handleExportBudgetPacket = () => {
-    const projectName = currentProject?.name || 'Estimate';
-    const result = exportBudgetPacket(filteredData, projectName, user?.email || 'User');
-    showNotification(`Budget Packet exported: ${result.laborCodes} labor codes, ${result.materialCodes} material codes. Grand Total: $${result.grandTotal.toLocaleString()}`, 'success');
-  };
-
-  // Export Audit Report (detailed with Labor + Material tabs)
-  const handleExportAuditReport = () => {
-    const projectName = currentProject?.name || 'Estimate';
-    const result = exportAuditReport(filteredData, projectName);
-    showNotification(`Audit Report exported: ${result.totalItems} items with Labor and Material tabs`, 'success');
-  };
+  // Create project info for export
+  const getProjectInfo = useCallback((): ProjectInfo => ({
+    jobNumber: currentProject?.name || 'Estimate',
+    jobName: currentProject?.name || 'Estimate',
+    date: new Date(),
+    preparedBy: user?.email || 'User',
+  }), [currentProject?.name, user?.email]);
 
   // Calculate stats
   const stats = {
@@ -1770,28 +1758,11 @@ const EnhancedCostCodeManager = () => {
                 >
                   🤖 Auto-Assign All Codes
                 </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 font-medium">
-                      💾 Export ▼
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-64">
-                    <DropdownMenuItem onClick={handleExportBudgetPacket}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">📊 Budget Packet</span>
-                        <span className="text-xs text-muted-foreground">Aggregated by cost code (submission format)</span>
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleExportAuditReport}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">📋 Audit Report</span>
-                        <span className="text-xs text-muted-foreground">Detailed Labor + Material tabs</span>
-                      </div>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <ExportDropdown
+                  items={filteredData}
+                  projectInfo={getProjectInfo()}
+                  disabled={filteredData.length === 0}
+                />
                 <button
                   onClick={() => setShowCostCodeBrowser(true)}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all flex items-center gap-2 font-medium"
