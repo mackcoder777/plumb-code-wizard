@@ -19,7 +19,7 @@ interface SystemCardProps {
   laborCode?: string;
   suggestedMaterialCode?: string;
   suggestedLaborCode?: string;
-  appliedInfo?: { appliedAt: Date; itemCount: number };
+  appliedInfo?: { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string };
   onMaterialCodeChange: (value: string) => void;
   onLaborCodeChange: (value: string) => void;
   onClear: () => void;
@@ -60,6 +60,12 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   const isMapped = materialCode && laborCode;
   const isPartial = (materialCode || laborCode) && !(materialCode && laborCode);
   const hasSuggestions = suggestedMaterialCode || suggestedLaborCode;
+  
+  // Check if mapping has changed since last applied
+  const hasChangedSinceApplied = appliedInfo && (
+    materialCode !== appliedInfo.appliedMaterialCode || 
+    laborCode !== appliedInfo.appliedLaborCode
+  );
 
   // Load cost codes from database
   const { data: dbMaterialCodes = [], isLoading: loadingMaterial } = useMaterialCodes();
@@ -339,23 +345,29 @@ export const SystemCard: React.FC<SystemCardProps> = ({
 
         {/* Apply to System Button */}
         {(materialCode || laborCode) && onApplySystemMapping && (
-          <Button
-            variant={appliedInfo ? "outline" : "default"}
-            size="sm"
-            className="w-full"
-            onClick={onApplySystemMapping}
-          >
-            {appliedInfo ? (
-              <>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Re-apply to System ({itemCount})
-              </>
+          <>
+            {appliedInfo && !hasChangedSinceApplied ? (
+              // Already applied and no changes - show static applied state
+              <div className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-success/10 border border-success/30 rounded-md text-success text-sm font-medium">
+                <CheckCircle className="w-4 h-4" />
+                Applied ({appliedInfo.itemCount} items)
+              </div>
             ) : (
-              <>
-                Apply to System ({itemCount})
-              </>
+              // Not applied yet OR mapping has changed - show apply button
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full"
+                onClick={onApplySystemMapping}
+              >
+                {hasChangedSinceApplied ? (
+                  <>Apply Changes ({itemCount})</>
+                ) : (
+                  <>Apply to System ({itemCount})</>
+                )}
+              </Button>
             )}
-          </Button>
+          </>
         )}
 
         {/* Item Preview Section */}
