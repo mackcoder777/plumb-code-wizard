@@ -45,6 +45,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number }>>({});
 
   // Load cost codes from database
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
@@ -126,9 +127,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         laborCode: mappings[system]?.laborCode,
         suggestedMaterialCode: suggestions[system]?.materialCode,
         suggestedLaborCode: suggestions[system]?.laborCode,
+        appliedInfo: appliedSystems[system],
       }))
       .sort((a, b) => b.itemCount - a.itemCount);
-  }, [data, mappings, suggestions]);
+  }, [data, mappings, suggestions, appliedSystems]);
 
   // Filter systems by search term and active filters
   const filteredSystems = useMemo(() => {
@@ -272,6 +274,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   const applyMappings = () => {
     let itemsAffected = 0;
+    const systemItemCounts: Record<string, number> = {};
 
     const updatedData = data.map(item => {
       const systemMapping = mappings[item.system];
@@ -307,10 +310,23 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       
       if (changed) {
         itemsAffected++;
+        systemItemCounts[item.system] = (systemItemCounts[item.system] || 0) + 1;
         return { ...item, costCode: newLaborCode, materialCostCode: newMaterialCode };
       }
       return item;
     });
+
+    // Track which systems were applied
+    const newAppliedSystems: Record<string, { appliedAt: Date; itemCount: number }> = {};
+    Object.keys(mappings).forEach(system => {
+      if (systemItemCounts[system] || mappings[system]?.laborCode || mappings[system]?.materialCode) {
+        newAppliedSystems[system] = {
+          appliedAt: new Date(),
+          itemCount: systemItemCounts[system] || 0,
+        };
+      }
+    });
+    setAppliedSystems(prev => ({ ...prev, ...newAppliedSystems }));
 
     onDataUpdate(updatedData);
     
@@ -322,6 +338,51 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     toast({
       title: "Mappings Applied Successfully",
       description: `Applied ${Object.keys(mappings).length} system mappings${itemTypeMappingCount > 0 ? ` and ${itemTypeMappingCount} item type overrides` : ''} to ${itemsAffected} items`,
+    });
+  };
+
+  const applySystemMapping = (system: string) => {
+    const systemMapping = mappings[system];
+    if (!systemMapping) return;
+
+    let itemsAffected = 0;
+    const updatedData = data.map(item => {
+      if (item.system !== system) return item;
+      
+      let newLaborCode = item.costCode;
+      let newMaterialCode = item.materialCostCode || '';
+      let changed = false;
+      
+      if (systemMapping.laborCode && !item.costCode) {
+        newLaborCode = systemMapping.laborCode;
+        changed = true;
+      }
+      if (systemMapping.materialCode && !item.materialCostCode) {
+        newMaterialCode = systemMapping.materialCode;
+        changed = true;
+      }
+      
+      if (changed) {
+        itemsAffected++;
+        return { ...item, costCode: newLaborCode, materialCostCode: newMaterialCode };
+      }
+      return item;
+    });
+
+    // Track this system as applied
+    setAppliedSystems(prev => ({
+      ...prev,
+      [system]: {
+        appliedAt: new Date(),
+        itemCount: itemsAffected,
+      }
+    }));
+
+    onDataUpdate(updatedData);
+    
+    toast({
+      title: "Mapping Applied",
+      description: `Applied mapping for "${system}" to ${itemsAffected} items`,
     });
   };
 
@@ -443,10 +504,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                         laborCode={sm.laborCode}
                         suggestedMaterialCode={sm.suggestedMaterialCode}
                         suggestedLaborCode={sm.suggestedLaborCode}
+                        appliedInfo={sm.appliedInfo}
                         onMaterialCodeChange={(value) => handleMappingChange(sm.system, 'materialCode', value)}
                         onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
                         onClear={() => clearMapping(sm.system)}
                         onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                        onApplySystemMapping={() => applySystemMapping(sm.system)}
                         onViewAllItems={onNavigateToEstimates}
                         importedCostCodes={importedCostCodes}
                       />

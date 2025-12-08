@@ -19,10 +19,12 @@ interface SystemCardProps {
   laborCode?: string;
   suggestedMaterialCode?: string;
   suggestedLaborCode?: string;
+  appliedInfo?: { appliedAt: Date; itemCount: number };
   onMaterialCodeChange: (value: string) => void;
   onLaborCodeChange: (value: string) => void;
   onClear: () => void;
   onApplySuggestions?: () => void;
+  onApplySystemMapping?: () => void;
   onViewAllItems?: (system: string) => void;
   items?: EstimateItem[];
   importedCostCodes?: Array<{
@@ -41,10 +43,12 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   laborCode,
   suggestedMaterialCode,
   suggestedLaborCode,
+  appliedInfo,
   onMaterialCodeChange,
   onLaborCodeChange,
   onClear,
   onApplySuggestions,
+  onApplySystemMapping,
   onViewAllItems,
   items = [],
   importedCostCodes = [],
@@ -121,6 +125,9 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   };
 
   const getStatusBadge = () => {
+    if (appliedInfo) {
+      return <Badge className="bg-success text-success-foreground"><CheckCircle className="w-3 h-3 mr-1" /> Applied</Badge>;
+    }
     if (isMapped) {
       return <Badge className="bg-success text-success-foreground">Fully Mapped</Badge>;
     } else if (isPartial) {
@@ -319,12 +326,39 @@ export const SystemCard: React.FC<SystemCardProps> = ({
 
         {/* Current mapping info */}
         {(materialCode || laborCode) && (
-          <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+          <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded space-y-1">
+            {appliedInfo && (
+              <div className="flex items-center gap-1 text-success font-medium">
+                <CheckCircle className="w-3 h-3" />
+                Applied to {appliedInfo.itemCount} items at {appliedInfo.appliedAt.toLocaleTimeString()}
+              </div>
+            )}
             <div>Last modified: {new Date().toLocaleString()}</div>
             {(suggestedMaterialCode || suggestedLaborCode) && (
               <div>Change trail: Auto-suggested: {suggestedMaterialCode || suggestedLaborCode}</div>
             )}
           </div>
+        )}
+
+        {/* Apply to System Button */}
+        {(materialCode || laborCode) && onApplySystemMapping && (
+          <Button
+            variant={appliedInfo ? "outline" : "default"}
+            size="sm"
+            className="w-full"
+            onClick={onApplySystemMapping}
+          >
+            {appliedInfo ? (
+              <>
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Re-apply to System ({itemCount})
+              </>
+            ) : (
+              <>
+                Apply to System ({itemCount})
+              </>
+            )}
+          </Button>
         )}
 
         {/* Item Preview Section */}
