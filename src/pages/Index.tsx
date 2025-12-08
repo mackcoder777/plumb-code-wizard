@@ -401,7 +401,7 @@ const EnhancedCostCodeManager = () => {
   // Item type mapping state
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
-  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number }>>({});
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }>>({});
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -1148,7 +1148,7 @@ const EnhancedCostCodeManager = () => {
     showNotification(`Auto-assigned ${assigned} cost codes with high confidence`, 'success');
   };
 
-  // Apply mapping to all items of a specific system
+  // Apply mapping to all items of a specific system (also marks as verified)
   const applyMappingToSystem = (system: string, costHead: string) => {
     const systemLower = system.toLowerCase().trim();
     let assigned = 0;
@@ -1172,12 +1172,23 @@ const EnhancedCostCodeManager = () => {
 
     setEstimateData(updated);
     
-    // Track applied status locally
+    // Track applied status locally (with the applied code for change detection)
     setAppliedSystems(prev => ({
       ...prev,
       [systemLower]: {
         appliedAt: new Date(),
-        itemCount: assigned
+        itemCount: assigned,
+        appliedCode: costHead
+      }
+    }));
+    
+    // Also mark as verified automatically when applied
+    setVerifiedSystems(prev => ({
+      ...prev,
+      [systemLower]: {
+        verifiedAt: new Date().toISOString(),
+        verifiedBy: 'user',
+        costHead: costHead
       }
     }));
     
@@ -1191,7 +1202,7 @@ const EnhancedCostCodeManager = () => {
         });
       }
       
-      // Persist applied status
+      // Persist applied status (which now also sets verified in the hook)
       updateAppliedStatus.mutate({
         projectId: currentProject.id,
         systemName: system,
@@ -1199,7 +1210,7 @@ const EnhancedCostCodeManager = () => {
       });
     }
     
-    showNotification(`Applied ${costHead} to ${assigned} items in ${system}`, 'success');
+    showNotification(`Applied & verified ${costHead} to ${assigned} items in ${system}`, 'success');
   };
 
   // Verify/confirm a system mapping
@@ -1852,43 +1863,36 @@ const EnhancedCostCodeManager = () => {
                             }`}>
                               {data.autoDetected ? 'Auto-detected' : 'Manual override'}
                             </span>
-                            {data.isVerified && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-green-600 text-white font-medium">
-                                ✓ Verified
-                              </span>
-                            )}
                             {data.appliedInfo && (
                               <span className="px-2 py-1 text-xs rounded-full bg-emerald-500 text-white font-medium">
-                                ✓ Applied ({data.appliedInfo.itemCount})
+                                ✓ Applied & Verified ({data.appliedInfo.itemCount})
                               </span>
                             )}
                           </div>
                           <div className="flex items-center space-x-2">
-                            {data.isVerified ? (
-                              <button
-                                onClick={() => unverifyMapping(system)}
-                                className="px-3 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 font-medium"
-                              >
-                                Unverify
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => verifyMapping(system, data.currentMapping)}
-                                className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-                              >
-                                ✓ Verify Mapping
-                              </button>
-                            )}
-                            <button
-                              onClick={() => applyMappingToSystem(system, data.currentMapping)}
-                              className={`px-3 py-1 text-xs rounded font-medium ${
-                                data.appliedInfo 
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200' 
-                                  : 'bg-green-600 text-white hover:bg-green-700'
-                              }`}
-                            >
-                              {data.appliedInfo ? `✓ Re-apply (${data.count})` : `Apply to System (${data.count})`}
-                            </button>
+                            {/* Contextual Apply Button */}
+                            {(() => {
+                              const hasChangedSinceApplied = data.appliedInfo && data.appliedInfo.appliedCode !== data.currentMapping;
+                              
+                              if (data.appliedInfo && !hasChangedSinceApplied) {
+                                // Already applied and no changes - show static applied state
+                                return (
+                                  <div className="px-3 py-1 text-xs rounded font-medium bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                    ✓ Applied ({data.appliedInfo.itemCount} items)
+                                  </div>
+                                );
+                              } else {
+                                // Not applied yet OR mapping has changed - show apply button
+                                return (
+                                  <button
+                                    onClick={() => applyMappingToSystem(system, data.currentMapping)}
+                                    className="px-3 py-1 text-xs rounded font-medium bg-green-600 text-white hover:bg-green-700"
+                                  >
+                                    {hasChangedSinceApplied ? `Apply Changes (${data.count})` : `Apply to System (${data.count})`}
+                                  </button>
+                                );
+                              }
+                            })()}
                             <button
                               onClick={() => updateMapping(system, 'none')}
                               className="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
@@ -1910,14 +1914,9 @@ const EnhancedCostCodeManager = () => {
                           
                           <div className="text-xs text-gray-500">
                             Last modified: {new Date(data.lastChanged).toLocaleString()}
-                            {data.isVerified && (
-                              <span className="ml-3 text-green-600">
-                                • Verified: {new Date(data.verifiedAt).toLocaleString()}
-                              </span>
-                            )}
                             {data.appliedInfo && (
                               <span className="ml-3 text-emerald-600 font-medium">
-                                • Applied: {data.appliedInfo.appliedAt.toLocaleString()} ({data.appliedInfo.itemCount} items)
+                                • Applied & verified: {data.appliedInfo.appliedAt.toLocaleString()} ({data.appliedInfo.itemCount} items)
                               </span>
                             )}
                           </div>
