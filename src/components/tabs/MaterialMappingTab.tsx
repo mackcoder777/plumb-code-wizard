@@ -62,6 +62,66 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
 
+  // Get parent checkbox state (checked, unchecked, or indeterminate)
+  const getParentCheckState = (spec: string, group: MaterialGroup): 'checked' | 'unchecked' | 'indeterminate' => {
+    const childKeys = group.subGroups.map(sg => `${spec}|${sg.itemType}`);
+    const selectedCount = childKeys.filter(k => selectedGroups.has(k)).length;
+
+    if (selectedCount === 0) return 'unchecked';
+    if (selectedCount === childKeys.length) return 'checked';
+    return 'indeterminate';
+  };
+
+  // Toggle parent selection with cascade to children
+  const toggleParentSelection = (spec: string, group: MaterialGroup, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedGroups(prev => {
+      const next = new Set(prev);
+      const currentState = getParentCheckState(spec, group);
+
+      if (currentState === 'checked' || currentState === 'indeterminate') {
+        // Uncheck parent and ALL children
+        next.delete(spec);
+        group.subGroups.forEach(sg => next.delete(`${spec}|${sg.itemType}`));
+      } else {
+        // Check parent and ALL children
+        next.add(spec);
+        group.subGroups.forEach(sg => next.add(`${spec}|${sg.itemType}`));
+      }
+      return next;
+    });
+  };
+
+  // Toggle child selection and sync parent state
+  const toggleChildSelection = (spec: string, type: string, group: MaterialGroup, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const childKey = `${spec}|${type}`;
+    
+    setSelectedGroups(prev => {
+      const next = new Set(prev);
+      const isCurrentlySelected = next.has(childKey);
+
+      if (isCurrentlySelected) {
+        next.delete(childKey);
+      } else {
+        next.add(childKey);
+      }
+
+      // Sync parent state
+      const childKeys = group.subGroups.map(sg => `${spec}|${sg.itemType}`);
+      const selectedCount = childKeys.filter(k => next.has(k)).length;
+
+      if (selectedCount === childKeys.length) {
+        next.add(spec); // All children selected = parent selected
+      } else {
+        next.delete(spec); // Not all children = parent not fully selected
+      }
+
+      return next;
+    });
+  };
+
+
   // Material codes list
   const allMaterialCodes = useMemo(() => {
     return dbMaterialCodes.map(c => ({
@@ -126,6 +186,20 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
     return Array.from(specMap.values()).sort((a, b) => b.totalMaterial - a.totalMaterial);
   }, [data]);
+
+  // Get selected item count for bulk operations
+  const getSelectedItemCount = useMemo(() => {
+    let count = 0;
+    selectedGroups.forEach(groupKey => {
+      if (groupKey.includes('|')) {
+        const [spec, type] = groupKey.split('|');
+        const specGroup = groups.find(g => g.materialSpec === spec);
+        const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
+        count += typeGroup?.itemCount || 0;
+      }
+    });
+    return count;
+  }, [selectedGroups, groups]);
 
   // Filter groups
   const filteredGroups = useMemo(() => {
@@ -199,21 +273,20 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     });
   };
 
-  // Bulk assign to selected groups
+  // Bulk assign to selected groups - only process child keys to avoid double-counting
   const handleBulkAssign = (code: string) => {
     const allItemIds: number[] = [];
     
     selectedGroups.forEach(groupKey => {
-      const [spec, type] = groupKey.split('|');
-      if (type) {
+      if (groupKey.includes('|')) {
+        const [spec, type] = groupKey.split('|');
         const specGroup = groups.find(g => g.materialSpec === spec);
         const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
         typeGroup?.items.forEach(i => allItemIds.push(i.id));
-      } else {
-        const specGroup = groups.find(g => g.materialSpec === spec);
-        specGroup?.subGroups.forEach(tg => tg.items.forEach(i => allItemIds.push(i.id)));
       }
     });
+
+    if (allItemIds.length === 0) return;
 
     const updatedData = data.map(item => {
       if (allItemIds.includes(item.id)) {
@@ -227,19 +300,20 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     setOpenCodePicker(null);
     toast({
       title: 'Bulk Code Assigned',
-      description: `Applied ${code} to ${allItemIds.length} items across ${selectedGroups.size} groups`,
+      description: `Applied ${code} to ${allItemIds.length} items`,
     });
   };
 
-  // Toggle group selection
-  const toggleGroupSelection = (groupKey: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setSelectedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
+  // Select all visible groups
+  const selectAllVisible = () => {
+    const newSelected = new Set<string>();
+    filteredGroups.forEach(group => {
+      newSelected.add(group.materialSpec);
+      group.subGroups.forEach(sg => {
+        newSelected.add(`${group.materialSpec}|${sg.itemType}`);
+      });
     });
+    setSelectedGroups(newSelected);
   };
 
   // Render status badge
@@ -387,20 +461,26 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               </div>
             </div>
 
+            <Button variant="outline" size="sm" onClick={selectAllVisible}>
+              Select All
+            </Button>
+
             {selectedGroups.size > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{selectedGroups.size} selected</span>
+              <div className="flex items-center gap-2 bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/20">
+                <span className="text-sm font-medium text-primary">
+                  {getSelectedItemCount.toLocaleString()} items selected
+                </span>
                 <Popover open={openCodePicker === 'bulk'} onOpenChange={(open) => setOpenCodePicker(open ? 'bulk' : null)}>
                   <PopoverTrigger asChild>
-                    <Button className="bg-primary hover:bg-primary/90">
-                      Assign to Selected
+                    <Button size="sm" className="bg-primary hover:bg-primary/90">
+                      Assign Code
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-80 p-0" align="end">
                     <CodePicker groupKey="bulk" onSelect={handleBulkAssign} />
                   </PopoverContent>
                 </Popover>
-                <Button variant="ghost" onClick={() => setSelectedGroups(new Set())}>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedGroups(new Set())}>
                   Clear
                 </Button>
               </div>
@@ -424,19 +504,22 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           {/* Groups */}
           <ScrollArea className="h-[600px]">
             <div className="divide-y divide-border">
-              {filteredGroups.map(group => (
+              {filteredGroups.map(group => {
+                const parentState = getParentCheckState(group.materialSpec, group);
+                
+                return (
                 <div key={group.materialSpec}>
                   {/* Material Spec Row */}
                   <div 
                     className={`grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer hover:bg-muted/50 transition-colors ${
-                      selectedGroups.has(group.materialSpec) ? 'bg-primary/5' : ''
+                      parentState !== 'unchecked' ? 'bg-primary/5' : ''
                     }`}
                     onClick={() => toggleSpec(group.materialSpec)}
                   >
                     <div className="col-span-1 flex items-center gap-2">
                       <Checkbox
-                        checked={selectedGroups.has(group.materialSpec)}
-                        onClick={e => toggleGroupSelection(group.materialSpec, e)}
+                        checked={parentState === 'checked' ? true : parentState === 'indeterminate' ? 'indeterminate' : false}
+                        onClick={e => toggleParentSelection(group.materialSpec, group, e as unknown as React.MouseEvent)}
                       />
                       {expandedSpecs.has(group.materialSpec) ? (
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -477,19 +560,23 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                   {/* Expanded Item Types */}
                   {expandedSpecs.has(group.materialSpec) && (
                     <div className="bg-muted/20">
-                      {group.subGroups.map(typeGroup => (
-                        <div key={`${group.materialSpec}|${typeGroup.itemType}`}>
+                    {group.subGroups.map(typeGroup => {
+                      const childKey = `${group.materialSpec}|${typeGroup.itemType}`;
+                      const isChildSelected = selectedGroups.has(childKey);
+                      
+                      return (
+                        <div key={childKey}>
                           {/* Item Type Row */}
                           <div 
                             className={`grid grid-cols-12 gap-4 px-4 py-2 items-center cursor-pointer hover:bg-muted/50 transition-colors pl-12 ${
-                              selectedGroups.has(`${group.materialSpec}|${typeGroup.itemType}`) ? 'bg-primary/5' : ''
+                              isChildSelected ? 'bg-primary/5' : ''
                             }`}
                             onClick={() => toggleType(group.materialSpec, typeGroup.itemType)}
                           >
                             <div className="col-span-1 flex items-center gap-2">
                               <Checkbox
-                                checked={selectedGroups.has(`${group.materialSpec}|${typeGroup.itemType}`)}
-                                onClick={e => toggleGroupSelection(`${group.materialSpec}|${typeGroup.itemType}`, e)}
+                                checked={isChildSelected}
+                                onClick={e => toggleChildSelection(group.materialSpec, typeGroup.itemType, group, e as unknown as React.MouseEvent)}
                               />
                               {expandedTypes.has(`${group.materialSpec}|${typeGroup.itemType}`) ? (
                                 <ChevronDown className="h-3 w-3 text-muted-foreground" />
@@ -567,11 +654,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             </div>
                           )}
                         </div>
-                      ))}
+                      );
+                    })}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
 
               {filteredGroups.length === 0 && (
                 <div className="px-4 py-12 text-center text-muted-foreground">
