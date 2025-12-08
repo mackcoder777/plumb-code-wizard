@@ -47,7 +47,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
-  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number }>>({});
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string }>>({});
 
   // Load system mappings from database to get applied status
   const { data: dbMappings = [] } = useSystemMappings(projectId);
@@ -57,12 +57,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Initialize appliedSystems from database on load
   useEffect(() => {
     if (dbMappings.length > 0) {
-      const appliedFromDb: Record<string, { appliedAt: Date; itemCount: number }> = {};
+      const appliedFromDb: Record<string, { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string }> = {};
       dbMappings.forEach(mapping => {
         if (mapping.applied_at) {
+          // Parse cost_head which may contain both codes in format "material|labor"
+          const codes = mapping.cost_head.split('|');
           appliedFromDb[mapping.system_name] = {
             appliedAt: new Date(mapping.applied_at),
             itemCount: mapping.applied_item_count || 0,
+            appliedMaterialCode: codes[0] || undefined,
+            appliedLaborCode: codes[1] || codes[0] || undefined,
           };
         }
       });
@@ -403,12 +407,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       return item;
     });
 
-    // Track this system as applied
+    // Track this system as applied with the codes that were applied
     setAppliedSystems(prev => ({
       ...prev,
       [system]: {
         appliedAt: new Date(),
         itemCount: itemsAffected,
+        appliedMaterialCode: systemMapping.materialCode,
+        appliedLaborCode: systemMapping.laborCode,
       }
     }));
 
