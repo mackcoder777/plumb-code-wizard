@@ -423,7 +423,7 @@ const EnhancedCostCodeManager = () => {
     if (savedMappings.length > 0) {
       const mappings: Record<string, string> = {};
       const verified: Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }> = {};
-      const applied: Record<string, { appliedAt: Date; itemCount: number }> = {};
+      const applied: Record<string, { appliedAt: Date; itemCount: number; appliedCode?: string }> = {};
       
       savedMappings.forEach(m => {
         mappings[m.system_name] = m.cost_head;
@@ -437,7 +437,8 @@ const EnhancedCostCodeManager = () => {
         if (m.applied_at) {
           applied[m.system_name] = {
             appliedAt: new Date(m.applied_at),
-            itemCount: m.applied_item_count || 0
+            itemCount: m.applied_item_count || 0,
+            appliedCode: m.cost_head
           };
         }
       });
