@@ -7,7 +7,8 @@ import {
   ShoppingCart, 
   TrendingUp, 
   LayoutDashboard,
-  Map
+  Map,
+  Package
 } from 'lucide-react';
 
 interface NavigationTabsProps {
@@ -17,7 +18,8 @@ interface NavigationTabsProps {
 
 const tabs = [
   { id: 'estimates', label: 'Estimates', icon: BarChart3 },
-  { id: 'mapping', label: 'System Mapping', icon: Map },
+  { id: 'mapping', label: 'Labor Mapping', icon: Map },
+  { id: 'material-mapping', label: 'Material Mapping', icon: Package },
   { id: 'costcodes', label: 'Cost Codes', icon: DollarSign },
   { id: 'automation', label: 'Auto-Assignment', icon: Bot },
   { id: 'buyout', label: 'Buyout Reports', icon: ShoppingCart },
