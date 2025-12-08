@@ -13,12 +13,14 @@ import {
   AlertCircle,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Filter,
   Hash,
   DollarSign,
   Layers,
   Loader2,
-  Save
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
 import { useBatchUpdateMaterialCostCodes } from '@/hooks/useEstimateProjects';
@@ -40,6 +42,12 @@ interface MaterialGroup {
   totalHours: number;
   assignedCode: string | null;
   subGroups: ItemTypeGroup[];
+  // Detailed assignment tracking
+  assignedChildCount: number;
+  totalChildCount: number;
+  unassignedChildCount: number;
+  hasUnassignedChildren: boolean;
+  assignmentStatus: 'complete' | 'partial' | 'none';
 }
 
 interface ItemTypeGroup {
@@ -49,6 +57,7 @@ interface ItemTypeGroup {
   totalHours: number;
   assignedCode: string | null;
   items: EstimateItem[];
+  isFullyAssigned: boolean;
 }
 
 export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({ 
@@ -60,7 +69,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned' | 'needs-attention'>('all');
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -85,11 +94,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       const currentState = getParentCheckState(spec, group);
 
       if (currentState === 'checked' || currentState === 'indeterminate') {
-        // Uncheck parent and ALL children
         next.delete(spec);
         group.subGroups.forEach(sg => next.delete(`${spec}|${sg.itemType}`));
       } else {
-        // Check parent and ALL children
         next.add(spec);
         group.subGroups.forEach(sg => next.add(`${spec}|${sg.itemType}`));
       }
@@ -112,20 +119,18 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         next.add(childKey);
       }
 
-      // Sync parent state
       const childKeys = group.subGroups.map(sg => `${spec}|${sg.itemType}`);
       const selectedCount = childKeys.filter(k => next.has(k)).length;
 
       if (selectedCount === childKeys.length) {
-        next.add(spec); // All children selected = parent selected
+        next.add(spec);
       } else {
-        next.delete(spec); // Not all children = parent not fully selected
+        next.delete(spec);
       }
 
       return next;
     });
   };
-
 
   // Material codes list
   const allMaterialCodes = useMemo(() => {
@@ -135,7 +140,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     })).sort((a, b) => a.description.localeCompare(b.description));
   }, [dbMaterialCodes]);
 
-  // Group items by Material Spec → Item Type
+  // Group items by Material Spec → Item Type with assignment tracking
   const groups = useMemo(() => {
     const specMap = new Map<string, MaterialGroup>();
 
@@ -151,6 +156,11 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           totalHours: 0,
           assignedCode: null,
           subGroups: [],
+          assignedChildCount: 0,
+          totalChildCount: 0,
+          unassignedChildCount: 0,
+          hasUnassignedChildren: false,
+          assignmentStatus: 'none'
         });
       }
 
@@ -159,7 +169,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       specGroup.totalMaterial += item.materialDollars || 0;
       specGroup.totalHours += item.hours || 0;
 
-      // Find or create item type subgroup
       let typeGroup = specGroup.subGroups.find(g => g.itemType === type);
       if (!typeGroup) {
         typeGroup = {
@@ -169,6 +178,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           totalHours: 0,
           assignedCode: null,
           items: [],
+          isFullyAssigned: false
         };
         specGroup.subGroups.push(typeGroup);
       }
@@ -177,16 +187,45 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       typeGroup.totalMaterial += item.materialDollars || 0;
       typeGroup.totalHours += item.hours || 0;
       typeGroup.items.push(item);
-
-      // Determine assigned code (if all items have same code)
-      const codes = new Set(typeGroup.items.map(i => i.materialCostCode).filter(Boolean));
-      typeGroup.assignedCode = codes.size === 1 ? [...codes][0]! : codes.size > 1 ? 'MIXED' : null;
     });
 
-    // Determine spec-level assigned code
+    // Calculate assignment status for each group
     specMap.forEach(specGroup => {
-      const codes = new Set(specGroup.subGroups.map(g => g.assignedCode).filter(c => c && c !== 'MIXED'));
-      specGroup.assignedCode = codes.size === 1 ? [...codes][0]! : codes.size > 1 ? 'MIXED' : null;
+      specGroup.totalChildCount = specGroup.subGroups.length;
+      
+      specGroup.subGroups.forEach(typeGroup => {
+        const codes = new Set(typeGroup.items.map(i => i.materialCostCode).filter(Boolean));
+        const hasUnassignedItems = typeGroup.items.some(i => !i.materialCostCode);
+        
+        typeGroup.assignedCode = codes.size === 1 && !hasUnassignedItems 
+          ? [...codes][0]! 
+          : codes.size > 0 && hasUnassignedItems 
+            ? 'MIXED' 
+            : codes.size > 1 
+              ? 'MIXED' 
+              : null;
+        
+        typeGroup.isFullyAssigned = !hasUnassignedItems && codes.size > 0;
+        
+        if (typeGroup.isFullyAssigned) {
+          specGroup.assignedChildCount++;
+        }
+      });
+      
+      specGroup.unassignedChildCount = specGroup.totalChildCount - specGroup.assignedChildCount;
+      specGroup.hasUnassignedChildren = specGroup.unassignedChildCount > 0;
+      
+      if (specGroup.assignedChildCount === 0) {
+        specGroup.assignmentStatus = 'none';
+        specGroup.assignedCode = null;
+      } else if (specGroup.assignedChildCount === specGroup.totalChildCount) {
+        specGroup.assignmentStatus = 'complete';
+        const allCodes = new Set(specGroup.subGroups.map(g => g.assignedCode).filter(c => c && c !== 'MIXED'));
+        specGroup.assignedCode = allCodes.size === 1 ? [...allCodes][0]! : 'MIXED';
+      } else {
+        specGroup.assignmentStatus = 'partial';
+        specGroup.assignedCode = 'MIXED';
+      }
     });
 
     return Array.from(specMap.values()).sort((a, b) => b.totalMaterial - a.totalMaterial);
@@ -212,11 +251,17 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (searchTerm && !group.materialSpec.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
-      if (filterStatus === 'assigned' && !group.assignedCode) return false;
-      if (filterStatus === 'unassigned' && group.assignedCode) return false;
+      if (filterStatus === 'assigned' && group.assignmentStatus !== 'complete') return false;
+      if (filterStatus === 'unassigned' && group.assignmentStatus !== 'none') return false;
+      if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
       return true;
     });
   }, [groups, searchTerm, filterStatus]);
+
+  // Groups needing attention
+  const groupsNeedingAttention = useMemo(() => {
+    return groups.filter(g => g.hasUnassignedChildren);
+  }, [groups]);
 
   // Stats
   const stats = useMemo(() => {
@@ -247,25 +292,36 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     });
   };
 
+  // Expand all groups with unassigned children
+  const expandAllIncomplete = () => {
+    const incomplete = groups
+      .filter(g => g.hasUnassignedChildren)
+      .map(g => g.materialSpec);
+    setExpandedSpecs(new Set(incomplete));
+  };
+
+  // Collapse all groups
+  const collapseAll = () => {
+    setExpandedSpecs(new Set());
+    setExpandedTypes(new Set());
+  };
+
   // Assign code to group with auto-save to database
   const handleAssignCode = useCallback(async (groupKey: string, code: string) => {
     const [spec, type] = groupKey.split('|');
     let targetItems: EstimateItem[] = [];
 
     if (type) {
-      // Item type level
       const specGroup = groups.find(g => g.materialSpec === spec);
       const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
       targetItems = typeGroup?.items || [];
     } else {
-      // Material spec level
       const specGroup = groups.find(g => g.materialSpec === spec);
       targetItems = specGroup?.subGroups.flatMap(g => g.items) || [];
     }
 
     if (targetItems.length === 0) return;
 
-    // Update local state immediately
     const updatedData = data.map(item => {
       if (targetItems.some(t => t.id === item.id)) {
         return { ...item, materialCostCode: code };
@@ -276,7 +332,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     onDataUpdate(updatedData);
     setOpenCodePicker(null);
 
-    // Persist to database if projectId is available
     if (projectId) {
       setIsSaving(true);
       try {
@@ -308,7 +363,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     }
   }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
 
-  // Bulk assign to selected groups with auto-save - only process child keys to avoid double-counting
+  // Bulk assign to selected groups with auto-save
   const handleBulkAssign = useCallback(async (code: string) => {
     const targetItems: EstimateItem[] = [];
     
@@ -325,7 +380,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
     if (targetItems.length === 0) return;
 
-    // Update local state immediately
     const itemIdSet = new Set(targetItems.map(i => i.id));
     const updatedData = data.map(item => {
       if (itemIdSet.has(item.id)) {
@@ -338,7 +392,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     setSelectedGroups(new Set());
     setOpenCodePicker(null);
 
-    // Persist to database if projectId is available
     if (projectId) {
       setIsSaving(true);
       try {
@@ -382,9 +435,52 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     setSelectedGroups(newSelected);
   };
 
-  // Render status badge
-  const renderStatusBadge = (code: string | null) => {
-    if (!code) {
+  // Render parent status badge with detailed assignment tracking
+  const renderParentStatusBadge = (group: MaterialGroup) => {
+    const { assignmentStatus, assignedChildCount, totalChildCount, assignedCode } = group;
+    
+    if (assignmentStatus === 'none') {
+      return (
+        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          0/{totalChildCount} Assigned
+        </Badge>
+      );
+    }
+    
+    if (assignmentStatus === 'partial') {
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          {assignedChildCount}/{totalChildCount} Assigned
+        </Badge>
+      );
+    }
+    
+    if (assignedCode === 'MIXED') {
+      return (
+        <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+          <Check className="h-3 w-3 mr-1" />
+          {totalChildCount}/{totalChildCount} Complete
+        </Badge>
+      );
+    }
+    
+    const codeInfo = allMaterialCodes.find(c => c.code === assignedCode);
+    return (
+      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono">
+        <Check className="h-3 w-3 mr-1" />
+        {assignedCode}
+        {codeInfo && <span className="ml-1 font-normal opacity-75 truncate max-w-32">- {codeInfo.description}</span>}
+      </Badge>
+    );
+  };
+
+  // Render child status badge
+  const renderChildStatusBadge = (typeGroup: ItemTypeGroup) => {
+    const { assignedCode, isFullyAssigned } = typeGroup;
+    
+    if (!assignedCode) {
       return (
         <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
           <AlertCircle className="h-3 w-3 mr-1" />
@@ -392,7 +488,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         </Badge>
       );
     }
-    if (code === 'MIXED') {
+    
+    if (assignedCode === 'MIXED') {
       return (
         <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
           <Layers className="h-3 w-3 mr-1" />
@@ -400,11 +497,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         </Badge>
       );
     }
-    const codeInfo = allMaterialCodes.find(c => c.code === code);
+    
+    const codeInfo = allMaterialCodes.find(c => c.code === assignedCode);
     return (
       <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono">
         <Check className="h-3 w-3 mr-1" />
-        {code}
+        {assignedCode}
         {codeInfo && <span className="ml-1 font-normal opacity-75 truncate max-w-32">- {codeInfo.description}</span>}
       </Badge>
     );
@@ -466,6 +564,45 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           </div>
         </CardHeader>
         <CardContent>
+          {/* Needs Attention Alert */}
+          {groupsNeedingAttention.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                    Incomplete Assignments
+                  </h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    {groupsNeedingAttention.length} material spec{groupsNeedingAttention.length > 1 ? 's' : ''} have 
+                    unassigned item types. Expand them to complete assignments.
+                  </p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={expandAllIncomplete}
+                      className="bg-amber-100 hover:bg-amber-200 text-amber-700 border-amber-300"
+                    >
+                      Expand All Incomplete
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFilterStatus('needs-attention')}
+                      className="text-amber-700 hover:bg-amber-100"
+                    >
+                      Filter to Show Only
+                    </Button>
+                  </div>
+                </div>
+                <span className="text-2xl font-bold text-amber-600">
+                  {groupsNeedingAttention.length}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Stats Cards */}
           <div className="grid grid-cols-4 gap-4 mb-6">
             <div className="bg-muted/50 rounded-lg p-4">
@@ -530,21 +667,30 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-48">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Groups</SelectItem>
-                    <SelectItem value="unassigned">Unassigned Only</SelectItem>
-                    <SelectItem value="assigned">Assigned Only</SelectItem>
+                    <SelectItem value="unassigned">Fully Unassigned</SelectItem>
+                    <SelectItem value="needs-attention">⚠️ Needs Attention</SelectItem>
+                    <SelectItem value="assigned">Fully Assigned</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            <Button variant="outline" size="sm" onClick={selectAllVisible}>
-              Select All
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={selectAllVisible}>
+                Select All
+              </Button>
+              {expandedSpecs.size > 0 && (
+                <Button variant="ghost" size="sm" onClick={collapseAll}>
+                  <ChevronUp className="h-4 w-4 mr-1" />
+                  Collapse All
+                </Button>
+              )}
+            </div>
 
             {selectedGroups.size > 0 && (
               <div className="flex items-center gap-2 bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/20">
@@ -587,6 +733,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
             <div className="divide-y divide-border">
               {filteredGroups.map(group => {
                 const parentState = getParentCheckState(group.materialSpec, group);
+                const isExpanded = expandedSpecs.has(group.materialSpec);
                 
                 return (
                 <div key={group.materialSpec}>
@@ -594,7 +741,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                   <div 
                     className={`grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer hover:bg-muted/50 transition-colors ${
                       parentState !== 'unchecked' ? 'bg-primary/5' : ''
-                    }`}
+                    } ${group.hasUnassignedChildren && !isExpanded ? 'border-l-4 border-amber-400' : ''}`}
                     onClick={() => toggleSpec(group.materialSpec)}
                   >
                     <div className="col-span-1 flex items-center gap-2">
@@ -602,15 +749,24 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                         checked={parentState === 'checked' ? true : parentState === 'indeterminate' ? 'indeterminate' : false}
                         onClick={e => toggleParentSelection(group.materialSpec, group, e as unknown as React.MouseEvent)}
                       />
-                      {expandedSpecs.has(group.materialSpec) ? (
+                      {isExpanded ? (
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       ) : (
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
                     <div className="col-span-4">
-                      <span className="font-medium text-foreground">{group.materialSpec}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">({group.subGroups.length} types)</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">{group.materialSpec}</span>
+                        <span className="text-xs text-muted-foreground">({group.subGroups.length} types)</span>
+                        {/* Warning indicator when collapsed and has unassigned */}
+                        {group.hasUnassignedChildren && !isExpanded && (
+                          <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 text-xs animate-pulse">
+                            <AlertTriangle className="h-3 w-3 mr-0.5" />
+                            {group.unassignedChildCount} need codes
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
                       {group.itemCount.toLocaleString()}
@@ -625,7 +781,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                       >
                         <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
                           <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
-                            {renderStatusBadge(group.assignedCode)}
+                            {renderParentStatusBadge(group)}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-0" align="start">
@@ -639,11 +795,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                   </div>
 
                   {/* Expanded Item Types */}
-                  {expandedSpecs.has(group.materialSpec) && (
+                  {isExpanded && (
                     <div className="bg-muted/20">
                     {group.subGroups.map(typeGroup => {
                       const childKey = `${group.materialSpec}|${typeGroup.itemType}`;
                       const isChildSelected = selectedGroups.has(childKey);
+                      const needsAttention = !typeGroup.isFullyAssigned;
                       
                       return (
                         <div key={childKey}>
@@ -651,7 +808,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                           <div 
                             className={`grid grid-cols-12 gap-4 px-4 py-2 items-center cursor-pointer hover:bg-muted/50 transition-colors pl-12 ${
                               isChildSelected ? 'bg-primary/5' : ''
-                            }`}
+                            } ${needsAttention ? 'border-l-2 border-amber-300' : ''}`}
                             onClick={() => toggleType(group.materialSpec, typeGroup.itemType)}
                           >
                             <div className="col-span-1 flex items-center gap-2">
@@ -666,7 +823,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                               )}
                             </div>
                             <div className="col-span-4">
-                              <span className="text-sm text-foreground">{typeGroup.itemType}</span>
+                              <span className={`text-sm ${needsAttention ? 'text-amber-700 font-medium' : 'text-foreground'}`}>
+                                {typeGroup.itemType}
+                              </span>
                             </div>
                             <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
                               {typeGroup.itemCount.toLocaleString()}
@@ -681,7 +840,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                               >
                                 <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
                                   <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
-                                    {renderStatusBadge(typeGroup.assignedCode)}
+                                    {renderChildStatusBadge(typeGroup)}
                                   </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80 p-0" align="start">
