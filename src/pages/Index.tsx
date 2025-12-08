@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
-import { DualCodeSelector } from '@/components/DualCodeSelector';
+import { MaterialMappingTab } from '@/components/tabs/MaterialMappingTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { 
   useSystemMappings, 
@@ -2165,21 +2165,12 @@ const EnhancedCostCodeManager = () => {
                           </div>
                         </div>
 
-                        {/* Dual Code Selector */}
+                        {/* Labor Code Selector (Material codes now in separate Material Mapping tab) */}
                         <div className="mt-3">
-                          <DualCodeSelector
-                            materialCode={data.materialCode}
-                            laborCode={data.laborCode}
-                            onMaterialCodeChange={(value) => {
-                              setCustomMappings(prev => ({
-                                ...prev,
-                                [systemLower]: {
-                                  ...prev[systemLower],
-                                  materialCode: value
-                                }
-                              }));
-                            }}
-                            onLaborCodeChange={(value) => {
+                          <div className="text-xs text-blue-600 font-medium mb-1">Labor Code:</div>
+                          <MappingCombobox
+                            value={data.laborCode}
+                            onChange={(value) => {
                               setCustomMappings(prev => ({
                                 ...prev,
                                 [systemLower]: {
@@ -2188,6 +2179,7 @@ const EnhancedCostCodeManager = () => {
                                 }
                               }));
                             }}
+                            className="min-w-[200px]"
                           />
                         </div>
                           
@@ -2386,6 +2378,15 @@ const EnhancedCostCodeManager = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Material Mapping Tab */}
+          {activeTab === 'material-mapping' && estimateData.length > 0 && (
+            <MaterialMappingTab
+              data={estimateData}
+              onDataUpdate={setEstimateData}
+              projectId={currentProject?.id}
+            />
           )}
 
           {/* Rules Tab */}

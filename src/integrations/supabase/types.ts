@@ -216,6 +216,65 @@ export type Database = {
           },
         ]
       }
+      material_code_rules: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          item_name_contains: string | null
+          item_type_contains: string | null
+          item_type_equals: string | null
+          material_cost_code: string
+          material_desc_contains: string | null
+          material_spec_contains: string | null
+          material_spec_equals: string | null
+          name: string
+          priority: number | null
+          project_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          item_name_contains?: string | null
+          item_type_contains?: string | null
+          item_type_equals?: string | null
+          material_cost_code: string
+          material_desc_contains?: string | null
+          material_spec_contains?: string | null
+          material_spec_equals?: string | null
+          name: string
+          priority?: number | null
+          project_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          item_name_contains?: string | null
+          item_type_contains?: string | null
+          item_type_equals?: string | null
+          material_cost_code?: string
+          material_desc_contains?: string | null
+          material_spec_contains?: string | null
+          material_spec_equals?: string | null
+          name?: string
+          priority?: number | null
+          project_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_code_rules_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_mappings: {
         Row: {
           applied_at: string | null
