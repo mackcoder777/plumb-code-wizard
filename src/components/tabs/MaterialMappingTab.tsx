@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useMaterialCodeRules, useCreateMaterialCodeRule, useUpdateMaterialCodeRule, useDeleteMaterialCodeRule, MaterialCodeRule, applyRulesToItems } from '@/hooks/useMaterialCodeRules';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
-import { COST_CODES_DB } from '@/data/costCodes';
+
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
@@ -61,23 +61,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const deleteRule = useDeleteMaterialCodeRule();
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
 
-  // Merge material codes
+  // Use only database material codes (no hardcoded fallback)
   const allMaterialCodes = useMemo(() => {
-    const hardcoded = COST_CODES_DB.material.map(c => ({
+    return dbMaterialCodes.map(c => ({
       code: c.code,
       description: c.description,
-    }));
-    const db = dbMaterialCodes.map(c => ({
-      code: c.code,
-      description: c.description,
-    }));
-    
-    const combined = [...hardcoded, ...db];
-    const uniqueCodes = Array.from(
-      new Map(combined.map(c => [c.code, c])).values()
-    );
-    
-    return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
+    })).sort((a, b) => a.description.localeCompare(b.description));
   }, [dbMaterialCodes]);
 
   // Get unique item types and material specs from data for suggestions
