@@ -399,6 +399,10 @@ const EnhancedCostCodeManager = () => {
   const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(100);
+  
   // Item type mapping state
   const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
@@ -1128,6 +1132,11 @@ const EnhancedCostCodeManager = () => {
     setFilteredData(filtered);
   }, [estimateData, filters, columnFilters, sortConfig]);
 
+  // Reset to page 1 when filters or sorting change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [columnFilters, sortConfig, filters]);
+
   // Handlers for column filters
   const handleColumnFilterChange = useCallback((columnKey: string, selectedValues: Set<string>) => {
     setColumnFilters(prev => {
@@ -1793,7 +1802,14 @@ const EnhancedCostCodeManager = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.slice(0, 100).map((item) => (
+                    {(() => {
+                      const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+                      const paginatedData = filteredData.slice(
+                        (currentPage - 1) * itemsPerPage,
+                        currentPage * itemsPerPage
+                      );
+                      return paginatedData;
+                    })().map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50">
                         {visibleColumns.map(col => {
                           const value = item[col.key];
@@ -1878,37 +1894,146 @@ const EnhancedCostCodeManager = () => {
                     ))}
                   </tbody>
                 </table>
-                <div className="p-3 bg-gray-50 border-t flex items-center justify-between text-sm text-gray-600">
-                  <div className="flex items-center gap-4">
-                    <span>
-                      Showing {Math.min(100, filteredData.length)} of {filteredData.length} filtered items
-                      {filteredData.length !== estimateData.length && (
-                        <span className="text-blue-600 ml-1">
-                          ({estimateData.length} total)
-                        </span>
+                {(() => {
+                  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+                  const startItem = filteredData.length > 0 ? ((currentPage - 1) * itemsPerPage) + 1 : 0;
+                  const endItem = Math.min(currentPage * itemsPerPage, filteredData.length);
+                  
+                  return (
+                    <div className="p-4 border-t bg-gray-50">
+                      {/* Top row: Summary and Items Per Page */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm text-gray-600">
+                          Showing <span className="font-medium text-gray-900">{startItem}-{endItem}</span> of{' '}
+                          <span className="font-medium text-gray-900">{filteredData.length}</span> items
+                          {filteredData.length !== estimateData.length && (
+                            <span className="text-yellow-600 ml-2">
+                              (filtered from {estimateData.length} total)
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Items Per Page Selector */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">Items per page:</span>
+                          <select
+                            value={itemsPerPage}
+                            onChange={(e) => {
+                              setItemsPerPage(Number(e.target.value));
+                              setCurrentPage(1);
+                            }}
+                            className="bg-white border border-gray-300 rounded px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+                          >
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                            <option value={250}>250</option>
+                            <option value={500}>500</option>
+                            <option value={1000}>1000</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-2 mb-3">
+                          <button
+                            onClick={() => setCurrentPage(1)}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ⏮ First
+                          </button>
+                          
+                          <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          
+                          <div className="flex items-center gap-2 mx-2">
+                            <span className="text-sm text-gray-500">Page</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={totalPages}
+                              value={currentPage}
+                              onChange={(e) => {
+                                const page = parseInt(e.target.value);
+                                if (page >= 1 && page <= totalPages) {
+                                  setCurrentPage(page);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const page = parseInt(e.target.value);
+                                if (isNaN(page) || page < 1) {
+                                  setCurrentPage(1);
+                                } else if (page > totalPages) {
+                                  setCurrentPage(totalPages);
+                                }
+                              }}
+                              className="w-16 bg-white border border-gray-300 rounded px-2 py-1 text-sm text-center focus:border-blue-500 focus:outline-none"
+                            />
+                            <span className="text-sm text-gray-500">of {totalPages}</span>
+                          </div>
+                          
+                          <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Next →
+                          </button>
+                          
+                          <button
+                            onClick={() => setCurrentPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Last ⏭
+                          </button>
+                        </div>
                       )}
-                    </span>
-                    {Object.keys(columnFilters).length > 0 && (
-                      <span className="flex items-center gap-1 text-blue-600">
-                        <span className="bg-blue-100 px-2 py-0.5 rounded text-xs">
-                          {Object.keys(columnFilters).length} column filter{Object.keys(columnFilters).length > 1 ? 's' : ''} active
-                        </span>
-                      </span>
-                    )}
-                    {sortConfig && (
-                      <span className="flex items-center gap-1 text-purple-600">
-                        <span className="bg-purple-100 px-2 py-0.5 rounded text-xs">
-                          Sorted by {columns.find(c => c.key === sortConfig.key)?.label || sortConfig.key} ({sortConfig.direction === 'asc' ? 'A→Z' : 'Z→A'})
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                  {filteredData.length > 100 && (
-                    <span className="text-orange-600 text-xs">
-                      Scroll down or filter to see more items
-                    </span>
-                  )}
-                </div>
+                      
+                      {/* Active Filters Display */}
+                      {(Object.keys(columnFilters).length > 0 || sortConfig) && (
+                        <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                          {Object.keys(columnFilters).length > 0 && (
+                            <>
+                              <span className="text-xs text-gray-500">Active filters:</span>
+                              {Object.entries(columnFilters).slice(0, 3).map(([key]) => (
+                                <span
+                                  key={key}
+                                  className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs"
+                                >
+                                  {columns.find(c => c.key === key)?.label || key}
+                                </span>
+                              ))}
+                              {Object.keys(columnFilters).length > 3 && (
+                                <span className="text-xs text-gray-500">+{Object.keys(columnFilters).length - 3} more</span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setColumnFilters({});
+                                  setCurrentPage(1);
+                                }}
+                                className="text-xs text-red-500 hover:text-red-700 ml-2"
+                              >
+                                Clear all
+                              </button>
+                            </>
+                          )}
+                          {sortConfig && (
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                              Sorted by {columns.find(c => c.key === sortConfig.key)?.label || sortConfig.key} ({sortConfig.direction === 'asc' ? 'A→Z' : 'Z→A'})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}
