@@ -1602,7 +1602,7 @@ const EnhancedCostCodeManager = () => {
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50">
-          {['upload', 'estimates', 'mapping', 'rules'].map((tab) => (
+          {['upload', 'estimates', 'mapping', 'material-mapping', 'rules'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1614,7 +1614,8 @@ const EnhancedCostCodeManager = () => {
             >
               {tab === 'upload' && '📁 Upload'}
               {tab === 'estimates' && '📊 Estimates'}
-              {tab === 'mapping' && '🔗 Mapping'}
+              {tab === 'mapping' && '🔗 Labor Mapping'}
+              {tab === 'material-mapping' && '📦 Material Mapping'}
               {tab === 'rules' && '🤖 Rules'}
             </button>
           ))}
