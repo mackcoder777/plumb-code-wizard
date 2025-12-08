@@ -20,6 +20,8 @@ export interface SystemMapping {
   is_verified: boolean;
   verified_at: string | null;
   verified_by: string | null;
+  applied_at: string | null;
+  applied_item_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -529,6 +531,77 @@ export const useBatchUpdateSystemCostCodes = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+    },
+  });
+};
+
+// Update applied status for a system mapping
+export const useUpdateAppliedStatus = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      systemName, 
+      appliedItemCount 
+    }: { 
+      projectId: string; 
+      systemName: string; 
+      appliedItemCount: number;
+    }) => {
+      const { data, error } = await supabase
+        .from('system_mappings')
+        .update({
+          applied_at: new Date().toISOString(),
+          applied_item_count: appliedItemCount,
+        })
+        .eq('project_id', projectId)
+        .eq('system_name', systemName.toLowerCase().trim())
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as SystemMapping;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['system_mappings', variables.projectId] });
+    },
+  });
+};
+
+// Batch update applied status for multiple system mappings
+export const useBatchUpdateAppliedStatus = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      systems 
+    }: { 
+      projectId: string; 
+      systems: Array<{ systemName: string; appliedItemCount: number }>;
+    }) => {
+      const now = new Date().toISOString();
+      
+      // Update each system's applied status
+      const updates = systems.map(async ({ systemName, appliedItemCount }) => {
+        const { error } = await supabase
+          .from('system_mappings')
+          .update({
+            applied_at: now,
+            applied_item_count: appliedItemCount,
+          })
+          .eq('project_id', projectId)
+          .eq('system_name', systemName.toLowerCase().trim());
+
+        if (error) throw error;
+      });
+
+      await Promise.all(updates);
+      return { success: true };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['system_mappings', variables.projectId] });
     },
   });
 };
