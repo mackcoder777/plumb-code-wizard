@@ -380,7 +380,7 @@ const EnhancedCostCodeManager = () => {
     costCode: 'all',
     search: ''
   });
-  const [customMappings, setCustomMappings] = useState({});
+  const [customMappings, setCustomMappings] = useState<Record<string, { materialCode?: string; laborCode?: string }>>({});
   const [mappingHistory, setMappingHistory] = useState({});
   const [verifiedSystems, setVerifiedSystems] = useState<Record<string, { verifiedAt: string; verifiedBy: string; materialCode?: string; laborCode?: string }>>({});
   const [showCostCodeBrowser, setShowCostCodeBrowser] = useState(false);
@@ -440,12 +440,22 @@ const EnhancedCostCodeManager = () => {
   // Load saved mappings when project changes - MERGE with existing local state to prevent reset
   useEffect(() => {
     if (savedMappings.length > 0) {
-      const mappings: Record<string, string> = {};
+      const mappings: Record<string, { materialCode?: string; laborCode?: string }> = {};
       const verified: Record<string, { verifiedAt: string; verifiedBy: string; costHead: string }> = {};
       const autoSuggestions: Record<string, string> = {};
       
       savedMappings.forEach(m => {
-        mappings[m.system_name] = m.cost_head;
+        // Parse the combined cost_head format "materialCode|laborCode" back into object
+        const costHead = m.cost_head || '';
+        const [materialCode, laborCode] = costHead.includes('|') 
+          ? costHead.split('|') 
+          : ['', costHead]; // Legacy format: just labor code
+        
+        mappings[m.system_name] = {
+          materialCode: materialCode || undefined,
+          laborCode: laborCode || undefined
+        };
+        
         if (m.is_verified) {
           verified[m.system_name] = {
             verifiedAt: m.verified_at || new Date().toISOString(),
@@ -549,8 +559,9 @@ const EnhancedCostCodeManager = () => {
     const activity = '0000';
     const systemLower = (item.system || '').toLowerCase().trim();
 
-    // Priority 1: Check custom mappings (user overrides)
-    let costHead = customMappings[systemLower] || null;
+    // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
+    const customMapping = customMappings[systemLower];
+    let costHead = (typeof customMapping === 'object' ? customMapping?.laborCode : customMapping) || null;
     let confidence = costHead ? 1.0 : 0;
     let source = costHead ? 'custom' : '';
     let matchReason = costHead ? 'Manual mapping' : '';
@@ -892,12 +903,12 @@ const EnhancedCostCodeManager = () => {
               item.system.toLowerCase().trim()
             ))].filter(Boolean);
             
-            const mappings: Record<string, string> = {};
+            const mappings: Record<string, { materialCode?: string; laborCode?: string }> = {};
             const history: Record<string, any[]> = {};
             
             systems.forEach(system => {
               if (system.includes('storm') || system.includes('overflow')) {
-                mappings[system] = 'STRM';
+                mappings[system] = { laborCode: 'STRM' };
                 history[system] = [{
                   timestamp: new Date().toISOString(),
                   user: 'system',
@@ -1389,15 +1400,18 @@ const EnhancedCostCodeManager = () => {
     const newHistory = { ...mappingHistory };
 
     if (costHead && costHead !== 'none') {
-      newMappings[systemLower] = costHead;
+      // Extract laborCode from current mapping for history
+      const currentLaborCode = typeof currentMapping === 'object' ? currentMapping?.laborCode : currentMapping;
+      
+      newMappings[systemLower] = { laborCode: costHead };
       newHistory[systemLower] = [
         ...history,
         {
           timestamp: new Date().toISOString(),
           user: userName,
-          from: currentMapping || originalAutoSuggested,
+          from: currentLaborCode || originalAutoSuggested,
           to: costHead,
-          reason: currentMapping ? 'Manual change' : 'Initial assignment'
+          reason: currentLaborCode ? 'Manual change' : 'Initial assignment'
         }
       ];
       
@@ -1406,8 +1420,8 @@ const EnhancedCostCodeManager = () => {
         saveMapping.mutate({
           projectId: currentProject.id,
           systemName: system,
-          costHead: costHead,
-          previousCode: currentMapping,
+          costHead: `|${costHead}`, // Store as "|laborCode" format
+          previousCode: currentLaborCode,
           autoSuggested: originalAutoSuggested
         });
       }
@@ -1420,13 +1434,14 @@ const EnhancedCostCodeManager = () => {
         }));
       }
     } else {
+      const currentLaborCode = typeof currentMapping === 'object' ? currentMapping?.laborCode : currentMapping;
       delete newMappings[systemLower];
       newHistory[systemLower] = [
         ...history,
         {
           timestamp: new Date().toISOString(),
           user: userName,
-          from: currentMapping || originalAutoSuggested,
+          from: currentLaborCode || originalAutoSuggested,
           to: originalAutoSuggested,
           reason: 'Reset to auto-detection'
         }
