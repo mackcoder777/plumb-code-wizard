@@ -25,6 +25,14 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { Switch } from '@/components/ui/switch';
+import { exportBudgetPacket, exportAuditReport } from '@/utils/exportUtils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -1453,36 +1461,18 @@ const EnhancedCostCodeManager = () => {
     showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? originalAutoSuggested : costHead}`, 'success');
   };
 
-  // Export with cost codes
-  const exportWithCostCodes = () => {
-    const exportData = filteredData.map(item => ({
-      'SEC': item.suggestedCode?.section || '',
-      'ACT': item.suggestedCode?.activity || '',
-      'COST HEAD': item.suggestedCode?.costHead || '',
-      'DESCRIPTION': item.suggestedCode?.description || '',
-      'Drawing': item.drawing,
-      'System': item.system,
-      'Floor': item.floor,
-      'Material Description': item.materialDesc,
-      'Item Name': item.itemName,
-      'Size': item.size,
-      'Quantity': item.quantity,
-      'Hours': item.hours,
-      'Material $': item.materialDollars,
-      'Assigned Code': item.costCode || '',
-      'Suggested Code': item.suggestedCode?.code || '',
-      'Confidence': item.suggestedCode ? Math.round(item.suggestedCode.confidence * 100) + '%' : '',
-      'Source': item.suggestedCode?.source || ''
-    }));
+  // Export Budget Packet (aggregated by cost code)
+  const handleExportBudgetPacket = () => {
+    const projectName = currentProject?.name || 'Estimate';
+    const result = exportBudgetPacket(filteredData, projectName, user?.email || 'User');
+    showNotification(`Budget Packet exported: ${result.laborCodes} labor codes, ${result.materialCodes} material codes. Grand Total: $${result.grandTotal.toLocaleString()}`, 'success');
+  };
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Labor Report');
-
-    const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `labor_report_${date}.xlsx`);
-
-    showNotification('Export completed successfully', 'success');
+  // Export Audit Report (detailed with Labor + Material tabs)
+  const handleExportAuditReport = () => {
+    const projectName = currentProject?.name || 'Estimate';
+    const result = exportAuditReport(filteredData, projectName);
+    showNotification(`Audit Report exported: ${result.totalItems} items with Labor and Material tabs`, 'success');
   };
 
   // Calculate stats
@@ -1780,12 +1770,28 @@ const EnhancedCostCodeManager = () => {
                 >
                   🤖 Auto-Assign All Codes
                 </button>
-                <button
-                  onClick={exportWithCostCodes}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 font-medium"
-                >
-                  💾 Export with Codes
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 font-medium">
+                      💾 Export ▼
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    <DropdownMenuItem onClick={handleExportBudgetPacket}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">📊 Budget Packet</span>
+                        <span className="text-xs text-muted-foreground">Aggregated by cost code (submission format)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleExportAuditReport}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">📋 Audit Report</span>
+                        <span className="text-xs text-muted-foreground">Detailed Labor + Material tabs</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <button
                   onClick={() => setShowCostCodeBrowser(true)}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all flex items-center gap-2 font-medium"
