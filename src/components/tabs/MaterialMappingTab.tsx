@@ -70,8 +70,18 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned' | 'needs-attention'>('all');
+  const [systemFilter, setSystemFilter] = useState<string>('all');
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Get unique systems from data
+  const uniqueSystems = useMemo(() => {
+    const systems = new Set<string>();
+    data.forEach(item => {
+      if (item.system) systems.add(item.system);
+    });
+    return Array.from(systems).sort();
+  }, [data]);
 
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
   const batchUpdateMaterialCodes = useBatchUpdateMaterialCostCodes();
@@ -247,7 +257,31 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   // Filter groups
   const filteredGroups = useMemo(() => {
-    return groups.filter(group => {
+    return groups.map(group => {
+      // If system filter is active, filter subGroups to only include those with matching items
+      if (systemFilter !== 'all') {
+        const filteredSubGroups = group.subGroups.map(sg => ({
+          ...sg,
+          items: sg.items.filter(item => item.system === systemFilter)
+        })).filter(sg => sg.items.length > 0);
+        
+        if (filteredSubGroups.length === 0) return null;
+        
+        // Recalculate group stats based on filtered items
+        const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
+        const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => 
+          sum + sg.items.reduce((s, i) => s + (i.materialDollars || 0), 0), 0);
+        
+        return {
+          ...group,
+          subGroups: filteredSubGroups,
+          itemCount: filteredItemCount,
+          totalMaterial: filteredTotalMaterial
+        };
+      }
+      return group;
+    }).filter((group): group is MaterialGroup => {
+      if (!group) return false;
       if (searchTerm && !group.materialSpec.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
@@ -256,7 +290,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
       return true;
     });
-  }, [groups, searchTerm, filterStatus]);
+  }, [groups, searchTerm, filterStatus, systemFilter]);
 
   // Groups needing attention
   const groupsNeedingAttention = useMemo(() => {
@@ -675,6 +709,20 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                     <SelectItem value="unassigned">Fully Unassigned</SelectItem>
                     <SelectItem value="needs-attention">⚠️ Needs Attention</SelectItem>
                     <SelectItem value="assigned">Fully Assigned</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-muted-foreground" />
+                <Select value={systemFilter} onValueChange={setSystemFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Filter by System" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Systems</SelectItem>
+                    {uniqueSystems.map(system => (
+                      <SelectItem key={system} value={system}>{system}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
