@@ -116,16 +116,22 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     });
   };
 
-  // Toggle child selection and sync parent state
+  // Toggle child selection and CASCADE to item-level selection
   const toggleChildSelection = (spec: string, type: string, group: MaterialGroup, e: React.MouseEvent) => {
     e.stopPropagation();
     const childKey = `${spec}|${type}`;
     
+    // Find the actual items in this group
+    const typeGroup = group.subGroups.find(g => g.itemType === type);
+    const itemIds = typeGroup?.items.map(i => String(i.id)) || [];
+    
+    // Check if ALL items in this group are currently selected
+    const allItemsSelected = itemIds.length > 0 && itemIds.every(id => selectedItems.has(id));
+    
+    // Toggle group selection state
     setSelectedGroups(prev => {
       const next = new Set(prev);
-      const isCurrentlySelected = next.has(childKey);
-
-      if (isCurrentlySelected) {
+      if (allItemsSelected) {
         next.delete(childKey);
       } else {
         next.add(childKey);
@@ -142,6 +148,38 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
       return next;
     });
+    
+    // CASCADE to item-level selection
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (allItemsSelected) {
+        // Deselect all items in this group
+        itemIds.forEach(id => next.delete(id));
+      } else {
+        // Select all items in this group
+        itemIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+  
+  // Get selection state for a type group based on item-level selections
+  const getGroupSelectionState = (spec: string, type: string) => {
+    const specGroup = groups.find(g => g.materialSpec === spec);
+    const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
+    const itemIds = typeGroup?.items.map(i => String(i.id)) || [];
+    
+    if (itemIds.length === 0) return { checked: false, indeterminate: false, selectedCount: 0, totalCount: 0 };
+    
+    const selectedCount = itemIds.filter(id => selectedItems.has(id)).length;
+    const totalCount = itemIds.length;
+    
+    return {
+      checked: selectedCount === totalCount,
+      indeterminate: selectedCount > 0 && selectedCount < totalCount,
+      selectedCount,
+      totalCount
+    };
   };
 
   // Material codes list
@@ -937,20 +975,36 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             onClick={() => toggleType(group.materialSpec, typeGroup.itemType)}
                           >
                             <div className="col-span-1 flex items-center gap-2">
-                              <Checkbox
-                                checked={isChildSelected}
-                                onClick={e => toggleChildSelection(group.materialSpec, typeGroup.itemType, group, e as unknown as React.MouseEvent)}
-                              />
+                              {(() => {
+                                const selState = getGroupSelectionState(group.materialSpec, typeGroup.itemType);
+                                return (
+                                  <Checkbox
+                                    checked={selState.checked ? true : selState.indeterminate ? 'indeterminate' : false}
+                                    onClick={e => toggleChildSelection(group.materialSpec, typeGroup.itemType, group, e as unknown as React.MouseEvent)}
+                                  />
+                                );
+                              })()}
                               {expandedTypes.has(`${group.materialSpec}|${typeGroup.itemType}`) ? (
                                 <ChevronDown className="h-3 w-3 text-muted-foreground" />
                               ) : (
                                 <ChevronRight className="h-3 w-3 text-muted-foreground" />
                               )}
                             </div>
-                            <div className="col-span-4">
+                            <div className="col-span-4 flex items-center gap-2">
                               <span className={`text-sm ${needsAttention ? 'text-amber-700 font-medium' : 'text-foreground'}`}>
                                 {typeGroup.itemType}
                               </span>
+                              {(() => {
+                                const selState = getGroupSelectionState(group.materialSpec, typeGroup.itemType);
+                                if (selState.selectedCount > 0 && selState.selectedCount < selState.totalCount) {
+                                  return (
+                                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                      {selState.selectedCount}/{selState.totalCount} selected
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                             <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
                               {typeGroup.itemCount.toLocaleString()}
@@ -1103,9 +1157,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
             variant="ghost" 
             size="sm" 
             className="h-8 text-muted-foreground hover:text-background"
-            onClick={() => setSelectedItems(new Set())}
+            onClick={() => {
+              setSelectedItems(new Set());
+              setSelectedGroups(new Set());
+            }}
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4 mr-1" />
+            Clear
           </Button>
         </div>
       )}
