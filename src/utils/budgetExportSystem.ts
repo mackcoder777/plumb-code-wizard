@@ -259,39 +259,39 @@ export function exportBudgetPacket(
   ws['H36'] = { t: 'n', f: `SUM(H${LABOR_START_ROW}:H${LABOR_END_ROW})`, v: 0, z: '#,##0.0' };
   ws['J36'] = { t: 'n', f: `SUM(J${LABOR_START_ROW}:J${LABOR_END_ROW})`, v: 0, z: '#,##0' };
 
-  // ===== NON LABOR SECTION (Rows 38-49) =====
-  const NON_LABOR_HEADER_ROW = 38;
-  const NON_LABOR_COLS_ROW = 39;
-  const NON_LABOR_START_ROW = 40;
-  const NON_LABOR_END_ROW = 49; // Max 10 material rows
+  // ===== MATERIAL BREAKDOWN SECTION (Rows 38-49) =====
+  const MATERIAL_HEADER_ROW = 38;
+  const MATERIAL_COLS_ROW = 39;
+  const MATERIAL_START_ROW = 40;
+  const MATERIAL_END_ROW = 49; // Max 10 material rows
   
-  // Row 38: Section header
-  ws[`B${NON_LABOR_HEADER_ROW}`] = { t: 's', v: 'NON LABOR' };
+  // Row 38: Section header - "MATERIAL BREAKDOWN" to match template
+  ws[`B${MATERIAL_HEADER_ROW}`] = { t: 's', v: 'MATERIAL BREAKDOWN' };
   
-  // Row 39: Column headers
-  ws[`B${NON_LABOR_COLS_ROW}`] = { t: 's', v: 'Cost Code' };
-  ws[`E${NON_LABOR_COLS_ROW}`] = { t: 's', v: 'Description' };
-  ws[`J${NON_LABOR_COLS_ROW}`] = { t: 's', v: 'Total Cost' };
+  // Row 39: Column headers - "AMOUNT" to match template, not "Total Cost"
+  ws[`B${MATERIAL_COLS_ROW}`] = { t: 's', v: 'Cost Code' };
+  ws[`D${MATERIAL_COLS_ROW}`] = { t: 's', v: 'DESCRIPTION' };
+  ws[`H${MATERIAL_COLS_ROW}`] = { t: 's', v: 'AMOUNT' };
 
   // Material data
   materialSummary.forEach((item, index) => {
     if (index >= 10) return; // Max 10 material items
     
-    const row = NON_LABOR_START_ROW + index;
+    const row = MATERIAL_START_ROW + index;
     
     // Cost Code (column B)
     ws[`B${row}`] = { t: 's', v: item.costCode };
     
-    // Description (column E)
-    ws[`E${row}`] = { t: 's', v: item.description };
+    // Description (column D) - same column as labor description
+    ws[`D${row}`] = { t: 's', v: item.description };
     
-    // Total Cost (column J)
-    ws[`J${row}`] = { t: 'n', v: Math.round(item.materialDollars * 100) / 100, z: '#,##0.00' };
+    // Amount (column H) - same column as hours for visual alignment
+    ws[`H${row}`] = { t: 'n', v: Math.round(item.materialDollars * 100) / 100, z: '#,##0.00' };
   });
 
   // Fill remaining material rows with 0
-  for (let row = NON_LABOR_START_ROW + materialSummary.length; row <= NON_LABOR_END_ROW; row++) {
-    ws[`J${row}`] = { t: 'n', v: 0, z: '#,##0' };
+  for (let row = MATERIAL_START_ROW + materialSummary.length; row <= MATERIAL_END_ROW; row++) {
+    ws[`H${row}`] = { t: 'n', v: 0, z: '#,##0' };
   }
 
   // ===== SUMMARY SECTION (Rows 52-56) =====
@@ -301,7 +301,7 @@ export function exportBudgetPacket(
   ws[`J${SUMMARY_START}`] = { t: 's', v: 'TOTAL COST' };
   ws[`K${SUMMARY_START}`] = { 
     t: 'n', 
-    f: `J36+SUM(J${NON_LABOR_START_ROW}:J${NON_LABOR_END_ROW})`,
+    f: `J36+SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
     v: 0,
     z: '#,##0.00'
   };
@@ -322,7 +322,7 @@ export function exportBudgetPacket(
   ws[`E${SUMMARY_START + 3}`] = { t: 's', v: 'Material Total' };
   ws[`G${SUMMARY_START + 3}`] = { 
     t: 'n', 
-    f: `SUM(J${NON_LABOR_START_ROW}:J${NON_LABOR_END_ROW})`,
+    f: `SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
     v: 0,
     z: '#,##0.00'
   };
