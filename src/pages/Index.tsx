@@ -1472,17 +1472,33 @@ const EnhancedCostCodeManager = () => {
     preparedBy: user?.email || 'User',
   });
 
+  // Calculate actually missing codes by checking against database
+  const actuallyMissingCodes = useMemo(() => {
+    return MISSING_CODES.filter(missing => 
+      !dbCostCodes.some(code => 
+        code.code === missing.code || 
+        code.code?.toUpperCase() === missing.code?.toUpperCase()
+      )
+    );
+  }, [dbCostCodes]);
+
   // Calculate stats
   const stats = {
     totalItems: filteredData.length,
     codedItems: filteredData.filter(item => item.costCode).length,
     totalHours: filteredData.reduce((sum, item) => sum + (item.hours || 0), 0),
-    autoMatched: filteredData.filter(item => item.suggestedCode && item.suggestedCode.confidence >= 0.8).length,
+    // FIX: Only count UNASSIGNED items with high-confidence suggestions
+    autoMatched: filteredData.filter(item => 
+      !item.costCode && // No code assigned yet
+      item.suggestedCode && 
+      item.suggestedCode.confidence >= 0.8
+    ).length,
     codingPercentage: filteredData.length > 0
       ? Math.round((filteredData.filter(item => item.costCode).length / filteredData.length) * 100)
       : 0,
     totalCodes: getTotalCodes(),
-    missingCodes: MISSING_CODES.length
+    // FIX: Dynamically check which codes are actually missing from library
+    missingCodes: actuallyMissingCodes.length
   };
 
   // Get unique filter values
@@ -1782,9 +1798,11 @@ const EnhancedCostCodeManager = () => {
                   <p className="text-xs text-purple-600 mt-1">Labor hours</p>
                 </div>
                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-lg">
-                  <h3 className="text-sm text-amber-600 font-medium uppercase">Auto-Matched</h3>
+                  <h3 className="text-sm text-amber-600 font-medium uppercase">Ready to Auto-Assign</h3>
                   <div className="text-3xl font-bold text-amber-900">{stats.autoMatched}</div>
-                  <p className="text-xs text-amber-600 mt-1">Ready to assign</p>
+                  <p className="text-xs text-amber-600 mt-1">
+                    {stats.autoMatched > 0 ? 'High-confidence suggestions' : 'All items coded'}
+                  </p>
                 </div>
               </div>
 
@@ -2734,20 +2752,26 @@ const EnhancedCostCodeManager = () => {
                     Consider adding these to ensure complete project cost tracking coverage:
                   </p>
                   <div className="space-y-3">
-                    {MISSING_CODES.map((code, index) => (
-                      <div key={index} className="p-4 border border-red-200 rounded-lg bg-red-50">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="font-mono font-bold text-red-700">{code.code}</span>
-                            <span className="ml-3 font-medium">{code.description}</span>
-                          </div>
-                          <div className="text-right text-sm text-red-600">
-                            <div>{code.category}</div>
-                            <div>{code.units}</div>
+                    {actuallyMissingCodes.length === 0 ? (
+                      <div className="p-4 border border-green-200 rounded-lg bg-green-50 text-green-700">
+                        ✓ All standard codes are present in your library!
+                      </div>
+                    ) : (
+                      actuallyMissingCodes.map((code, index) => (
+                        <div key={index} className="p-4 border border-red-200 rounded-lg bg-red-50">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-mono font-bold text-red-700">{code.code}</span>
+                              <span className="ml-3 font-medium">{code.description}</span>
+                            </div>
+                            <div className="text-right text-sm text-red-600">
+                              <div>{code.category}</div>
+                              <div>{code.units}</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                   <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-700">
