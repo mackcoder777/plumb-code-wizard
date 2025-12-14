@@ -71,6 +71,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
   const processRawData = useCallback((rawData: any[]): EstimateItem[] => {
     return rawData.map((row, index) => {
+      // CRITICAL: Use "Field Hours" (Column AA - Total Hours) NOT "Hours" (Column U - Unit Hours)
+      // Field Hours = Unit Hours × Quantity (already calculated in Excel)
+      const fieldHours = parseFloat(row['Field Hours'] || row['Field Hour'] || row['FieldHours'] || 0);
+      const unitHours = parseFloat(row['T_3'] || row['Hours'] || 0);
+      const quantity = parseFloat(row['T'] || row['Quantity'] || 1);
+      
+      // Use Field Hours if available, otherwise calculate from Unit Hours × Quantity
+      const hours = fieldHours > 0 ? fieldHours : (unitHours * quantity);
+      
       const item: EstimateItem = {
         id: index,
         drawing: row['D'] || row['Drawing'] || '',
@@ -86,11 +95,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         materialDesc: row['A'] || row['Material Description'] || '',
         itemName: row['A_1'] || row['Item Name'] || '',
         size: row['A_2'] || row['Size'] || '',
-        quantity: parseFloat(row['T'] || row['Quantity'] || 0),
+        quantity: quantity,
         listPrice: parseFloat(row['A_3'] || row['List Price'] || 0),
         materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
         weight: parseFloat(row['T_2'] || row['Weight'] || 0),
-        hours: parseFloat(row['T_3'] || row['Hours'] || 0),
+        hours: hours,
         laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
         costCode: '',
         materialCostCode: '',
