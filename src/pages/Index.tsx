@@ -304,15 +304,7 @@ const STANDARD_COST_CODES = {
   }
 };
 
-// Missing codes that should be in the library
-const MISSING_CODES = [
-  { code: 'REBAR', description: 'REINFORCING STEEL', category: 'STRUCTURAL', sheet: 'Field Labor', units: 'LBS' },
-  { code: 'COMPACT', description: 'COMPACTION', category: 'UNDERGROUND', sheet: 'Field Labor', units: 'HRS' },
-  { code: 'QUAL', description: 'QUALITY CONTROL', category: 'TESTING', sheet: 'Field Labor', units: 'HRS' },
-  { code: 'CEIL', description: 'CEILING WORK', category: 'FINISHING', sheet: 'Field Labor', units: 'SF' },
-  { code: 'DOOR', description: 'DOORS AND FRAMES', category: 'FINISHING', sheet: 'Field Labor', units: 'EA' },
-  { code: 'WIND', description: 'WINDOWS', category: 'FINISHING', sheet: 'Field Labor', units: 'EA' }
-];
+// MISSING_CODES feature removed - was showing generic construction codes irrelevant to plumbing
 
 // Default pattern-based mappings
 const DEFAULT_COST_HEAD_MAPPING = {
@@ -395,7 +387,6 @@ const EnhancedCostCodeManager = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [editingSystem, setEditingSystem] = useState(null);
-  const [showMissingCodes, setShowMissingCodes] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
   
@@ -1182,16 +1173,6 @@ const EnhancedCostCodeManager = () => {
     setSortConfig(null);
   }, []);
 
-  // Calculate actually missing codes by checking against database - MUST be before conditional returns
-  const actuallyMissingCodes = useMemo(() => {
-    return MISSING_CODES.filter(missing => 
-      !dbCostCodes.some(code => 
-        code.code === missing.code || 
-        code.code?.toUpperCase() === missing.code?.toUpperCase()
-      )
-    );
-  }, [dbCostCodes]);
-
   // Show auth if not logged in - MUST be after all hooks
   if (authLoading) {
     return (
@@ -1498,9 +1479,7 @@ const EnhancedCostCodeManager = () => {
     codingPercentage: filteredData.length > 0
       ? Math.round((filteredData.filter(item => item.costCode).length / filteredData.length) * 100)
       : 0,
-    totalCodes: getTotalCodes(),
-    // FIX: Dynamically check which codes are actually missing from library
-    missingCodes: actuallyMissingCodes.length
+    totalCodes: getTotalCodes()
   };
 
   // Get unique filter values
@@ -1756,29 +1735,6 @@ const EnhancedCostCodeManager = () => {
           {/* Estimates Tab */}
           {activeTab === 'estimates' && estimateData.length > 0 && (
             <>
-              {/* Missing Codes Alert */}
-              {stats.missingCodes > 0 && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">⚠️</span>
-                      <div>
-                        <h3 className="text-lg font-semibold text-red-900">Missing Standard Codes Detected</h3>
-                        <p className="text-red-700 text-sm">
-                          {stats.missingCodes} critical construction codes are missing from your library. 
-                          This may affect project cost tracking accuracy.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowMissingCodes(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                    >
-                      View Missing Codes
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -2626,7 +2582,7 @@ const EnhancedCostCodeManager = () => {
               </div>
 
               {/* Usage Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-lg border p-4">
                   <div className="text-2xl font-bold text-blue-600">{stats.totalCodes}</div>
                   <div className="text-sm text-gray-600">Total Cost Codes</div>
@@ -2634,10 +2590,6 @@ const EnhancedCostCodeManager = () => {
                 <div className="bg-white rounded-lg border p-4">
                   <div className="text-2xl font-bold text-green-600">{Object.keys(DEFAULT_COST_HEAD_MAPPING).length}</div>
                   <div className="text-sm text-gray-600">Pattern Rules</div>
-                </div>
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-orange-600">{stats.missingCodes}</div>
-                  <div className="text-sm text-gray-600">Missing Codes</div>
                 </div>
               </div>
             </div>
@@ -2735,56 +2687,6 @@ const EnhancedCostCodeManager = () => {
             </div>
           )}
 
-          {/* Missing Codes Modal */}
-          {showMissingCodes && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4">
-                <div className="flex items-center justify-between p-6 border-b">
-                  <h2 className="text-2xl font-bold text-red-900">⚠️ Missing Standard Codes</h2>
-                  <button
-                    onClick={() => setShowMissingCodes(false)}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="p-6">
-                  <p className="text-gray-700 mb-6">
-                    The following standard construction codes are missing from your cost code library. 
-                    Consider adding these to ensure complete project cost tracking coverage:
-                  </p>
-                  <div className="space-y-3">
-                    {actuallyMissingCodes.length === 0 ? (
-                      <div className="p-4 border border-green-200 rounded-lg bg-green-50 text-green-700">
-                        ✓ All standard codes are present in your library!
-                      </div>
-                    ) : (
-                      actuallyMissingCodes.map((code, index) => (
-                        <div key={index} className="p-4 border border-red-200 rounded-lg bg-red-50">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="font-mono font-bold text-red-700">{code.code}</span>
-                              <span className="ml-3 font-medium">{code.description}</span>
-                            </div>
-                            <div className="text-right text-sm text-red-600">
-                              <div>{code.category}</div>
-                              <div>{code.units}</div>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-700">
-                      <strong>💡 Recommendation:</strong> Contact your cost accounting team to add these codes to your standard library 
-                      to ensure accurate project cost tracking and reporting.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Overwrite Confirmation Dialog */}
           {overwriteConfirm && (
