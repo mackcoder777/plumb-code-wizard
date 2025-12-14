@@ -281,6 +281,7 @@ interface BudgetAdjustmentsPanelProps {
   laborSummary: Record<string, LaborCodeSummary>;
   materialSummary: Record<string, MaterialCodeSummary>;
   bidLaborRate: number;
+  projectId?: string;
   onAdjustmentsChange: (adjustments: BudgetAdjustments) => void;
 }
 
@@ -288,14 +289,63 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   laborSummary,
   materialSummary,
   bidLaborRate,
+  projectId = 'default',
   onAdjustmentsChange,
 }) => {
-  const [jobsiteZipCode, setJobsiteZipCode] = useState('');
-  const [customTaxRate, setCustomTaxRate] = useState<number | null>(null);
-  const [foremanBonusEnabled, setForemanBonusEnabled] = useState(true);
-  const [foremanBonusPercent, setForemanBonusPercent] = useState(1);
-  const [fabricationConfigs, setFabricationConfigs] = useState<Record<string, FabricationConfig>>({});
-  const [materialTaxOverrides, setMaterialTaxOverrides] = useState<Record<string, boolean>>({});
+  // Load persisted settings from localStorage
+  const [jobsiteZipCode, setJobsiteZipCode] = useState(() => {
+    const saved = localStorage.getItem(`budget_zip_${projectId}`);
+    return saved || '';
+  });
+  const [customTaxRate, setCustomTaxRate] = useState<number | null>(() => {
+    const saved = localStorage.getItem(`budget_taxrate_${projectId}`);
+    return saved ? parseFloat(saved) : null;
+  });
+  const [foremanBonusEnabled, setForemanBonusEnabled] = useState(() => {
+    const saved = localStorage.getItem(`budget_foreman_enabled_${projectId}`);
+    return saved === null ? true : saved === 'true';
+  });
+  const [foremanBonusPercent, setForemanBonusPercent] = useState(() => {
+    const saved = localStorage.getItem(`budget_foreman_pct_${projectId}`);
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [fabricationConfigs, setFabricationConfigs] = useState<Record<string, FabricationConfig>>(() => {
+    const saved = localStorage.getItem(`budget_fab_configs_${projectId}`);
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [materialTaxOverrides, setMaterialTaxOverrides] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem(`budget_tax_overrides_${projectId}`);
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Persist settings to localStorage
+  useEffect(() => {
+    localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
+  }, [jobsiteZipCode, projectId]);
+
+  useEffect(() => {
+    if (customTaxRate !== null) {
+      localStorage.setItem(`budget_taxrate_${projectId}`, customTaxRate.toString());
+    } else {
+      localStorage.removeItem(`budget_taxrate_${projectId}`);
+    }
+  }, [customTaxRate, projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(`budget_foreman_enabled_${projectId}`, foremanBonusEnabled.toString());
+  }, [foremanBonusEnabled, projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(`budget_foreman_pct_${projectId}`, foremanBonusPercent.toString());
+  }, [foremanBonusPercent, projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(`budget_fab_configs_${projectId}`, JSON.stringify(fabricationConfigs));
+  }, [fabricationConfigs, projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
+  }, [materialTaxOverrides, projectId]);
 
   const taxInfo = useMemo(() => {
     if (customTaxRate !== null) {
@@ -378,9 +428,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     });
 
     if (foremanBonusEnabled && foremanBonusHours > 0) {
-      adjustedLaborSummary['FOREMAN_BONUS'] = {
-        code: '01 0000 FRMN',
-        description: 'FOREMAN FIELD BONUS',
+      adjustedLaborSummary['FCNT'] = {
+        code: '01 0000 FCNT',
+        description: 'FOREMAN CONTINGENCY',
         hours: foremanBonusHours,
         rate: bidLaborRate,
         dollars: foremanBonusDollars,
