@@ -141,7 +141,8 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
           weight: parseFloat(row[colMap.weight]) || 0,
           costCode: '',
           materialCostCode: '',
-          suggestedCodes: []
+          suggestedCodes: [],
+          sourceFile: file.name
         });
       }
 

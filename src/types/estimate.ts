@@ -22,6 +22,7 @@ export interface EstimateItem {
   costCode: string;           // Labor cost code
   materialCostCode: string;   // Material cost code
   suggestedCodes: CostCodeSuggestion[];
+  sourceFile?: string;        // Source Excel file name for auditing
 }
 
 export interface CostCodeSuggestion {
