@@ -296,17 +296,22 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     return groups.map(group => {
       // If system filter is active, filter subGroups to only include those with matching items
       if (systemFilter !== 'all') {
-        const filteredSubGroups = group.subGroups.map(sg => ({
-          ...sg,
-          items: sg.items.filter(item => item.system === systemFilter)
-        })).filter(sg => sg.items.length > 0);
+        const filteredSubGroups = group.subGroups.map(sg => {
+          const filteredItems = sg.items.filter(item => item.system === systemFilter);
+          return {
+            ...sg,
+            items: filteredItems,
+            itemCount: filteredItems.length, // FIX: Update subGroup itemCount
+            totalMaterial: filteredItems.reduce((sum, i) => sum + (i.materialDollars || 0), 0),
+            totalHours: filteredItems.reduce((sum, i) => sum + (i.hours || 0), 0)
+          };
+        }).filter(sg => sg.items.length > 0);
         
         if (filteredSubGroups.length === 0) return null;
         
         // Recalculate group stats based on filtered items
         const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
-        const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => 
-          sum + sg.items.reduce((s, i) => s + (i.materialDollars || 0), 0), 0);
+        const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
         
         return {
           ...group,
