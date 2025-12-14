@@ -75,6 +75,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [expandedItemPages, setExpandedItemPages] = useState<Record<string, number>>({});
+  const [expandedItemSearch, setExpandedItemSearch] = useState<Record<string, string>>({});
+  const ITEMS_PER_PAGE = 15;
 
   // Get unique systems from data
   const uniqueSystems = useMemo(() => {
@@ -117,13 +120,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   };
 
   // Toggle child selection and CASCADE to item-level selection
-  const toggleChildSelection = (spec: string, type: string, group: MaterialGroup, e: React.MouseEvent) => {
+  // FIXED: Use the typeGroup passed directly from UI (already filtered by system filter)
+  const toggleChildSelection = (spec: string, type: string, typeGroup: ItemTypeGroup, e: React.MouseEvent) => {
     e.stopPropagation();
     const childKey = `${spec}|${type}`;
     
-    // Find the actual items in this group
-    const typeGroup = group.subGroups.find(g => g.itemType === type);
-    const itemIds = typeGroup?.items.map(i => String(i.id)) || [];
+    // Use ALL items from the typeGroup (the UI-filtered version)
+    const itemIds = typeGroup.items.map(i => String(i.id));
     
     // Check if ALL items in this group are currently selected
     const allItemsSelected = itemIds.length > 0 && itemIds.every(id => selectedItems.has(id));
@@ -136,27 +139,17 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       } else {
         next.add(childKey);
       }
-
-      const childKeys = group.subGroups.map(sg => `${spec}|${sg.itemType}`);
-      const selectedCount = childKeys.filter(k => next.has(k)).length;
-
-      if (selectedCount === childKeys.length) {
-        next.add(spec);
-      } else {
-        next.delete(spec);
-      }
-
       return next;
     });
     
-    // CASCADE to item-level selection
+    // CASCADE to item-level selection - select ALL items regardless of pagination
     setSelectedItems(prev => {
       const next = new Set(prev);
       if (allItemsSelected) {
         // Deselect all items in this group
         itemIds.forEach(id => next.delete(id));
       } else {
-        // Select all items in this group
+        // Select all items in this group (even ones not visible on current page)
         itemIds.forEach(id => next.add(id));
       }
       return next;
@@ -164,10 +157,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   };
   
   // Get selection state for a type group based on item-level selections
-  const getGroupSelectionState = (spec: string, type: string) => {
-    const specGroup = groups.find(g => g.materialSpec === spec);
-    const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
-    const itemIds = typeGroup?.items.map(i => String(i.id)) || [];
+  // FIXED: Accept typeGroup directly from UI to use consistent filtered data
+  const getGroupSelectionState = (typeGroup: ItemTypeGroup) => {
+    const itemIds = typeGroup.items.map(i => String(i.id));
     
     if (itemIds.length === 0) return { checked: false, indeterminate: false, selectedCount: 0, totalCount: 0 };
     
@@ -181,6 +173,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       totalCount
     };
   };
+  
+  // Helper functions for pagination
+  const getPageForGroup = (groupKey: string) => expandedItemPages[groupKey] || 1;
+  const getSearchForGroup = (groupKey: string) => expandedItemSearch[groupKey] || '';
 
   // Material codes list
   const allMaterialCodes = useMemo(() => {
@@ -976,11 +972,11 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                           >
                             <div className="col-span-1 flex items-center gap-2">
                               {(() => {
-                                const selState = getGroupSelectionState(group.materialSpec, typeGroup.itemType);
+                                const selState = getGroupSelectionState(typeGroup);
                                 return (
                                   <Checkbox
                                     checked={selState.checked ? true : selState.indeterminate ? 'indeterminate' : false}
-                                    onClick={e => toggleChildSelection(group.materialSpec, typeGroup.itemType, group, e as unknown as React.MouseEvent)}
+                                    onClick={e => toggleChildSelection(group.materialSpec, typeGroup.itemType, typeGroup, e as unknown as React.MouseEvent)}
                                   />
                                 );
                               })()}
@@ -995,10 +991,14 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                 {typeGroup.itemType}
                               </span>
                               {(() => {
-                                const selState = getGroupSelectionState(group.materialSpec, typeGroup.itemType);
-                                if (selState.selectedCount > 0 && selState.selectedCount < selState.totalCount) {
+                                const selState = getGroupSelectionState(typeGroup);
+                                if (selState.selectedCount > 0) {
                                   return (
-                                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                      selState.checked 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : 'bg-primary/10 text-primary'
+                                    }`}>
                                       {selState.selectedCount}/{selState.totalCount} selected
                                     </span>
                                   );
@@ -1044,60 +1044,197 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             </div>
                           </div>
 
-                          {/* Expanded Items */}
-                          {expandedTypes.has(`${group.materialSpec}|${typeGroup.itemType}`) && (
-                            <div className="bg-background border-l-2 border-primary/20 ml-16">
-                              <table className="w-full text-xs">
-                                <thead className="bg-muted/50">
-                                  <tr>
-                                    <th className="px-2 py-2 w-10">
-                                      <Checkbox
-                                        checked={typeGroup.items.every(item => selectedItems.has(String(item.id)))}
-                                        onCheckedChange={() => selectAllItemsInGroup(typeGroup.items)}
-                                      />
-                                    </th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">System</th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Description</th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Size</th>
-                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
-                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">Material $</th>
-                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Code</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                  {typeGroup.items.map(item => {
-                                    const isSelected = selectedItems.has(String(item.id));
-                                    return (
-                                      <tr 
-                                        key={item.id} 
-                                        className={`hover:bg-muted/30 cursor-pointer ${isSelected ? 'bg-primary/10' : ''}`}
-                                        onClick={() => toggleItemSelection(String(item.id))}
+                          {/* Expanded Items with Pagination */}
+                          {expandedTypes.has(`${group.materialSpec}|${typeGroup.itemType}`) && (() => {
+                            const groupKey = `${group.materialSpec}|${typeGroup.itemType}`;
+                            const itemSearchTerm = getSearchForGroup(groupKey).toLowerCase();
+                            const currentPage = getPageForGroup(groupKey);
+                            
+                            // Filter items by search term
+                            const filteredItems = typeGroup.items.filter(item => 
+                              !itemSearchTerm || 
+                              (item.itemName || '').toLowerCase().includes(itemSearchTerm) ||
+                              (item.materialDesc || '').toLowerCase().includes(itemSearchTerm) ||
+                              (item.size || '').toLowerCase().includes(itemSearchTerm) ||
+                              (item.system || '').toLowerCase().includes(itemSearchTerm)
+                            );
+                            
+                            const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
+                            const paginatedItems = filteredItems.slice(
+                              (currentPage - 1) * ITEMS_PER_PAGE,
+                              currentPage * ITEMS_PER_PAGE
+                            );
+                            const pageItemIds = paginatedItems.map(i => String(i.id));
+                            const allPageSelected = pageItemIds.length > 0 && pageItemIds.every(id => selectedItems.has(id));
+                            const somePageSelected = pageItemIds.some(id => selectedItems.has(id));
+                            
+                            return (
+                              <div className="bg-background border-l-2 border-primary/20 ml-16">
+                                {/* Search & Pagination Controls */}
+                                <div className="px-4 py-2 bg-muted/30 border-b flex items-center justify-between gap-4 flex-wrap">
+                                  <div className="flex items-center gap-2">
+                                    <Search className="h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                      placeholder="Search items..."
+                                      value={getSearchForGroup(groupKey)}
+                                      onChange={(e) => {
+                                        setExpandedItemSearch(prev => ({ ...prev, [groupKey]: e.target.value }));
+                                        setExpandedItemPages(prev => ({ ...prev, [groupKey]: 1 }));
+                                      }}
+                                      className="h-7 text-xs w-48"
+                                    />
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-3">
+                                    {/* Select All / Deselect All */}
+                                    <div className="flex items-center gap-1 text-xs">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const allIds = typeGroup.items.map(i => String(i.id));
+                                          setSelectedItems(prev => {
+                                            const next = new Set(prev);
+                                            allIds.forEach(id => next.add(id));
+                                            return next;
+                                          });
+                                        }}
+                                        className="text-primary hover:underline"
                                       >
-                                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
-                                          <Checkbox
-                                            checked={isSelected}
-                                            onCheckedChange={() => toggleItemSelection(String(item.id))}
-                                          />
-                                        </td>
-                                        <td className="px-3 py-2 text-foreground font-medium">{item.system || '—'}</td>
-                                        <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
-                                        <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
-                                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
-                                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">${(item.materialDollars || 0).toLocaleString()}</td>
-                                        <td className="px-3 py-2">
-                                          {item.materialCostCode ? (
-                                            <span className="font-mono text-green-600">{item.materialCostCode}</span>
-                                          ) : (
-                                            <span className="text-muted-foreground">—</span>
-                                          )}
+                                        Select All {typeGroup.items.length}
+                                      </button>
+                                      <span className="text-muted-foreground">|</span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const allIds = typeGroup.items.map(i => String(i.id));
+                                          setSelectedItems(prev => {
+                                            const next = new Set(prev);
+                                            allIds.forEach(id => next.delete(id));
+                                            return next;
+                                          });
+                                        }}
+                                        className="text-muted-foreground hover:text-foreground"
+                                      >
+                                        Deselect All
+                                      </button>
+                                    </div>
+
+                                    {/* Pagination Controls */}
+                                    {filteredItems.length > ITEMS_PER_PAGE && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                          {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredItems.length)}-
+                                          {Math.min(currentPage * ITEMS_PER_PAGE, filteredItems.length)} of {filteredItems.length}
+                                        </span>
+                                        <div className="flex gap-1">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 px-2 text-xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExpandedItemPages(prev => ({ 
+                                                ...prev, 
+                                                [groupKey]: Math.max(1, currentPage - 1) 
+                                              }));
+                                            }}
+                                            disabled={currentPage === 1}
+                                          >
+                                            ← Prev
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 px-2 text-xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setExpandedItemPages(prev => ({ 
+                                                ...prev, 
+                                                [groupKey]: Math.min(totalPages, currentPage + 1) 
+                                              }));
+                                            }}
+                                            disabled={currentPage >= totalPages}
+                                          >
+                                            Next →
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Items Table */}
+                                <table className="w-full text-xs">
+                                  <thead className="bg-muted/50">
+                                    <tr>
+                                      <th className="px-2 py-2 w-10">
+                                        <Checkbox
+                                          checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                                          onCheckedChange={() => {
+                                            setSelectedItems(prev => {
+                                              const next = new Set(prev);
+                                              if (allPageSelected) {
+                                                pageItemIds.forEach(id => next.delete(id));
+                                              } else {
+                                                pageItemIds.forEach(id => next.add(id));
+                                              }
+                                              return next;
+                                            });
+                                          }}
+                                          title={allPageSelected ? "Deselect this page" : "Select this page"}
+                                        />
+                                      </th>
+                                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">System</th>
+                                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Description</th>
+                                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Size</th>
+                                      <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
+                                      <th className="px-3 py-2 text-right font-medium text-muted-foreground">Material $</th>
+                                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Code</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border">
+                                    {paginatedItems.length === 0 ? (
+                                      <tr>
+                                        <td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">
+                                          {itemSearchTerm ? 'No items match your search' : 'No items'}
                                         </td>
                                       </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                                    ) : (
+                                      paginatedItems.map(item => {
+                                        const isSelected = selectedItems.has(String(item.id));
+                                        return (
+                                          <tr 
+                                            key={item.id} 
+                                            className={`hover:bg-muted/30 cursor-pointer ${isSelected ? 'bg-primary/10' : ''}`}
+                                            onClick={() => toggleItemSelection(String(item.id))}
+                                          >
+                                            <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                                              <Checkbox
+                                                checked={isSelected}
+                                                onCheckedChange={() => toggleItemSelection(String(item.id))}
+                                              />
+                                            </td>
+                                            <td className="px-3 py-2 text-foreground font-medium">{item.system || '—'}</td>
+                                            <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
+                                            <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
+                                            <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
+                                            <td className="px-3 py-2 text-right font-mono text-muted-foreground">${(item.materialDollars || 0).toLocaleString()}</td>
+                                            <td className="px-3 py-2">
+                                              {item.materialCostCode ? (
+                                                <span className="font-mono text-green-600">{item.materialCostCode}</span>
+                                              ) : (
+                                                <span className="text-muted-foreground">—</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
