@@ -1182,6 +1182,16 @@ const EnhancedCostCodeManager = () => {
     setSortConfig(null);
   }, []);
 
+  // Calculate actually missing codes by checking against database - MUST be before conditional returns
+  const actuallyMissingCodes = useMemo(() => {
+    return MISSING_CODES.filter(missing => 
+      !dbCostCodes.some(code => 
+        code.code === missing.code || 
+        code.code?.toUpperCase() === missing.code?.toUpperCase()
+      )
+    );
+  }, [dbCostCodes]);
+
   // Show auth if not logged in - MUST be after all hooks
   if (authLoading) {
     return (
@@ -1472,15 +1482,7 @@ const EnhancedCostCodeManager = () => {
     preparedBy: user?.email || 'User',
   });
 
-  // Calculate actually missing codes by checking against database
-  const actuallyMissingCodes = useMemo(() => {
-    return MISSING_CODES.filter(missing => 
-      !dbCostCodes.some(code => 
-        code.code === missing.code || 
-        code.code?.toUpperCase() === missing.code?.toUpperCase()
-      )
-    );
-  }, [dbCostCodes]);
+  // Calculate stats - actuallyMissingCodes is now computed before conditional returns
 
   // Calculate stats
   const stats = {
