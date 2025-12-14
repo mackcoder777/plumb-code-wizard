@@ -88,7 +88,9 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
         quantity: headers.findIndex(h => h.includes('quantity')),
         listPrice: headers.findIndex(h => h.includes('list price')),
         materialDollars: headers.findIndex(h => h.includes('material dollar')),
-        hours: headers.findIndex(h => h === 'hours'),
+        // CRITICAL: Use "Field Hours" (Column AA - Total Hours) NOT "Hours" (Column U - Unit Hours)
+        fieldHours: headers.findIndex(h => h.includes('field hour') || h === 'field hours'),
+        unitHours: headers.findIndex(h => h === 'hours'),
         laborDollars: headers.findIndex(h => h.includes('labor dollar')),
         symbol: headers.findIndex(h => h.includes('symbol')),
         estimator: headers.findIndex(h => h.includes('estimator')),
@@ -127,7 +129,11 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
           quantity: parseFloat(row[colMap.quantity]) || 0,
           listPrice: parseFloat(row[colMap.listPrice]) || 0,
           materialDollars: parseFloat(row[colMap.materialDollars]) || 0,
-          hours: parseFloat(row[colMap.hours]) || 0,
+          hours: colMap.fieldHours !== -1 
+            ? (parseFloat(row[colMap.fieldHours]) || 0)
+            : (colMap.unitHours !== -1 
+                ? (parseFloat(row[colMap.unitHours]) || 0) * (parseFloat(row[colMap.quantity]) || 1)
+                : 0),
           laborDollars: parseFloat(row[colMap.laborDollars]) || 0,
           symbol: row[colMap.symbol] || '',
           estimator: row[colMap.estimator] || '',
