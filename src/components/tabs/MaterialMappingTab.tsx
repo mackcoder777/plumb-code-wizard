@@ -20,7 +20,8 @@ import {
   Layers,
   Loader2,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
 import { useBatchUpdateMaterialCostCodes } from '@/hooks/useEstimateProjects';
@@ -73,6 +74,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [systemFilter, setSystemFilter] = useState<string>('all');
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
   // Get unique systems from data
   const uniqueSystems = useMemo(() => {
@@ -456,6 +458,81 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       });
     }
   }, [selectedGroups, groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
+
+  // Toggle individual item selection
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  // Select all items in a type group
+  const selectAllItemsInGroup = (items: EstimateItem[]) => {
+    const itemIds = items.map(i => String(i.id));
+    const allSelected = itemIds.every(id => selectedItems.has(id));
+    
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        itemIds.forEach(id => next.delete(id));
+      } else {
+        itemIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  // Assign code to individually selected items
+  const handleItemLevelAssign = useCallback(async (code: string) => {
+    if (selectedItems.size === 0) return;
+
+    const itemIds = Array.from(selectedItems);
+    const updatedData = data.map(item => {
+      if (itemIds.includes(String(item.id))) {
+        return { ...item, materialCostCode: code };
+      }
+      return item;
+    });
+
+    onDataUpdate(updatedData);
+    
+    if (projectId) {
+      setIsSaving(true);
+      try {
+        await batchUpdateMaterialCodes.mutateAsync({
+          projectId,
+          itemIds,
+          materialCode: code
+        });
+        toast({
+          title: 'Items Updated',
+          description: `Applied ${code} to ${itemIds.length} selected items`,
+        });
+      } catch (error) {
+        console.error('Failed to save material codes:', error);
+        toast({
+          title: 'Save Failed',
+          description: 'Changes applied locally but failed to save to database.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      toast({
+        title: 'Items Updated',
+        description: `Applied ${code} to ${itemIds.length} selected items (not saved - no project selected)`,
+      });
+    }
+    
+    setSelectedItems(new Set());
+  }, [selectedItems, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
 
   // Select all visible groups
   const selectAllVisible = () => {
@@ -907,6 +984,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                               <table className="w-full text-xs">
                                 <thead className="bg-muted/50">
                                   <tr>
+                                    <th className="px-2 py-2 w-10">
+                                      <Checkbox
+                                        checked={typeGroup.items.every(item => selectedItems.has(String(item.id)))}
+                                        onCheckedChange={() => selectAllItemsInGroup(typeGroup.items)}
+                                      />
+                                    </th>
                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground">System</th>
                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground">Description</th>
                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground">Size</th>
@@ -916,29 +999,35 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                  {typeGroup.items.slice(0, 10).map(item => (
-                                    <tr key={item.id} className="hover:bg-muted/30">
-                                      <td className="px-3 py-2 text-foreground font-medium">{item.system || '—'}</td>
-                                      <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
-                                      <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
-                                      <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
-                                      <td className="px-3 py-2 text-right font-mono text-muted-foreground">${(item.materialDollars || 0).toLocaleString()}</td>
-                                      <td className="px-3 py-2">
-                                        {item.materialCostCode ? (
-                                          <span className="font-mono text-green-600">{item.materialCostCode}</span>
-                                        ) : (
-                                          <span className="text-muted-foreground">—</span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {typeGroup.items.length > 10 && (
-                                    <tr>
-                                      <td colSpan={6} className="px-3 py-2 text-center text-muted-foreground">
-                                        + {typeGroup.items.length - 10} more items
-                                      </td>
-                                    </tr>
-                                  )}
+                                  {typeGroup.items.map(item => {
+                                    const isSelected = selectedItems.has(String(item.id));
+                                    return (
+                                      <tr 
+                                        key={item.id} 
+                                        className={`hover:bg-muted/30 cursor-pointer ${isSelected ? 'bg-primary/10' : ''}`}
+                                        onClick={() => toggleItemSelection(String(item.id))}
+                                      >
+                                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                                          <Checkbox
+                                            checked={isSelected}
+                                            onCheckedChange={() => toggleItemSelection(String(item.id))}
+                                          />
+                                        </td>
+                                        <td className="px-3 py-2 text-foreground font-medium">{item.system || '—'}</td>
+                                        <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
+                                        <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
+                                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
+                                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">${(item.materialDollars || 0).toLocaleString()}</td>
+                                        <td className="px-3 py-2">
+                                          {item.materialCostCode ? (
+                                            <span className="font-mono text-green-600">{item.materialCostCode}</span>
+                                          ) : (
+                                            <span className="text-muted-foreground">—</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -963,6 +1052,51 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* Floating Action Bar for Item-Level Selection */}
+      {selectedItems.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-foreground text-background px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50">
+          <span className="text-sm font-medium">
+            {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
+          </span>
+          <div className="h-4 w-px bg-muted-foreground/50" />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="secondary" size="sm" className="h-8">
+                Assign Code
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="center" side="top">
+              <Command>
+                <CommandInput placeholder="Search codes..." />
+                <CommandList>
+                  <CommandEmpty>No code found.</CommandEmpty>
+                  <CommandGroup heading="Material Codes">
+                    {allMaterialCodes.map(code => (
+                      <CommandItem
+                        key={code.code}
+                        value={`${code.code} ${code.description}`}
+                        onSelect={() => handleItemLevelAssign(code.code)}
+                      >
+                        <span className="font-mono mr-2">{code.code}</span>
+                        <span className="text-muted-foreground truncate">{code.description}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-8 text-muted-foreground hover:text-background"
+            onClick={() => setSelectedItems(new Set())}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
