@@ -28,16 +28,190 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-// Tax rate lookup by ZIP code (expandable)
-const CA_TAX_RATES: Record<string, { rate: number; jurisdiction: string }> = {
-  '90001': { rate: 9.5, jurisdiction: 'Los Angeles' },
-  '90210': { rate: 9.5, jurisdiction: 'Beverly Hills' },
-  '90802': { rate: 10.25, jurisdiction: 'Long Beach' },
-  '91101': { rate: 10.25, jurisdiction: 'Pasadena' },
-  '92602': { rate: 7.75, jurisdiction: 'Irvine' },
-  '92801': { rate: 7.75, jurisdiction: 'Anaheim' },
-  '92101': { rate: 7.75, jurisdiction: 'San Diego' },
-  'default': { rate: 7.25, jurisdiction: 'California State Minimum' },
+// Function to get tax rate by ZIP code using ranges
+const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
+  const zip = parseInt(zipCode);
+  if (isNaN(zip)) return { rate: 7.25, jurisdiction: 'California State Minimum' };
+
+  // LOS ANGELES COUNTY (varies by city)
+  
+  // Long Beach: 10.25%
+  if ((zip >= 90801 && zip <= 90815) || 
+      zip === 90822 || 
+      (zip >= 90831 && zip <= 90848)) {
+    return { rate: 10.25, jurisdiction: 'Long Beach' };
+  }
+  
+  // Los Angeles City: 9.5%
+  if ((zip >= 90001 && zip <= 90089) ||
+      (zip >= 90091 && zip <= 90099) ||
+      (zip >= 90101 && zip <= 90189) ||
+      (zip >= 90291 && zip <= 90296) ||
+      (zip >= 91040 && zip <= 91043) ||
+      (zip >= 91303 && zip <= 91308) ||
+      (zip >= 91311 && zip <= 91316) ||
+      (zip >= 91324 && zip <= 91328) ||
+      (zip >= 91330 && zip <= 91335) ||
+      (zip >= 91340 && zip <= 91349) ||
+      (zip >= 91352 && zip <= 91357) ||
+      (zip >= 91364 && zip <= 91367) ||
+      (zip >= 91401 && zip <= 91499) ||
+      (zip >= 91601 && zip <= 91618)) {
+    return { rate: 9.5, jurisdiction: 'Los Angeles' };
+  }
+  
+  // Pasadena: 10.25%
+  if (zip >= 91101 && zip <= 91199) {
+    return { rate: 10.25, jurisdiction: 'Pasadena' };
+  }
+  
+  // Glendale: 10.25%
+  if (zip >= 91201 && zip <= 91226) {
+    return { rate: 10.25, jurisdiction: 'Glendale' };
+  }
+  
+  // Burbank: 10.25%
+  if (zip >= 91501 && zip <= 91526) {
+    return { rate: 10.25, jurisdiction: 'Burbank' };
+  }
+  
+  // Santa Monica: 10.25%
+  if (zip >= 90401 && zip <= 90411) {
+    return { rate: 10.25, jurisdiction: 'Santa Monica' };
+  }
+  
+  // Culver City: 10.25%
+  if (zip >= 90230 && zip <= 90233) {
+    return { rate: 10.25, jurisdiction: 'Culver City' };
+  }
+  
+  // Inglewood: 10.25%
+  if (zip >= 90301 && zip <= 90312) {
+    return { rate: 10.25, jurisdiction: 'Inglewood' };
+  }
+  
+  // Torrance: 10.25%
+  if (zip >= 90501 && zip <= 90510) {
+    return { rate: 10.25, jurisdiction: 'Torrance' };
+  }
+  
+  // Carson: 10.25%
+  if (zip >= 90745 && zip <= 90749) {
+    return { rate: 10.25, jurisdiction: 'Carson' };
+  }
+  
+  // Compton: 10.25%
+  if (zip >= 90220 && zip <= 90224) {
+    return { rate: 10.25, jurisdiction: 'Compton' };
+  }
+  
+  // Downey: 10.25%
+  if (zip >= 90239 && zip <= 90242) {
+    return { rate: 10.25, jurisdiction: 'Downey' };
+  }
+  
+  // Pomona: 10.25%
+  if (zip >= 91766 && zip <= 91769) {
+    return { rate: 10.25, jurisdiction: 'Pomona' };
+  }
+  
+  // El Monte: 10.25%
+  if (zip >= 91731 && zip <= 91735) {
+    return { rate: 10.25, jurisdiction: 'El Monte' };
+  }
+  
+  // West Covina: 10.25%
+  if (zip >= 91790 && zip <= 91793) {
+    return { rate: 10.25, jurisdiction: 'West Covina' };
+  }
+  
+  // Other LA County (unincorporated): 9.5%
+  if (zip >= 90000 && zip <= 91999) {
+    return { rate: 9.5, jurisdiction: 'Los Angeles County' };
+  }
+  
+  // ORANGE COUNTY
+  
+  // Santa Ana: 9.25%
+  if (zip >= 92701 && zip <= 92799) {
+    return { rate: 9.25, jurisdiction: 'Santa Ana' };
+  }
+  
+  // Anaheim: 7.75%
+  if (zip >= 92801 && zip <= 92899) {
+    return { rate: 7.75, jurisdiction: 'Anaheim' };
+  }
+  
+  // Irvine: 7.75%
+  if (zip >= 92602 && zip <= 92699) {
+    return { rate: 7.75, jurisdiction: 'Irvine' };
+  }
+  
+  // Other Orange County: 7.75%
+  if (zip >= 92600 && zip <= 92899) {
+    return { rate: 7.75, jurisdiction: 'Orange County' };
+  }
+  
+  // SAN DIEGO COUNTY: 7.75%
+  if (zip >= 92101 && zip <= 92199) {
+    return { rate: 7.75, jurisdiction: 'San Diego' };
+  }
+  if ((zip >= 91901 && zip <= 92199) || (zip >= 92020 && zip <= 92099)) {
+    return { rate: 7.75, jurisdiction: 'San Diego County' };
+  }
+  
+  // RIVERSIDE COUNTY: 7.75%
+  if (zip >= 92201 && zip <= 92599) {
+    return { rate: 7.75, jurisdiction: 'Riverside County' };
+  }
+  
+  // SAN BERNARDINO COUNTY: 7.75%
+  if ((zip >= 91701 && zip <= 91799) || (zip >= 92301 && zip <= 92427)) {
+    return { rate: 7.75, jurisdiction: 'San Bernardino County' };
+  }
+  
+  // VENTURA COUNTY: 7.25%
+  if (zip >= 93001 && zip <= 93099) {
+    return { rate: 7.25, jurisdiction: 'Ventura County' };
+  }
+  
+  // KERN COUNTY (Bakersfield): 8.25%
+  if (zip >= 93201 && zip <= 93399) {
+    return { rate: 8.25, jurisdiction: 'Kern County' };
+  }
+  
+  // FRESNO COUNTY: 7.975%
+  if (zip >= 93601 && zip <= 93799) {
+    return { rate: 7.975, jurisdiction: 'Fresno County' };
+  }
+  
+  // SACRAMENTO COUNTY: 8.75%
+  if (zip >= 94203 && zip <= 95899) {
+    return { rate: 8.75, jurisdiction: 'Sacramento County' };
+  }
+  
+  // ALAMEDA COUNTY (Oakland, Berkeley): 10.25%
+  if (zip >= 94501 && zip <= 94699) {
+    return { rate: 10.25, jurisdiction: 'Alameda County' };
+  }
+  
+  // SAN FRANCISCO: 8.625%
+  if (zip >= 94101 && zip <= 94188) {
+    return { rate: 8.625, jurisdiction: 'San Francisco' };
+  }
+  
+  // SANTA CLARA COUNTY (San Jose): 9.125%
+  if (zip >= 94301 && zip <= 95199) {
+    return { rate: 9.125, jurisdiction: 'Santa Clara County' };
+  }
+  
+  // CONTRA COSTA COUNTY: 8.75%
+  if (zip >= 94506 && zip <= 94599) {
+    return { rate: 8.75, jurisdiction: 'Contra Costa County' };
+  }
+  
+  // Default California State Minimum
+  return { rate: 7.25, jurisdiction: 'California State Minimum' };
 };
 
 // Material codes that are typically TAXABLE
@@ -128,9 +302,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       return { rate: customTaxRate, jurisdiction: 'Custom Rate' };
     }
     if (jobsiteZipCode && jobsiteZipCode.length === 5) {
-      return CA_TAX_RATES[jobsiteZipCode] || CA_TAX_RATES['default'];
+      return getTaxRateByZip(jobsiteZipCode);
     }
-    return CA_TAX_RATES['default'];
+    return { rate: 7.25, jurisdiction: 'Enter ZIP Code' };
   }, [jobsiteZipCode, customTaxRate]);
 
   const calculations = useMemo(() => {
