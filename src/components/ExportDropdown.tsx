@@ -7,25 +7,28 @@ import {
   ProjectInfo 
 } from '@/utils/budgetExportSystem';
 import { toast } from '@/components/ui/use-toast';
+import { BudgetAdjustments } from './BudgetAdjustmentsPanel';
 
 interface ExportDropdownProps {
   items: ExportEstimateItem[];
   projectInfo: ProjectInfo;
   laborRate?: number;
   disabled?: boolean;
+  budgetAdjustments?: BudgetAdjustments | null;
 }
 
 export const ExportDropdown: React.FC<ExportDropdownProps> = ({ 
   items, 
   projectInfo, 
   laborRate = 0,
-  disabled = false
+  disabled = false,
+  budgetAdjustments = null,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleExportBudgetPacket = () => {
     try {
-      const result = exportBudgetPacket(items, projectInfo, laborRate);
+      const result = exportBudgetPacket(items, projectInfo, laborRate, budgetAdjustments);
       toast({
         title: "Budget Packet Exported",
         description: `Exported ${result.laborCodes} labor codes and ${result.materialCodes} material codes. Grand Total: $${result.grandTotal.toLocaleString()}`,

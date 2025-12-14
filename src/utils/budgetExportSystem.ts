@@ -4,6 +4,7 @@
 // 2. Audit Report - Detailed line items for internal backup
 
 import * as XLSX from 'xlsx';
+import { BudgetAdjustments } from '../components/BudgetAdjustmentsPanel';
 
 // ============================================
 // TYPES
@@ -156,31 +157,72 @@ export function aggregateMaterialByCostCode(items: ExportEstimateItem[]): Aggreg
 
 /**
  * Exports Budget Packet matching Murray Company Budget_Packet.xls format exactly
- * Template structure:
- * - Rows 1-16: First header block
- * - Row 17: "LABOR BREAKDOWN"
- * - Row 18: Labor column headers
- * - Rows 19-54: Labor data (35 rows)
- * - Row 55: Labor TOTALS
- * - Rows 58-71: Second header block (CHANGE ORDER WORKSHEET)
- * - Row 73: "MATERIAL BREAKDOWN"
- * - Row 74: Material column headers
- * - Rows 75-108: Material data (33 rows)
- * - Rows 77-81: Right-side summary box (TOTAL COST, PLUS, MARKUP, TOTAL)
- * - Row 110: MATERIAL TOTAL -->
- * - Row 112: LABOR TOTAL -->
- * - Row 114: TOTAL -->
+ * Now accepts optional budgetAdjustments to use adjusted labor/material data
  */
 export function exportBudgetPacket(
   items: ExportEstimateItem[],
   projectInfo: ProjectInfo,
-  laborRate: number = 0
+  laborRate: number = 0,
+  budgetAdjustments?: BudgetAdjustments | null
 ): { laborCodes: number; materialCodes: number; totalLaborHours: number; totalLaborDollars: number; totalMaterialDollars: number; grandTotal: number } {
   const wb = XLSX.utils.book_new();
   const ws: XLSX.WorkSheet = {};
 
-  const laborSummary = aggregateLaborByCostCode(items);
-  const materialSummary = aggregateMaterialByCostCode(items);
+  // Determine data source: use Budget Adjustments if available, otherwise raw aggregation
+  let laborData: Array<{ code: string; description: string; hours: number; dollars: number }>;
+  let materialData: Array<{ code: string; description: string; amount: number }>;
+  let totalLaborHours = 0;
+  let totalLaborDollars = 0;
+  let totalMaterialDollars = 0;
+
+  if (budgetAdjustments && Object.keys(budgetAdjustments.adjustedLaborSummary || {}).length > 0) {
+    // USE BUDGET BUILDER ADJUSTMENTS (includes foreman FCNT, FAB codes, tax)
+    laborData = Object.values(budgetAdjustments.adjustedLaborSummary)
+      .map(item => ({
+        code: item.code,
+        description: item.description,
+        hours: item.hours,
+        dollars: item.dollars
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    totalLaborHours = budgetAdjustments.totalFieldHours + 
+                      budgetAdjustments.totalFabHours + 
+                      (budgetAdjustments.foremanBonusHours || 0);
+    totalLaborDollars = budgetAdjustments.totalLaborDollars;
+
+    // Material: Use tax summary (includes tax amounts)
+    materialData = (budgetAdjustments.materialTaxSummary || [])
+      .map(item => ({
+        code: item.code,
+        description: item.description,
+        amount: item.amount + item.taxAmount // Include tax in amount
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
+  } else {
+    // FALLBACK: Use raw item aggregation (no adjustments)
+    const rawLaborSummary = aggregateLaborByCostCode(items);
+    laborData = rawLaborSummary.map(item => ({
+      code: item.costCode,
+      description: item.description,
+      hours: item.hours,
+      dollars: item.hours * laborRate
+    }));
+
+    totalLaborHours = laborData.reduce((sum, i) => sum + i.hours, 0);
+    totalLaborDollars = laborData.reduce((sum, i) => sum + i.dollars, 0);
+
+    const rawMaterialSummary = aggregateMaterialByCostCode(items);
+    materialData = rawMaterialSummary.map(item => ({
+      code: item.costCode,
+      description: item.description,
+      amount: item.materialDollars
+    }));
+
+    totalMaterialDollars = materialData.reduce((sum, i) => sum + i.amount, 0);
+  }
 
   // ===== FIRST HEADER SECTION (Rows 1-16) =====
   ws['D2'] = { t: 's', v: '  NEW JOB / CHANGE ORDER' };
@@ -226,12 +268,12 @@ export function exportBudgetPacket(
   const LABOR_START_ROW = 19;
   const LABOR_END_ROW = 54;
   
-  laborSummary.forEach((item, index) => {
+  laborData.forEach((item, index) => {
     if (index >= 35) return; // Max 35 labor items
     
     const row = LABOR_START_ROW + index;
     
-    ws[`B${row}`] = { t: 's', v: item.costCode };
+    ws[`B${row}`] = { t: 's', v: item.code };
     ws[`D${row}`] = { t: 's', v: item.description };
     ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
     
@@ -239,18 +281,19 @@ export function exportBudgetPacket(
       ws[`I${row}`] = { t: 'n', v: laborRate, z: '#,##0.00' };
     }
     
-    ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
+    // Use actual dollars from adjusted data, or formula for fallback
+    ws[`J${row}`] = { t: 'n', v: Math.round(item.dollars * 100) / 100, z: '#,##0' };
   });
 
   // Fill remaining labor rows with formula structure
-  for (let row = LABOR_START_ROW + laborSummary.length; row <= LABOR_END_ROW; row++) {
+  for (let row = LABOR_START_ROW + laborData.length; row <= LABOR_END_ROW; row++) {
     ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
   }
 
   // Row 55: Labor TOTALS
   ws['E55'] = { t: 's', v: 'TOTALS' };
-  ws['H55'] = { t: 'n', f: `SUM(H${LABOR_START_ROW}:H${LABOR_END_ROW})`, v: 0, z: '#,##0.0' };
-  ws['J55'] = { t: 'n', f: `SUM(J${LABOR_START_ROW}:J${LABOR_END_ROW})`, v: 0, z: '#,##0' };
+  ws['H55'] = { t: 'n', v: Math.round(totalLaborHours * 10) / 10, z: '#,##0.0' };
+  ws['J55'] = { t: 'n', v: Math.round(totalLaborDollars * 100) / 100, z: '#,##0' };
 
   // ===== SECOND HEADER BLOCK (Rows 58-71) - Before Material Section =====
   ws['D58'] = { t: 's', v: '   CHANGE ORDER' };
@@ -295,25 +338,35 @@ export function exportBudgetPacket(
   ws[`H${MATERIAL_COLS_ROW}`] = { t: 's', v: 'AMOUNT' };
 
   // Material data: Rows 75-108 (33 rows max)
-  materialSummary.forEach((item, index) => {
-    if (index >= 33) return; // Max 33 material items
+  let materialRowIndex = 0;
+  materialData.forEach((item) => {
+    if (materialRowIndex >= 32) return; // Leave room for tax line
     
-    const row = MATERIAL_START_ROW + index;
+    const row = MATERIAL_START_ROW + materialRowIndex;
     
     // Format material code as "01 0000 {code}" to match template format
-    const formattedCode = item.costCode.includes(' ') ? item.costCode : `01 0000 ${item.costCode}`;
+    const formattedCode = item.code.includes(' ') ? item.code : `01 0000 ${item.code}`;
     
     ws[`B${row}`] = { t: 's', v: formattedCode };
-    ws[`D${row}`] = { t: 's', v: item.description || getMaterialCodeDescription(item.costCode) };
-    ws[`H${row}`] = { t: 'n', v: Math.round(item.materialDollars * 100) / 100, z: '#,##0.00' };
+    ws[`D${row}`] = { t: 's', v: item.description || getMaterialCodeDescription(item.code) };
+    ws[`H${row}`] = { t: 'n', v: Math.round(item.amount * 100) / 100, z: '#,##0.00' };
+    materialRowIndex++;
   });
 
+  // Add SALES TAX line if there's any tax from budget adjustments
+  if (budgetAdjustments && budgetAdjustments.totalMaterialTax > 0) {
+    const taxRow = MATERIAL_START_ROW + materialRowIndex;
+    ws[`B${taxRow}`] = { t: 's', v: '01 0000 TAX' };
+    ws[`D${taxRow}`] = { t: 's', v: `SALES TAX (${budgetAdjustments.taxRate}% - ${budgetAdjustments.taxJurisdiction})` };
+    ws[`H${taxRow}`] = { t: 'n', v: Math.round(budgetAdjustments.totalMaterialTax * 100) / 100, z: '#,##0.00' };
+  }
+
   // ===== RIGHT-SIDE SUMMARY BOX (Rows 77-81, Columns J-K) =====
+  const grandTotal = totalLaborDollars + totalMaterialDollars;
   ws['J77'] = { t: 's', v: 'TOTAL COST' };
   ws['K77'] = { 
     t: 'n', 
-    f: `J55+SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
-    v: 0,
+    v: Math.round(grandTotal * 100) / 100,
     z: '#,##0.00'
   };
   
@@ -325,8 +378,7 @@ export function exportBudgetPacket(
   ws['J80'] = { t: 's', v: 'TOTAL' };
   ws['K80'] = { 
     t: 'n', 
-    f: 'K77+K79',
-    v: 0,
+    v: Math.round(grandTotal * 100) / 100,
     z: '#,##0.00'
   };
   
@@ -336,16 +388,15 @@ export function exportBudgetPacket(
   ws['G110'] = { t: 's', v: 'MATERIAL TOTAL -->' };
   ws['H110'] = { 
     t: 'n', 
-    f: `SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
-    v: 0,
+    v: Math.round(totalMaterialDollars * 100) / 100,
     z: '#,##0.00'
   };
   
   ws['G112'] = { t: 's', v: 'LABOR TOTAL -->' };
-  ws['H112'] = { t: 'n', f: 'J55', v: 0, z: '#,##0.00' };
+  ws['H112'] = { t: 'n', v: Math.round(totalLaborDollars * 100) / 100, z: '#,##0.00' };
   
   ws['G114'] = { t: 's', v: 'TOTAL -->' };
-  ws['H114'] = { t: 'n', f: 'H110+H112', v: 0, z: '#,##0.00' };
+  ws['H114'] = { t: 'n', v: Math.round(grandTotal * 100) / 100, z: '#,##0.00' };
 
   // ===== WORKSHEET CONFIGURATION =====
   ws['!cols'] = [
@@ -373,18 +424,13 @@ export function exportBudgetPacket(
 
   XLSX.writeFile(wb, filename);
 
-  // Calculate stats for return
-  const totalLaborHours = laborSummary.reduce((s, l) => s + l.hours, 0);
-  const totalLaborDollars = laborSummary.reduce((s, l) => s + l.laborDollars, 0);
-  const totalMaterialDollars = materialSummary.reduce((s, m) => s + m.materialDollars, 0);
-
   return {
-    laborCodes: laborSummary.length,
-    materialCodes: materialSummary.length,
+    laborCodes: laborData.length,
+    materialCodes: materialData.length,
     totalLaborHours,
     totalLaborDollars,
     totalMaterialDollars,
-    grandTotal: totalLaborDollars + totalMaterialDollars
+    grandTotal
   };
 }
 

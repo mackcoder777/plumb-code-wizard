@@ -1834,6 +1834,8 @@ const EnhancedCostCodeManager = () => {
                 <ExportDropdown
                   items={filteredData}
                   projectInfo={getProjectInfo()}
+                  laborRate={bidLaborRate}
+                  budgetAdjustments={budgetAdjustments}
                   disabled={filteredData.length === 0}
                 />
                 <button
@@ -2533,6 +2535,7 @@ const EnhancedCostCodeManager = () => {
                     return summary;
                   })()}
                   bidLaborRate={bidLaborRate}
+                  projectId={currentProject?.id || 'default'}
                   onAdjustmentsChange={setBudgetAdjustments}
                 />
               </div>
