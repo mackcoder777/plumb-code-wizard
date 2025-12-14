@@ -298,12 +298,30 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (systemFilter !== 'all') {
         const filteredSubGroups = group.subGroups.map(sg => {
           const filteredItems = sg.items.filter(item => item.system === systemFilter);
+          
+          // FIX: Recalculate assignedCode based on FILTERED items
+          const codes = new Set(
+            filteredItems
+              .map(i => i.materialCostCode)
+              .filter(Boolean)
+          );
+          const hasUnassigned = filteredItems.some(i => !i.materialCostCode);
+          
+          let newAssignedCode: string | null = null;
+          if (codes.size === 1 && !hasUnassigned) {
+            newAssignedCode = [...codes][0]!;
+          } else if (codes.size > 1 || (codes.size > 0 && hasUnassigned)) {
+            newAssignedCode = 'MIXED';
+          }
+
           return {
             ...sg,
             items: filteredItems,
-            itemCount: filteredItems.length, // FIX: Update subGroup itemCount
+            itemCount: filteredItems.length,
             totalMaterial: filteredItems.reduce((sum, i) => sum + (i.materialDollars || 0), 0),
-            totalHours: filteredItems.reduce((sum, i) => sum + (i.hours || 0), 0)
+            totalHours: filteredItems.reduce((sum, i) => sum + (i.hours || 0), 0),
+            assignedCode: newAssignedCode,
+            isFullyAssigned: !hasUnassigned && codes.size > 0
           };
         }).filter(sg => sg.items.length > 0);
         
@@ -313,11 +331,28 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
         const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
         
+        // FIX: Recalculate parent group's assignedCode based on filtered subGroups
+        const allSubCodes = new Set(
+          filteredSubGroups
+            .map(g => g.assignedCode)
+            .filter(c => c && c !== 'MIXED')
+        );
+        const hasUnassignedSubs = filteredSubGroups.some(g => !g.assignedCode);
+        const hasMixedSubs = filteredSubGroups.some(g => g.assignedCode === 'MIXED');
+        
+        let newGroupAssignedCode: string | null = null;
+        if (allSubCodes.size === 1 && !hasUnassignedSubs && !hasMixedSubs) {
+          newGroupAssignedCode = [...allSubCodes][0]!;
+        } else if (allSubCodes.size > 1 || hasMixedSubs || (allSubCodes.size > 0 && hasUnassignedSubs)) {
+          newGroupAssignedCode = 'MIXED';
+        }
+        
         return {
           ...group,
           subGroups: filteredSubGroups,
           itemCount: filteredItemCount,
-          totalMaterial: filteredTotalMaterial
+          totalMaterial: filteredTotalMaterial,
+          assignedCode: newGroupAssignedCode
         };
       }
       return group;
