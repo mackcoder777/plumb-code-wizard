@@ -6,6 +6,7 @@ import { PdfImportTab } from '@/components/tabs/PdfImportTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo } from '@/utils/budgetExportSystem';
+import BudgetAdjustmentsPanel, { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
 import { 
   useSystemMappings, 
   useSaveMapping, 
@@ -422,6 +423,10 @@ const EnhancedCostCodeManager = () => {
   const [showAddFileDialog, setShowAddFileDialog] = useState(false);
   const appendEstimateItems = useAppendEstimateItems();
   const queryClient = useQueryClient();
+  
+  // Budget adjustments state
+  const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
+  const [bidLaborRate, setBidLaborRate] = useState(85); // Default rate
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -1672,7 +1677,7 @@ const EnhancedCostCodeManager = () => {
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50 items-center">
-          {['upload', 'estimates', 'mapping', 'material-mapping', 'rules'].map((tab) => (
+          {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'rules'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1686,6 +1691,7 @@ const EnhancedCostCodeManager = () => {
               {tab === 'estimates' && '📊 Estimates'}
               {tab === 'mapping' && '🔗 Labor Mapping'}
               {tab === 'material-mapping' && '📦 Material Mapping'}
+              {tab === 'budget' && '💰 Budget Builder'}
               {tab === 'rules' && '🤖 Rules'}
             </button>
           ))}
@@ -2459,6 +2465,88 @@ const EnhancedCostCodeManager = () => {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Material codes are assigned by Item Type + Material Spec combinations (not by system like labor codes).
+                </p>
+              </div>
+            )
+          )}
+
+          {/* Budget Builder Tab */}
+          {activeTab === 'budget' && (
+            estimateData.length > 0 ? (
+              <div className="p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">💰 Budget Builder</h2>
+                    <p className="text-gray-600 mt-1">Configure tax rates, foreman bonus, and fabrication hour strips</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-medium text-gray-700">Bid Labor Rate:</label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">$</span>
+                      <input
+                        type="number"
+                        value={bidLaborRate}
+                        onChange={(e) => setBidLaborRate(Number(e.target.value) || 85)}
+                        className="w-20 px-3 py-2 border rounded-lg font-mono text-right"
+                        min="0"
+                        step="5"
+                      />
+                      <span className="text-gray-500">/hr</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <BudgetAdjustmentsPanel
+                  laborSummary={(() => {
+                    const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
+                    estimateData.forEach((item: any) => {
+                      const code = item.costCode || item.laborCostCode;
+                      if (!code) return;
+                      if (!summary[code]) {
+                        const codeInfo = COST_CODES.find(c => c.code === code);
+                        summary[code] = {
+                          code,
+                          description: codeInfo?.description || code,
+                          fieldHours: 0,
+                          rate: bidLaborRate
+                        };
+                      }
+                      summary[code].fieldHours += item.hours || 0;
+                    });
+                    return summary;
+                  })()}
+                  materialSummary={(() => {
+                    const summary: Record<string, { code: string; description: string; amount: number }> = {};
+                    estimateData.forEach((item: any) => {
+                      const code = item.materialCostCode;
+                      if (!code) return;
+                      if (!summary[code]) {
+                        const codeInfo = COST_CODES.find(c => c.code === code);
+                        summary[code] = {
+                          code,
+                          description: codeInfo?.description || code,
+                          amount: 0
+                        };
+                      }
+                      summary[code].amount += item.materialDollars || 0;
+                    });
+                    return summary;
+                  })()}
+                  bidLaborRate={bidLaborRate}
+                  onAdjustmentsChange={setBudgetAdjustments}
+                />
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-lg p-12 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                  <span className="text-3xl">💰</span>
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">No Estimate Data Loaded</h3>
+                <p className="text-muted-foreground mb-4">
+                  Upload an estimate file first to configure budget adjustments.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The Budget Builder allows you to add sales tax, foreman bonus strips, and fabrication hour allocations.
                 </p>
               </div>
             )
