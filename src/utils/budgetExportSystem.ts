@@ -155,8 +155,21 @@ export function aggregateMaterialByCostCode(items: ExportEstimateItem[]): Aggreg
 // ============================================
 
 /**
- * Exports Budget Packet matching Murray Company Budget_Packet.xls format
- * Includes proper cell positions and Excel formulas
+ * Exports Budget Packet matching Murray Company Budget_Packet.xls format exactly
+ * Template structure:
+ * - Rows 1-16: First header block
+ * - Row 17: "LABOR BREAKDOWN"
+ * - Row 18: Labor column headers
+ * - Rows 19-54: Labor data (35 rows)
+ * - Row 55: Labor TOTALS
+ * - Rows 58-71: Second header block (CHANGE ORDER WORKSHEET)
+ * - Row 73: "MATERIAL BREAKDOWN"
+ * - Row 74: Material column headers
+ * - Rows 75-108: Material data (33 rows)
+ * - Rows 77-81: Right-side summary box (TOTAL COST, PLUS, MARKUP, TOTAL)
+ * - Row 110: MATERIAL TOTAL -->
+ * - Row 112: LABOR TOTAL -->
+ * - Row 114: TOTAL -->
  */
 export function exportBudgetPacket(
   items: ExportEstimateItem[],
@@ -169,50 +182,37 @@ export function exportBudgetPacket(
   const laborSummary = aggregateLaborByCostCode(items);
   const materialSummary = aggregateMaterialByCostCode(items);
 
-  // ===== HEADER SECTION (Rows 1-16) =====
-  // Row 2: Title
+  // ===== FIRST HEADER SECTION (Rows 1-16) =====
   ws['D2'] = { t: 's', v: '  NEW JOB / CHANGE ORDER' };
-  
-  // Row 3: Title continued
   ws['E3'] = { t: 's', v: '   WORKSHEET' };
   
-  // Row 6: Job #
   ws['B6'] = { t: 's', v: 'JOB #:' };
   ws['C6'] = { t: 's', v: projectInfo.jobNumber };
   ws['H6'] = { t: 's', v: '  Pending Change Order (MPCO)' };
   
-  // Row 7: Job Name
   ws['B7'] = { t: 's', v: 'JOB NAME:' };
   ws['C7'] = { t: 's', v: projectInfo.jobName };
   ws['H7'] = { t: 's', v: ' MCE # (s)' };
   ws['I7'] = { t: 's', v: 'Initial Budget' };
   
-  // Row 8: Date
   ws['B8'] = { t: 's', v: 'DATE:' };
   ws['C8'] = { t: 's', v: projectInfo.date.toLocaleDateString() };
   
-  // Row 9: By
   ws['B9'] = { t: 's', v: 'BY:' };
   ws['C9'] = { t: 's', v: projectInfo.preparedBy };
   ws['H9'] = { t: 's', v: '  Change Order  (CO)' };
   
-  // Row 10
   ws['H10'] = { t: 's', v: ' (if PCO transfer to CO, see page 2)' };
-  
-  // Row 11
   ws['H11'] = { t: 's', v: '     CO # ' };
   
-  // Row 13: Client Change Reference
   ws['B13'] = { t: 's', v: 'Client Change Reference:' };
   ws['D13'] = { t: 's', v: projectInfo.clientReference || '' };
   ws['G13'] = { t: 's', v: 'X' };
   ws['H13'] = { t: 's', v: 'Original Budget' };
   
-  // Row 16: Approval
   ws['H16'] = { t: 's', v: 'APPROVAL:' };
 
-  // ===== LABOR BREAKDOWN SECTION (Rows 17-36) =====
-  // Row 17: Section header
+  // ===== LABOR BREAKDOWN SECTION (Rows 17-55) =====
   ws['B17'] = { t: 's', v: 'LABOR BREAKDOWN' };
   
   // Row 18: Column headers
@@ -222,147 +222,151 @@ export function exportBudgetPacket(
   ws['I18'] = { t: 's', v: 'RATE' };
   ws['J18'] = { t: 's', v: 'TOTAL COST' };
 
-  // Labor data starts at row 20, max 16 rows (20-35)
-  const LABOR_START_ROW = 20;
-  const LABOR_END_ROW = 35;
+  // Labor data: Rows 19-54 (35 rows max)
+  const LABOR_START_ROW = 19;
+  const LABOR_END_ROW = 54;
   
   laborSummary.forEach((item, index) => {
-    if (index >= 16) return; // Max 16 labor items
+    if (index >= 35) return; // Max 35 labor items
     
     const row = LABOR_START_ROW + index;
     
-    // Cost Code (column B)
     ws[`B${row}`] = { t: 's', v: item.costCode };
-    
-    // Description (column D)
     ws[`D${row}`] = { t: 's', v: item.description };
-    
-    // Hours (column H)
     ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
     
-    // Rate (column I) - Leave empty for user to fill, or use provided rate
     if (laborRate > 0) {
       ws[`I${row}`] = { t: 'n', v: laborRate, z: '#,##0.00' };
     }
     
-    // Total Cost formula (column J): =I{row}*H{row}
     ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
   });
 
-  // Fill remaining labor rows with empty structure and formulas
+  // Fill remaining labor rows with formula structure
   for (let row = LABOR_START_ROW + laborSummary.length; row <= LABOR_END_ROW; row++) {
     ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
   }
 
-  // Row 36: Labor Subtotals with SUM formulas
-  ws['G36'] = { t: 's', v: 'LABOR SUBTOTAL:' };
-  ws['H36'] = { t: 'n', f: `SUM(H${LABOR_START_ROW}:H${LABOR_END_ROW})`, v: 0, z: '#,##0.0' };
-  ws['J36'] = { t: 'n', f: `SUM(J${LABOR_START_ROW}:J${LABOR_END_ROW})`, v: 0, z: '#,##0' };
+  // Row 55: Labor TOTALS
+  ws['E55'] = { t: 's', v: 'TOTALS' };
+  ws['H55'] = { t: 'n', f: `SUM(H${LABOR_START_ROW}:H${LABOR_END_ROW})`, v: 0, z: '#,##0.0' };
+  ws['J55'] = { t: 'n', f: `SUM(J${LABOR_START_ROW}:J${LABOR_END_ROW})`, v: 0, z: '#,##0' };
 
-  // ===== MATERIAL BREAKDOWN SECTION (Rows 38-49) =====
-  const MATERIAL_HEADER_ROW = 38;
-  const MATERIAL_COLS_ROW = 39;
-  const MATERIAL_START_ROW = 40;
-  const MATERIAL_END_ROW = 49; // Max 10 material rows
+  // ===== SECOND HEADER BLOCK (Rows 58-71) - Before Material Section =====
+  ws['D58'] = { t: 's', v: '   CHANGE ORDER' };
+  ws['E59'] = { t: 's', v: '   WORKSHEET' };
   
-  // Row 38: Section header - "MATERIAL BREAKDOWN" to match template
+  ws['B62'] = { t: 's', v: 'JOB #:' };
+  ws['C62'] = { t: 's', v: projectInfo.jobNumber };
+  ws['G62'] = { t: 's', v: '0' };
+  ws['H62'] = { t: 's', v: '  Pending Change Order (MPCO)' };
+  
+  ws['B63'] = { t: 's', v: 'JOB NAME:' };
+  ws['C63'] = { t: 's', v: projectInfo.jobName };
+  ws['H63'] = { t: 's', v: ' MCE # (s)' };
+  ws['I63'] = { t: 's', v: 'Initial Budget' };
+  
+  ws['B64'] = { t: 's', v: 'DATE:' };
+  ws['C64'] = { t: 's', v: projectInfo.date.toLocaleDateString() };
+  
+  ws['B65'] = { t: 's', v: 'BY:' };
+  ws['C65'] = { t: 's', v: projectInfo.preparedBy };
+  ws['H65'] = { t: 's', v: '  Change Order  (CO)' };
+  
+  ws['H66'] = { t: 's', v: ' (if PCO transfer to CO, see page 2)' };
+  ws['H67'] = { t: 's', v: '     CO # ' };
+  ws['I67'] = { t: 's', v: '0' };
+  
+  ws['B69'] = { t: 's', v: 'Client Change Reference:' };
+  ws['G69'] = { t: 's', v: 'X' };
+  ws['H69'] = { t: 's', v: 'Original Budget' };
+  ws['I70'] = { t: 's', v: '0' };
+
+  // ===== MATERIAL BREAKDOWN SECTION (Rows 73-108) =====
+  const MATERIAL_HEADER_ROW = 73;
+  const MATERIAL_COLS_ROW = 74;
+  const MATERIAL_START_ROW = 75;
+  const MATERIAL_END_ROW = 108;
+  
   ws[`B${MATERIAL_HEADER_ROW}`] = { t: 's', v: 'MATERIAL BREAKDOWN' };
   
-  // Row 39: Column headers - "AMOUNT" to match template, not "Total Cost"
   ws[`B${MATERIAL_COLS_ROW}`] = { t: 's', v: 'Cost Code' };
   ws[`D${MATERIAL_COLS_ROW}`] = { t: 's', v: 'DESCRIPTION' };
   ws[`H${MATERIAL_COLS_ROW}`] = { t: 's', v: 'AMOUNT' };
 
-  // Material data
+  // Material data: Rows 75-108 (33 rows max)
   materialSummary.forEach((item, index) => {
-    if (index >= 10) return; // Max 10 material items
+    if (index >= 33) return; // Max 33 material items
     
     const row = MATERIAL_START_ROW + index;
     
-    // Cost Code (column B)
-    ws[`B${row}`] = { t: 's', v: item.costCode };
+    // Format material code as "01 0000 {code}" to match template format
+    const formattedCode = item.costCode.includes(' ') ? item.costCode : `01 0000 ${item.costCode}`;
     
-    // Description (column D) - same column as labor description
-    ws[`D${row}`] = { t: 's', v: item.description };
-    
-    // Amount (column H) - same column as hours for visual alignment
+    ws[`B${row}`] = { t: 's', v: formattedCode };
+    ws[`D${row}`] = { t: 's', v: item.description || getMaterialCodeDescription(item.costCode) };
     ws[`H${row}`] = { t: 'n', v: Math.round(item.materialDollars * 100) / 100, z: '#,##0.00' };
   });
 
-  // Fill remaining material rows with 0
-  for (let row = MATERIAL_START_ROW + materialSummary.length; row <= MATERIAL_END_ROW; row++) {
-    ws[`H${row}`] = { t: 'n', v: 0, z: '#,##0' };
-  }
-
-  // ===== SUMMARY SECTION (Rows 52-56) =====
-  const SUMMARY_START = 52;
-  
-  // Row 52: TOTAL COST (Labor + Material)
-  ws[`J${SUMMARY_START}`] = { t: 's', v: 'TOTAL COST' };
-  ws[`K${SUMMARY_START}`] = { 
+  // ===== RIGHT-SIDE SUMMARY BOX (Rows 77-81, Columns J-K) =====
+  ws['J77'] = { t: 's', v: 'TOTAL COST' };
+  ws['K77'] = { 
     t: 'n', 
-    f: `J36+SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
+    f: `J55+SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
     v: 0,
     z: '#,##0.00'
   };
   
-  // Row 53: Labor Hours Total
-  ws[`E${SUMMARY_START + 1}`] = { t: 's', v: 'Labor Hours Total' };
-  ws[`G${SUMMARY_START + 1}`] = { t: 'n', f: 'H36', v: 0, z: '#,##0.0' };
-  ws[`J${SUMMARY_START + 1}`] = { t: 's', v: 'PLUS' };
+  ws['J78'] = { t: 's', v: 'PLUS' };
   
-  // Row 54: Labor $$ Total
-  ws[`E${SUMMARY_START + 2}`] = { t: 's', v: 'Labor $$ Total' };
-  ws[`G${SUMMARY_START + 2}`] = { t: 'n', f: 'J36', v: 0, z: '#,##0' };
-  ws[`H${SUMMARY_START + 2}`] = { t: 'n', v: 0, z: '0%' };
-  ws[`J${SUMMARY_START + 2}`] = { t: 's', v: 'MARKUP' };
-  ws[`K${SUMMARY_START + 2}`] = { t: 'n', v: 0, z: '#,##0' };
+  ws['J79'] = { t: 's', v: 'MARKUP' };
+  ws['K79'] = { t: 'n', v: 0, z: '#,##0' };
   
-  // Row 55: Material Total
-  ws[`E${SUMMARY_START + 3}`] = { t: 's', v: 'Material Total' };
-  ws[`G${SUMMARY_START + 3}`] = { 
+  ws['J80'] = { t: 's', v: 'TOTAL' };
+  ws['K80'] = { 
+    t: 'n', 
+    f: 'K77+K79',
+    v: 0,
+    z: '#,##0.00'
+  };
+  
+  ws['J81'] = { t: 's', v: '(PCO, TRNSFR, CO, or RVSN)' };
+
+  // ===== BOTTOM SUMMARY ROWS (Rows 110, 112, 114) =====
+  ws['G110'] = { t: 's', v: 'MATERIAL TOTAL -->' };
+  ws['H110'] = { 
     t: 'n', 
     f: `SUM(H${MATERIAL_START_ROW}:H${MATERIAL_END_ROW})`,
     v: 0,
     z: '#,##0.00'
   };
-  ws[`H${SUMMARY_START + 3}`] = { t: 'n', v: 0, z: '0%' };
-  ws[`J${SUMMARY_START + 3}`] = { t: 's', v: 'MARGIN %' };
-  ws[`K${SUMMARY_START + 3}`] = { t: 'n', v: 0, z: '0%' };
   
-  // Row 56: TOTAL (with formula)
-  ws[`J${SUMMARY_START + 4}`] = { t: 's', v: 'TOTAL' };
-  ws[`K${SUMMARY_START + 4}`] = { 
-    t: 'n', 
-    f: `K${SUMMARY_START}+K${SUMMARY_START + 2}`,
-    v: 0,
-    z: '#,##0.00'
-  };
+  ws['G112'] = { t: 's', v: 'LABOR TOTAL -->' };
+  ws['H112'] = { t: 'n', f: 'J55', v: 0, z: '#,##0.00' };
+  
+  ws['G114'] = { t: 's', v: 'TOTAL -->' };
+  ws['H114'] = { t: 'n', f: 'H110+H112', v: 0, z: '#,##0.00' };
 
   // ===== WORKSHEET CONFIGURATION =====
-  
-  // Set column widths
   ws['!cols'] = [
     { wch: 3 },   // A
-    { wch: 14 },  // B - Cost Code
+    { wch: 16 },  // B - Cost Code
     { wch: 18 },  // C - Job info values
     { wch: 25 },  // D - Description
-    { wch: 20 },  // E - Description (non-labor)
+    { wch: 12 },  // E - TOTALS label
     { wch: 8 },   // F
-    { wch: 16 },  // G - Subtotal labels
-    { wch: 12 },  // H - Hours
+    { wch: 20 },  // G - Bottom totals labels
+    { wch: 14 },  // H - Hours / Amount
     { wch: 10 },  // I - Rate
-    { wch: 14 },  // J - Total Cost
+    { wch: 14 },  // J - Total Cost / Summary labels
     { wch: 14 },  // K - Summary values
   ];
 
-  // Set print area / used range
-  ws['!ref'] = `A1:K${SUMMARY_START + 5}`;
+  ws['!ref'] = 'A1:K115';
 
-  // Add worksheet to workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Initial Budget');
 
-  // ===== GENERATE FILENAME AND DOWNLOAD =====
+  // Generate filename and download
   const dateStr = projectInfo.date.toISOString().split('T')[0];
   const safeName = projectInfo.jobNumber.replace(/[^a-zA-Z0-9]/g, '_');
   const filename = `Budget_Packet_${safeName}_${dateStr}.xlsx`;
@@ -382,6 +386,35 @@ export function exportBudgetPacket(
     totalMaterialDollars,
     grandTotal: totalLaborDollars + totalMaterialDollars
   };
+}
+
+/**
+ * Helper: Get material code description
+ */
+function getMaterialCodeDescription(code: string): string {
+  const descriptions: Record<string, string> = {
+    '9510': 'PIPE',
+    '9511': 'CAST IRON PIPE & FITTINGS',
+    '9512': 'COPPER PIPE & FITTINGS',
+    '9513': 'PLASTIC PIPE & FITTINGS',
+    '9514': 'STAINLESS STEEL PIPE & FITTINGS',
+    '9515': 'CARBON STEEL PIPE & FITTINGS',
+    '9520': 'SPECIALTIES',
+    '9521': 'HANGERS & SUPPORTS',
+    '9522': 'INSULATION',
+    '9523': 'IDENTIFICATION',
+    '9524': 'VALVES',
+    '9525': 'FIXTURES',
+    '9526': 'EQUIPMENT',
+    '9530': 'FITTINGS',
+    '9540': 'FLANGES',
+    '9550': 'MISCELLANEOUS',
+    '9560': 'TESTING',
+    '9570': 'CONSUMABLES',
+    'MCKM': 'MISCELLANEOUS MATERIAL',
+  };
+  // Try exact match first, then try just the numeric part
+  return descriptions[code] || descriptions[code.replace(/\D/g, '')] || '';
 }
 
 // ============================================
