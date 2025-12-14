@@ -7,6 +7,7 @@ import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo } from '@/utils/budgetExportSystem';
 import BudgetAdjustmentsPanel, { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
+import SourceFileSummary from '@/components/SourceFileSummary';
 import { 
   useSystemMappings, 
   useSaveMapping, 
@@ -652,6 +653,7 @@ const EnhancedCostCodeManager = () => {
         laborDollars: item.labor_dollars || 0,
         costCode: item.cost_code || '',
         materialCostCode: (item as any).material_cost_code || '',
+        sourceFile: item.source_file || '',
         suggestedCode: generateCostCode({
           system: item.system || '',
           floor: item.floor || ''
@@ -845,34 +847,43 @@ const EnhancedCostCodeManager = () => {
             const processedChunk = chunk
               .filter((row: any) => !isHeaderRow(row))
               .filter((row: any) => !isEmptyOrSummaryRow(row))
-              .map((row: any, index: number) => ({
-                id: processedItemsCount + index,
-                drawing: String(row['D'] || row['Drawing'] || ''),
-                system: String(row['D_1'] || row['System'] || ''),
-                floor: String(row['D_2'] || row['Floor'] || ''),
-                zone: String(row['D_3'] || row['Zone'] || ''),
-                symbol: String(row['D_4'] || row['Symbol'] || ''),
-                estimator: String(row['D_5'] || row['Estimator'] || ''),
-                materialSpec: String(row['D_6'] || row['Material Spec'] || ''),
-                itemType: String(row['D_7'] || row['Item Type'] || ''),
-                reportCat: String(row['D_8'] || row['Report Cat'] || ''),
-                trade: String(row['D_9'] || row['Trade'] || ''),
-                materialDesc: String(row['A'] || row['Material Description'] || ''),
-                itemName: String(row['A_1'] || row['Item Name'] || ''),
-                size: String(row['A_2'] || row['Size'] || ''),
-                quantity: Number(row['T'] || row['Quantity']) || 0,
-                listPrice: Number(row['A_3'] || row['List Price']) || 0,
-                materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
-                weight: Number(row['T_2'] || row['Weight']) || 0,
-                hours: Number(row['T_3'] || row['Hours']) || 0,
-                laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
-                costCode: '',
-                materialCostCode: '',
-                suggestedCode: generateCostCode({
+              .map((row: any, index: number) => {
+                // CRITICAL: Use "Field Hours" (Column AA) NOT "Hours" (Column U)
+                const fieldHours = Number(row['Field Hours'] || row['Field Hour'] || row['FieldHours'] || 0);
+                const unitHours = Number(row['T_3'] || row['Hours'] || 0);
+                const quantity = Number(row['T'] || row['Quantity'] || 1);
+                const hours = fieldHours > 0 ? fieldHours : (unitHours * quantity);
+                
+                return {
+                  id: processedItemsCount + index,
+                  drawing: String(row['D'] || row['Drawing'] || ''),
                   system: String(row['D_1'] || row['System'] || ''),
-                  floor: String(row['D_2'] || row['Floor'] || '')
-                })
-              }));
+                  floor: String(row['D_2'] || row['Floor'] || ''),
+                  zone: String(row['D_3'] || row['Zone'] || ''),
+                  symbol: String(row['D_4'] || row['Symbol'] || ''),
+                  estimator: String(row['D_5'] || row['Estimator'] || ''),
+                  materialSpec: String(row['D_6'] || row['Material Spec'] || ''),
+                  itemType: String(row['D_7'] || row['Item Type'] || ''),
+                  reportCat: String(row['D_8'] || row['Report Cat'] || ''),
+                  trade: String(row['D_9'] || row['Trade'] || ''),
+                  materialDesc: String(row['A'] || row['Material Description'] || ''),
+                  itemName: String(row['A_1'] || row['Item Name'] || ''),
+                  size: String(row['A_2'] || row['Size'] || ''),
+                  quantity: quantity,
+                  listPrice: Number(row['A_3'] || row['List Price']) || 0,
+                  materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
+                  weight: Number(row['T_2'] || row['Weight']) || 0,
+                  hours: hours,
+                  laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
+                  costCode: '',
+                  materialCostCode: '',
+                  sourceFile: file.name,
+                  suggestedCode: generateCostCode({
+                    system: String(row['D_1'] || row['System'] || ''),
+                    floor: String(row['D_2'] || row['Floor'] || '')
+                  })
+                };
+              });
             
             processedData.push(...processedChunk);
             processedItemsCount += processedChunk.length;
@@ -1769,6 +1780,12 @@ const EnhancedCostCodeManager = () => {
                   </p>
                 </div>
               </div>
+
+              {/* Source File Audit Summary */}
+              <SourceFileSummary 
+                items={estimateData} 
+                projectId={currentProject?.id} 
+              />
 
               {/* Filters with Search */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">

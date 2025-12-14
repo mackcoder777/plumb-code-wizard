@@ -63,6 +63,7 @@ export interface EstimateItem {
   labor_dollars: number;
   cost_code: string;
   material_cost_code: string;
+  source_file: string | null;
   created_at: string;
   updated_at: string;
 }
