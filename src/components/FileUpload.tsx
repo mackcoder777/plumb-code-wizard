@@ -69,46 +69,175 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     return suggestions.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
   }, []);
 
-  const processRawData = useCallback((rawData: any[]): EstimateItem[] => {
-    return rawData.map((row, index) => {
-      // CRITICAL: Use "Field Hours" (Column AA - Total Hours) NOT "Hours" (Column U - Unit Hours)
-      // Field Hours = Unit Hours × Quantity (already calculated in Excel)
-      const fieldHours = parseFloat(row['Field Hours'] || row['Field Hour'] || row['FieldHours'] || 0);
-      const unitHours = parseFloat(row['T_3'] || row['Hours'] || 0);
-      const quantity = parseFloat(row['T'] || row['Quantity'] || 1);
+  // FIXED: Use header-based detection like AddFileDialog.tsx
+  const processRawData = useCallback(async (file: File): Promise<EstimateItem[]> => {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data);
+    
+    // Find Raw Data sheet
+    let sheetName = workbook.SheetNames.find(name => 
+      name.toLowerCase().includes('raw')
+    ) || workbook.SheetNames[0];
+    
+    const sheet = workbook.Sheets[sheetName];
+    
+    // CRITICAL FIX: Use { header: 1 } to get raw arrays instead of auto-keyed objects
+    const rawData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    
+    console.log('=== FileUpload Parsing Debug ===');
+    console.log('Sheet name:', sheetName);
+    console.log('Total rows:', rawData.length);
+    
+    // Find the header row by scanning first 15 rows for key columns
+    let headerRowIndex = 0;
+    for (let i = 0; i < Math.min(15, rawData.length); i++) {
+      const row = rawData[i];
+      if (row && Array.isArray(row)) {
+        const rowLower = row.map(cell => String(cell || '').toLowerCase());
+        // Look for rows containing both "system" and "drawing" or "material"
+        if (rowLower.some(c => c === 'system') && 
+            (rowLower.some(c => c.includes('drawing')) || rowLower.some(c => c.includes('material')))) {
+          headerRowIndex = i;
+          console.log('Found header row at index:', i);
+          break;
+        }
+      }
+    }
+    
+    // Get headers and normalize to lowercase
+    const headers = (rawData[headerRowIndex] || []).map((h: any) => 
+      String(h || '').toLowerCase().trim()
+    );
+    
+    console.log('Headers found:', headers.slice(0, 30)); // First 30 headers
+    
+    // Helper function to find column index by partial match
+    const findCol = (...searchTerms: string[]): number => {
+      for (const term of searchTerms) {
+        const idx = headers.findIndex(h => {
+          if (term.startsWith('=')) {
+            // Exact match
+            return h === term.slice(1);
+          }
+          return h.includes(term);
+        });
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+    
+    // Build column map - CRITICAL: Look for "field hours" NOT "hours"
+    const colMap = {
+      drawing: findCol('drawing'),
+      system: findCol('=system'),
+      floor: findCol('floor', 'flr'),
+      zone: findCol('zone'),
+      symbol: findCol('symbol'),
+      estimator: findCol('estimator'),
+      materialSpec: findCol('material spec', 'mat spec'),
+      itemType: findCol('item type', 'item ty'),
+      reportCat: findCol('report cat'),
+      trade: findCol('trade', 'trad'),
+      materialDesc: findCol('material description', 'material desc'),
+      itemName: findCol('item name'),
+      size: findCol('=size'),
+      quantity: findCol('quantity', 'qty'),
+      listPrice: findCol('list price'),
+      materialDollars: findCol('material dollar'),
+      weight: findCol('=weight'),
+      // CRITICAL: Field Hours (Column AA) - Total hours for line item
+      fieldHours: findCol('field hour', 'field hours'),
+      // Unit Hours (Column U) - Per-item hours (backup only)
+      unitHours: findCol('=hours'),
+      laborDollars: findCol('labor dollar'),
+    };
+    
+    console.log('Column Map:', colMap);
+    console.log('Field Hours column index:', colMap.fieldHours, '-> Header:', headers[colMap.fieldHours]);
+    console.log('Unit Hours column index:', colMap.unitHours, '-> Header:', headers[colMap.unitHours]);
+    
+    // Validate critical columns
+    if (colMap.system === -1) {
+      console.error('Could not find "System" column in spreadsheet');
+    }
+    
+    if (colMap.fieldHours === -1) {
+      console.warn('WARNING: "Field Hours" column not found! Will calculate from Unit Hours × Quantity');
+    }
+    
+    // Parse data rows
+    const items: EstimateItem[] = [];
+    let totalHours = 0;
+    let totalMaterial = 0;
+    
+    for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+      const row = rawData[i];
+      if (!row || row.length < 5) continue;
       
-      // Use Field Hours if available, otherwise calculate from Unit Hours × Quantity
-      const hours = fieldHours > 0 ? fieldHours : (unitHours * quantity);
+      const system = row[colMap.system];
+      const drawing = row[colMap.drawing];
+      const materialDesc = row[colMap.materialDesc];
+      const itemName = row[colMap.itemName];
+      
+      // Skip empty/summary rows (rows with no key identifiers)
+      if (!system && !drawing && !materialDesc && !itemName) continue;
+      
+      // CRITICAL: Extract hours correctly
+      let hours = 0;
+      
+      // Priority 1: Use Field Hours (Column AA) - this is the total hours for the line
+      if (colMap.fieldHours !== -1 && row[colMap.fieldHours] != null) {
+        hours = parseFloat(row[colMap.fieldHours]) || 0;
+      }
+      // Priority 2: Calculate from Unit Hours × Quantity
+      else if (colMap.unitHours !== -1 && row[colMap.unitHours] != null) {
+        const unitHours = parseFloat(row[colMap.unitHours]) || 0;
+        const qty = parseFloat(row[colMap.quantity]) || 1;
+        hours = unitHours * qty;
+      }
+      
+      const materialDollars = parseFloat(row[colMap.materialDollars]) || 0;
+      totalHours += hours;
+      totalMaterial += materialDollars;
       
       const item: EstimateItem = {
-        id: index,
-        drawing: row['D'] || row['Drawing'] || '',
-        system: row['D_1'] || row['System'] || '',
-        floor: row['D_2'] || row['Floor'] || '',
-        zone: row['D_3'] || row['Zone'] || '',
-        symbol: row['D_4'] || row['Symbol'] || '',
-        estimator: row['D_5'] || row['Estimator'] || '',
-        materialSpec: row['D_6'] || row['Material Spec'] || '',
-        itemType: row['D_7'] || row['Item Type'] || '',
-        reportCat: row['D_8'] || row['Report Cat'] || '',
-        trade: row['D_9'] || row['Trade'] || '',
-        materialDesc: row['A'] || row['Material Description'] || '',
-        itemName: row['A_1'] || row['Item Name'] || '',
-        size: row['A_2'] || row['Size'] || '',
-        quantity: quantity,
-        listPrice: parseFloat(row['A_3'] || row['List Price'] || 0),
-        materialDollars: parseFloat(row['T_1'] || row['Material Dollars'] || 0),
-        weight: parseFloat(row['T_2'] || row['Weight'] || 0),
+        id: i - headerRowIndex - 1,
+        drawing: String(row[colMap.drawing] || ''),
+        system: String(system || ''),
+        floor: String(row[colMap.floor] || ''),
+        zone: String(row[colMap.zone] || ''),
+        symbol: String(row[colMap.symbol] || ''),
+        estimator: String(row[colMap.estimator] || ''),
+        materialSpec: String(row[colMap.materialSpec] || ''),
+        itemType: String(row[colMap.itemType] || ''),
+        reportCat: String(row[colMap.reportCat] || ''),
+        trade: String(row[colMap.trade] || ''),
+        materialDesc: String(row[colMap.materialDesc] || ''),
+        itemName: String(row[colMap.itemName] || ''),
+        size: String(row[colMap.size] || ''),
+        quantity: parseFloat(row[colMap.quantity]) || 0,
+        listPrice: parseFloat(row[colMap.listPrice]) || 0,
+        materialDollars: materialDollars,
+        weight: parseFloat(row[colMap.weight]) || 0,
         hours: hours,
-        laborDollars: parseFloat(row['T_4'] || row['Labor Dollars'] || 0),
+        laborDollars: parseFloat(row[colMap.laborDollars]) || 0,
         costCode: '',
         materialCostCode: '',
-        suggestedCodes: []
+        suggestedCodes: [],
+        sourceFile: file.name,
       };
       
       item.suggestedCodes = getSuggestedCostCodes(item);
-      return item;
-    });
+      items.push(item);
+    }
+    
+    console.log('=== FileUpload Parsing Complete ===');
+    console.log('Items parsed:', items.length);
+    console.log('Total Field Hours:', totalHours.toFixed(3));
+    console.log('Total Material $:', totalMaterial.toFixed(2));
+    console.log('Source File:', file.name);
+    
+    return items;
   }, [getSuggestedCostCodes]);
 
   const handleFile = useCallback(async (file: File) => {
@@ -117,19 +246,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     setIsLoading(true);
     
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      
-      // Look for Raw Data sheet
-      const sheetName = workbook.SheetNames.find(name => 
-        name.toLowerCase().includes('raw') || 
-        name.toLowerCase().includes('data')
-      ) || workbook.SheetNames[0];
-      
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(sheet);
-      
-      const processedData = processRawData(jsonData);
+      const processedData = await processRawData(file);
       onFileUpload(processedData, file);
     } catch (error) {
       console.error('Error processing file:', error);
