@@ -971,7 +971,19 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                 <PopoverContent className="w-80 p-0" align="start">
                                   <CodePicker 
                                     groupKey={`${group.materialSpec}|${typeGroup.itemType}`} 
-                                    onSelect={(code) => handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code)} 
+                                    onSelect={(code) => {
+                                      // If items are selected within this group, only update those
+                                      const groupItemIds = typeGroup.items.map(i => String(i.id));
+                                      const selectedInGroup = groupItemIds.filter(id => selectedItems.has(id));
+                                      
+                                      if (selectedInGroup.length > 0) {
+                                        // Update only selected items
+                                        handleItemLevelAssign(code);
+                                      } else {
+                                        // No items selected, update entire group
+                                        handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code);
+                                      }
+                                    }} 
                                   />
                                 </PopoverContent>
                               </Popover>
