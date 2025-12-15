@@ -697,85 +697,195 @@ const EnhancedCostCodeManager = () => {
         setLoadingProgress(15);
         setLoadingMessage('Creating worker thread...');
         
-        // Create inline Web Worker
+        // Create inline Web Worker with header-based column detection
         const workerCode = `
           importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
           
           self.onmessage = async function(e) {
-            const { data, action } = e.data;
+            const { data, action, fileName } = e.data;
             
             if (action === 'parse') {
               try {
-                // Parse Excel file
                 self.postMessage({ type: 'progress', progress: 15, message: 'Parsing Excel structure...' });
                 
-                const workbook = XLSX.read(data, { 
-                  type: 'array',
-                  cellDates: true,
-                  cellNF: true,
-                  cellStyles: false
-                });
+                const workbook = XLSX.read(data, { type: 'array' });
                 
                 self.postMessage({ type: 'progress', progress: 30, message: 'Finding Raw Data sheet...' });
                 
                 const sheet = workbook.Sheets['Raw Data'];
                 if (!sheet) {
-                  throw new Error('Raw Data sheet not found in file. Please ensure your Excel file has a "Raw Data" sheet.');
+                  throw new Error('Raw Data sheet not found. Please ensure your Excel file has a "Raw Data" sheet.');
                 }
                 
-                // Get row count for user info
-                const range = XLSX.utils.decode_range(sheet['!ref']);
-                const totalRows = range.e.r - range.s.r;
+                // Use header: 1 to get raw arrays for proper column detection
+                const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
                 
-                self.postMessage({ 
-                  type: 'progress', 
-                  progress: 40, 
-                  message: \`Found \${totalRows.toLocaleString()} rows. Converting to JSON...\`
-                });
+                console.log('=== WEB WORKER DEBUG ===');
+                console.log('Total rows in sheet:', rawData.length);
                 
-                // Use native sheet_to_json (fast, optimized, reliable)
-                // This will take 15-30 seconds for large files but won't crash
-                const startConversion = performance.now();
-                const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-                const conversionTime = Math.round((performance.now() - startConversion) / 1000);
+                self.postMessage({ type: 'progress', progress: 40, message: 'Detecting column headers...' });
                 
-                self.postMessage({ 
-                  type: 'progress', 
-                  progress: 65, 
-                  message: \`Conversion complete in \${conversionTime}s. Preparing to transfer \${jsonData.length.toLocaleString()} rows...\`
-                });
+                // Find header row - scan first 10 rows for row containing "system" and "drawing"
+                let headerRowIndex = 0;
+                for (let i = 0; i < Math.min(10, rawData.length); i++) {
+                  const row = rawData[i];
+                  if (!row || !Array.isArray(row)) continue;
+                  const rowStr = row.map(cell => String(cell || '').toLowerCase().trim());
+                  if (rowStr.includes('system') && rowStr.includes('drawing')) {
+                    headerRowIndex = i;
+                    break;
+                  }
+                }
                 
-                // Send data in chunks to avoid memory issues during transfer
-                const TRANSFER_CHUNK_SIZE = 100;
-                const totalChunks = Math.ceil(jsonData.length / TRANSFER_CHUNK_SIZE);
+                const headers = (rawData[headerRowIndex] || []).map(h => String(h || '').toLowerCase().trim());
+                console.log('Header row index:', headerRowIndex);
+                console.log('Headers found:', headers.slice(0, 30));
                 
-                for (let i = 0; i < jsonData.length; i += TRANSFER_CHUNK_SIZE) {
-                  const chunk = jsonData.slice(i, i + TRANSFER_CHUNK_SIZE);
-                  const chunkNum = Math.floor(i / TRANSFER_CHUNK_SIZE) + 1;
-                  const transferProgress = 65 + Math.round((chunkNum / totalChunks) * 15);
+                // Find column indices by header name
+                const findCol = function(...terms) {
+                  for (const term of terms) {
+                    for (let i = 0; i < headers.length; i++) {
+                      const h = headers[i];
+                      if (term.startsWith('=')) {
+                        if (h === term.slice(1)) return i;
+                      } else {
+                        if (h.includes(term)) return i;
+                      }
+                    }
+                  }
+                  return -1;
+                };
+                
+                const colMap = {
+                  drawing: findCol('=drawing'),
+                  system: findCol('=system'),
+                  floor: findCol('=floor'),
+                  zone: findCol('=zone'),
+                  symbol: findCol('=symbol'),
+                  estimator: findCol('=estimator'),
+                  materialSpec: findCol('material spec'),
+                  itemType: findCol('item type'),
+                  reportCat: findCol('report cat'),
+                  trade: findCol('=trade'),
+                  materialDescription: findCol('material description', 'material desc'),
+                  itemName: findCol('item name'),
+                  size: findCol('=size'),
+                  quantity: findCol('=quantity'),
+                  listPrice: findCol('list price'),
+                  multiplier: findCol('=multiplier'),
+                  materialDollars: findCol('material dollar'),
+                  weight: findCol('=weight'),
+                  fieldHours: findCol('=field hours', 'field hour'),
+                  unitHours: findCol('=hours'),
+                  laborDollars: findCol('labor dollar'),
+                };
+                
+                console.log('Column map:', JSON.stringify(colMap));
+                console.log('fieldHours col:', colMap.fieldHours, '-> "' + headers[colMap.fieldHours] + '"');
+                
+                if (colMap.system === -1) {
+                  throw new Error('Could not find "System" column in spreadsheet');
+                }
+                
+                self.postMessage({ type: 'progress', progress: 50, message: 'Processing data rows...' });
+                
+                // Process data rows - stop when System is empty (formula rows)
+                const dataStartRow = headerRowIndex + 1;
+                const items = [];
+                let totalHours = 0;
+                let totalMaterial = 0;
+                
+                for (let i = dataStartRow; i < rawData.length; i++) {
+                  const row = rawData[i];
+                  if (!row || row.length < 5) continue;
                   
-                  self.postMessage({ 
-                    type: 'chunk', 
+                  // CRITICAL: Stop at rows where System is empty (user formula rows)
+                  const system = row[colMap.system];
+                  if (!system || String(system).trim() === '') continue;
+                  
+                  const drawing = row[colMap.drawing];
+                  if (!drawing || String(drawing).trim() === '') continue;
+                  
+                  // Use Field Hours directly (Column AA) - already contains total hours
+                  let hours = 0;
+                  if (colMap.fieldHours !== -1) {
+                    const val = row[colMap.fieldHours];
+                    if (val !== '' && val != null && !isNaN(parseFloat(val))) {
+                      hours = parseFloat(val) || 0;
+                    }
+                  } else if (colMap.unitHours !== -1) {
+                    // Fallback only if Field Hours column missing
+                    const unitHrs = parseFloat(row[colMap.unitHours]) || 0;
+                    const qty = parseFloat(row[colMap.quantity]) || 1;
+                    hours = unitHrs * qty;
+                  }
+                  
+                  const materialDollars = parseFloat(row[colMap.materialDollars]) || 0;
+                  totalHours += hours;
+                  totalMaterial += materialDollars;
+                  
+                  items.push({
+                    drawing: String(drawing),
+                    system: String(system),
+                    floor: String(row[colMap.floor] || ''),
+                    zone: String(row[colMap.zone] || ''),
+                    symbol: String(row[colMap.symbol] || ''),
+                    estimator: String(row[colMap.estimator] || ''),
+                    materialSpec: String(row[colMap.materialSpec] || ''),
+                    itemType: String(row[colMap.itemType] || ''),
+                    reportCat: String(row[colMap.reportCat] || ''),
+                    trade: String(row[colMap.trade] || ''),
+                    materialDescription: String(row[colMap.materialDescription] || ''),
+                    itemName: String(row[colMap.itemName] || ''),
+                    size: String(row[colMap.size] || ''),
+                    quantity: parseFloat(row[colMap.quantity]) || 0,
+                    listPrice: parseFloat(row[colMap.listPrice]) || 0,
+                    multiplier: parseFloat(row[colMap.multiplier]) || 1,
+                    materialDollars: materialDollars,
+                    weight: parseFloat(row[colMap.weight]) || 0,
+                    hours: hours,
+                    laborDollars: parseFloat(row[colMap.laborDollars]) || 0,
+                  });
+                }
+                
+                console.log('=== PARSING COMPLETE ===');
+                console.log('Items:', items.length);
+                console.log('Total Hours:', totalHours.toFixed(2));
+                console.log('Expected: 1,568.43');
+                console.log('Match:', totalHours > 1560 && totalHours < 1580 ? 'YES ✓' : 'NO ✗');
+                
+                // Send items in chunks
+                const CHUNK_SIZE = 100;
+                const totalChunks = Math.ceil(items.length / CHUNK_SIZE);
+                
+                for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+                  const chunk = items.slice(i, i + CHUNK_SIZE);
+                  const chunkNum = Math.floor(i / CHUNK_SIZE) + 1;
+                  const progress = 50 + Math.round((chunkNum / totalChunks) * 30);
+                  
+                  self.postMessage({
+                    type: 'chunk',
                     chunk: chunk,
                     chunkNumber: chunkNum,
                     totalChunks: totalChunks,
-                    totalRows: jsonData.length,
-                    progress: transferProgress,
-                    message: \`Transferring chunk \${chunkNum.toLocaleString()} of \${totalChunks.toLocaleString()}...\`
+                    totalRows: items.length,
+                    progress: progress,
+                    message: 'Processing chunk ' + chunkNum + ' of ' + totalChunks + '...'
                   });
                   
-                  // Small yield to keep worker responsive
                   await new Promise(resolve => setTimeout(resolve, 0));
                 }
                 
-                self.postMessage({ 
-                  type: 'transfer-complete', 
-                  totalRows: jsonData.length,
+                self.postMessage({
+                  type: 'transfer-complete',
+                  totalRows: items.length,
+                  totalHours: totalHours,
                   progress: 80,
-                  message: \`Successfully transferred \${jsonData.length.toLocaleString()} rows!\`
+                  message: 'Complete! ' + items.length + ' items, ' + totalHours.toFixed(1) + ' hours'
                 });
                 
               } catch (error) {
+                console.error('Worker error:', error);
                 self.postMessage({ type: 'error', error: error.message });
               }
             }
@@ -811,79 +921,36 @@ const EnhancedCostCodeManager = () => {
             }
             
           } else if (type === 'chunk') {
-            // Helper to detect header rows (rows that contain column header text instead of actual data)
-            const isHeaderRow = (row: any): boolean => {
-              const drawing = String(row['D'] || row['Drawing'] || '').toLowerCase().trim();
-              const system = String(row['D_1'] || row['System'] || '').toLowerCase().trim();
-              const floor = String(row['D_2'] || row['Floor'] || '').toLowerCase().trim();
-              const materialDesc = String(row['A'] || row['Material Description'] || '').toLowerCase().trim();
-              const itemName = String(row['A_1'] || row['Item Name'] || '').toLowerCase().trim();
-              
-              // Check if this row contains column header text
-              const headerKeywords = ['drawing', 'system', 'floor', 'material description', 'item name', 'zone', 'quantity', 'hours'];
-              const fieldsToCheck = [drawing, system, floor, materialDesc, itemName];
-              
-              // If 3 or more fields match header keywords exactly, it's a header row
-              const headerMatches = fieldsToCheck.filter(field => 
-                headerKeywords.some(keyword => field === keyword)
-              ).length;
-              
-              return headerMatches >= 3;
-            };
-            
-            // Helper to detect empty/summary rows (rows with no identifying info - just totals)
-            const isEmptyOrSummaryRow = (row: any): boolean => {
-              const system = String(row['D_1'] || row['System'] || '').trim();
-              const drawing = String(row['D'] || row['Drawing'] || '').trim();
-              const materialDesc = String(row['A'] || row['Material Description'] || '').trim();
-              const itemName = String(row['A_1'] || row['Item Name'] || '').trim();
-              
-              // If ALL key identifier fields are empty, this is a summary/blank row
-              // (even if it has dollar values - those are subtotals)
-              return !system && !drawing && !materialDesc && !itemName;
-            };
-            
-            // Process chunk immediately, filtering out header rows AND summary/empty rows
-            const processedChunk = chunk
-              .filter((row: any) => !isHeaderRow(row))
-              .filter((row: any) => !isEmptyOrSummaryRow(row))
-              .map((row: any, index: number) => {
-                // CRITICAL: Use "Field Hours" (Column AA) NOT "Hours" (Column U)
-                const fieldHours = Number(row['Field Hours'] || row['Field Hour'] || row['FieldHours'] || 0);
-                const unitHours = Number(row['T_3'] || row['Hours'] || 0);
-                const quantity = Number(row['T'] || row['Quantity'] || 1);
-                const hours = fieldHours > 0 ? fieldHours : (unitHours * quantity);
-                
-                return {
-                  id: processedItemsCount + index,
-                  drawing: String(row['D'] || row['Drawing'] || ''),
-                  system: String(row['D_1'] || row['System'] || ''),
-                  floor: String(row['D_2'] || row['Floor'] || ''),
-                  zone: String(row['D_3'] || row['Zone'] || ''),
-                  symbol: String(row['D_4'] || row['Symbol'] || ''),
-                  estimator: String(row['D_5'] || row['Estimator'] || ''),
-                  materialSpec: String(row['D_6'] || row['Material Spec'] || ''),
-                  itemType: String(row['D_7'] || row['Item Type'] || ''),
-                  reportCat: String(row['D_8'] || row['Report Cat'] || ''),
-                  trade: String(row['D_9'] || row['Trade'] || ''),
-                  materialDesc: String(row['A'] || row['Material Description'] || ''),
-                  itemName: String(row['A_1'] || row['Item Name'] || ''),
-                  size: String(row['A_2'] || row['Size'] || ''),
-                  quantity: quantity,
-                  listPrice: Number(row['A_3'] || row['List Price']) || 0,
-                  materialDollars: Number(row['T_1'] || row['Material Dollars']) || 0,
-                  weight: Number(row['T_2'] || row['Weight']) || 0,
-                  hours: hours,
-                  laborDollars: Number(row['T_4'] || row['Labor Dollars']) || 0,
-                  costCode: '',
-                  materialCostCode: '',
-                  sourceFile: file.name,
-                  suggestedCode: generateCostCode({
-                    system: String(row['D_1'] || row['System'] || ''),
-                    floor: String(row['D_2'] || row['Floor'] || '')
-                  })
-                };
-              });
+            // Worker already processed and filtered data - just add IDs and source file
+            const processedChunk = chunk.map((row: any, index: number) => ({
+              id: processedItemsCount + index,
+              drawing: row.drawing,
+              system: row.system,
+              floor: row.floor,
+              zone: row.zone,
+              symbol: row.symbol,
+              estimator: row.estimator,
+              materialSpec: row.materialSpec,
+              itemType: row.itemType,
+              reportCat: row.reportCat,
+              trade: row.trade,
+              materialDesc: row.materialDescription,
+              itemName: row.itemName,
+              size: row.size,
+              quantity: row.quantity,
+              listPrice: row.listPrice,
+              materialDollars: row.materialDollars,
+              weight: row.weight,
+              hours: row.hours,
+              laborDollars: row.laborDollars,
+              costCode: '',
+              materialCostCode: '',
+              sourceFile: file.name,
+              suggestedCode: generateCostCode({
+                system: row.system,
+                floor: row.floor
+              })
+            }));
             
             processedData.push(...processedChunk);
             processedItemsCount += processedChunk.length;
