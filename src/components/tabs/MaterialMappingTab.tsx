@@ -77,6 +77,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [expandedItemPages, setExpandedItemPages] = useState<Record<string, number>>({});
   const [expandedItemSearch, setExpandedItemSearch] = useState<Record<string, string>>({});
+  const [expandedItemFilter, setExpandedItemFilter] = useState<Record<string, 'all' | 'assigned' | 'unassigned'>>({});
   const ITEMS_PER_PAGE = 15;
 
   // Get unique systems from data
@@ -174,9 +175,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     };
   };
   
-  // Helper functions for pagination
+  // Helper functions for pagination and filtering
   const getPageForGroup = (groupKey: string) => expandedItemPages[groupKey] || 1;
   const getSearchForGroup = (groupKey: string) => expandedItemSearch[groupKey] || '';
+  const getItemFilterForGroup = (groupKey: string) => expandedItemFilter[groupKey] || 'all';
 
   // Material codes list
   const allMaterialCodes = useMemo(() => {
@@ -365,6 +367,22 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (filterStatus === 'unassigned' && group.assignmentStatus !== 'none') return false;
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
       return true;
+    }).map(group => {
+      // Apply child-level filtering based on filterStatus
+      if (filterStatus === 'all') return group;
+      
+      const filteredSubGroups = group.subGroups.filter(sg => {
+        if (filterStatus === 'assigned') return sg.isFullyAssigned;
+        if (filterStatus === 'unassigned') return !sg.assignedCode;
+        if (filterStatus === 'needs-attention') return !sg.isFullyAssigned;
+        return true;
+      });
+      
+      // If no subgroups match, still return group but with filtered subgroups
+      return {
+        ...group,
+        subGroups: filteredSubGroups
+      };
     });
   }, [groups, searchTerm, filterStatus, systemFilter]);
 
@@ -852,14 +870,14 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as typeof filterStatus)}>
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-52">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Groups</SelectItem>
-                    <SelectItem value="unassigned">Fully Unassigned</SelectItem>
+                    <SelectItem value="all">All Groups & Types</SelectItem>
+                    <SelectItem value="unassigned">○ Unassigned Only</SelectItem>
                     <SelectItem value="needs-attention">⚠️ Needs Attention</SelectItem>
-                    <SelectItem value="assigned">Fully Assigned</SelectItem>
+                    <SelectItem value="assigned">✓ Assigned Only</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1089,15 +1107,24 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             const groupKey = `${group.materialSpec}|${typeGroup.itemType}`;
                             const itemSearchTerm = getSearchForGroup(groupKey).toLowerCase();
                             const currentPage = getPageForGroup(groupKey);
+                            const itemFilter = getItemFilterForGroup(groupKey);
                             
-                            // Filter items by search term
-                            const filteredItems = typeGroup.items.filter(item => 
-                              !itemSearchTerm || 
-                              (item.itemName || '').toLowerCase().includes(itemSearchTerm) ||
-                              (item.materialDesc || '').toLowerCase().includes(itemSearchTerm) ||
-                              (item.size || '').toLowerCase().includes(itemSearchTerm) ||
-                              (item.system || '').toLowerCase().includes(itemSearchTerm)
-                            );
+                            // Filter items by search term AND assignment status
+                            const filteredItems = typeGroup.items.filter(item => {
+                              // Search filter
+                              const matchesSearch = !itemSearchTerm || 
+                                (item.itemName || '').toLowerCase().includes(itemSearchTerm) ||
+                                (item.materialDesc || '').toLowerCase().includes(itemSearchTerm) ||
+                                (item.size || '').toLowerCase().includes(itemSearchTerm) ||
+                                (item.system || '').toLowerCase().includes(itemSearchTerm);
+                              
+                              if (!matchesSearch) return false;
+                              
+                              // Assignment status filter
+                              if (itemFilter === 'assigned') return !!item.materialCostCode;
+                              if (itemFilter === 'unassigned') return !item.materialCostCode;
+                              return true;
+                            });
                             
                             const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
                             const paginatedItems = filteredItems.slice(
@@ -1108,21 +1135,45 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             const allPageSelected = pageItemIds.length > 0 && pageItemIds.every(id => selectedItems.has(id));
                             const somePageSelected = pageItemIds.some(id => selectedItems.has(id));
                             
+                            // Stats for this group
+                            const totalInGroup = typeGroup.items.length;
+                            const assignedInGroup = typeGroup.items.filter(i => i.materialCostCode).length;
+                            const unassignedInGroup = totalInGroup - assignedInGroup;
+                            
                             return (
                               <div className="bg-background border-l-2 border-primary/20 ml-16">
                                 {/* Search & Pagination Controls */}
                                 <div className="px-4 py-2 bg-muted/30 border-b flex items-center justify-between gap-4 flex-wrap">
-                                  <div className="flex items-center gap-2">
-                                    <Search className="h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                      placeholder="Search items..."
-                                      value={getSearchForGroup(groupKey)}
-                                      onChange={(e) => {
-                                        setExpandedItemSearch(prev => ({ ...prev, [groupKey]: e.target.value }));
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                      <Search className="h-4 w-4 text-muted-foreground" />
+                                      <Input
+                                        placeholder="Search items..."
+                                        value={getSearchForGroup(groupKey)}
+                                        onChange={(e) => {
+                                          setExpandedItemSearch(prev => ({ ...prev, [groupKey]: e.target.value }));
+                                          setExpandedItemPages(prev => ({ ...prev, [groupKey]: 1 }));
+                                        }}
+                                        className="h-7 text-xs w-40"
+                                      />
+                                    </div>
+                                    {/* Item-level filter */}
+                                    <Select 
+                                      value={itemFilter} 
+                                      onValueChange={(v) => {
+                                        setExpandedItemFilter(prev => ({ ...prev, [groupKey]: v as 'all' | 'assigned' | 'unassigned' }));
                                         setExpandedItemPages(prev => ({ ...prev, [groupKey]: 1 }));
                                       }}
-                                      className="h-7 text-xs w-48"
-                                    />
+                                    >
+                                      <SelectTrigger className="h-7 w-36 text-xs">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All Items ({totalInGroup})</SelectItem>
+                                        <SelectItem value="assigned">✓ Assigned ({assignedInGroup})</SelectItem>
+                                        <SelectItem value="unassigned">○ Unassigned ({unassignedInGroup})</SelectItem>
+                                      </SelectContent>
+                                    </Select>
                                   </div>
                                   
                                   <div className="flex items-center gap-3">
