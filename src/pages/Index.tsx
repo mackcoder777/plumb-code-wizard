@@ -2354,13 +2354,13 @@ const EnhancedCostCodeManager = () => {
                               const storedAutoSuggestion = systemAutoSuggestions[systemLower];
                               const autoSuggested = storedAutoSuggestion || generateCostCode({ system }).costHead;
                               
-                              if (data.currentMapping === autoSuggested) {
-                                return <span className="ml-2">Auto-suggested: {autoSuggested}</span>;
+                              if (data.laborCode === autoSuggested || (!data.laborCode && !autoSuggested)) {
+                                return <span className="ml-2">Auto-suggested: {autoSuggested || 'None'}</span>;
                               }
                               return (
                                 <span className="ml-2">
-                                  Auto-suggested: {autoSuggested} → 
-                                  <span className="text-blue-600 font-medium"> Changed by user to: {data.currentMapping}</span>
+                                  Auto-suggested: {autoSuggested || 'None'} → 
+                                  <span className="text-blue-600 font-medium"> Changed by user to: {data.laborCode || 'Cleared'}</span>
                                 </span>
                               );
                             })()}
