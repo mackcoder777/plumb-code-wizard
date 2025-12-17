@@ -19,15 +19,20 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { toast } from '@/components/ui/use-toast';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo } from '@/utils/budgetExportSystem';
+import { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
 
 interface EstimatesTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
+  laborRate?: number;
+  budgetAdjustments?: BudgetAdjustments | null;
 }
 
 export const EstimatesTab: React.FC<EstimatesTabProps> = ({
   data,
-  onDataUpdate
+  onDataUpdate,
+  laborRate = 0,
+  budgetAdjustments = null,
 }) => {
   const [filters, setFilters] = useState({
     system: '',
@@ -305,6 +310,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
           <ExportDropdown
             items={filteredData}
             projectInfo={getProjectInfo()}
+            laborRate={laborRate}
+            budgetAdjustments={budgetAdjustments}
             disabled={filteredData.length === 0}
           />
           <Button variant="outline" onClick={clearFilters}>

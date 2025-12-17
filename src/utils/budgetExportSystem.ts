@@ -176,7 +176,7 @@ export function exportBudgetPacket(
   let totalMaterialDollars = 0;
 
   if (budgetAdjustments && Object.keys(budgetAdjustments.adjustedLaborSummary || {}).length > 0) {
-    // USE BUDGET BUILDER ADJUSTMENTS (includes foreman FCNT, FAB codes, tax)
+    // USE BUDGET BUILDER ADJUSTMENTS (includes foreman FCNT, FAB codes)
     laborData = Object.values(budgetAdjustments.adjustedLaborSummary)
       .map(item => ({
         code: item.code,
@@ -191,15 +191,17 @@ export function exportBudgetPacket(
                       (budgetAdjustments.foremanBonusHours || 0);
     totalLaborDollars = budgetAdjustments.totalLaborDollars;
 
-    // Material: Use tax summary (includes tax amounts)
+    // Material: Use PRE-TAX amounts (tax is added as separate line item)
+    // This prevents double-counting since we add a SALES TAX line below
     materialData = (budgetAdjustments.materialTaxSummary || [])
       .map(item => ({
         code: item.code,
         description: item.description,
-        amount: item.amount + item.taxAmount // Include tax in amount
+        amount: item.amount // PRE-TAX amount only - tax added as separate line
       }))
       .sort((a, b) => a.code.localeCompare(b.code));
 
+    // Total material includes tax (for bottom summary)
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
