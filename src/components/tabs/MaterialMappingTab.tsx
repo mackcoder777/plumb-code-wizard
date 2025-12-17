@@ -289,17 +289,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   // Get selected item count for bulk operations
   const getSelectedItemCount = useMemo(() => {
-    let count = 0;
-    selectedGroups.forEach(groupKey => {
-      if (groupKey.includes('|')) {
-        const [spec, type] = groupKey.split('|');
-        const specGroup = groups.find(g => g.materialSpec === spec);
-        const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
-        count += typeGroup?.itemCount || 0;
-      }
-    });
-    return count;
-  }, [selectedGroups, groups]);
+    // Use the actual selectedItems set as the source of truth
+    return selectedItems.size;
+  }, [selectedItems]);
 
   // Filter groups
   const filteredGroups = useMemo(() => {
