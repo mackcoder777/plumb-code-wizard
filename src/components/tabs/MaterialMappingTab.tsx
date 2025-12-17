@@ -178,7 +178,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   // Helper functions for pagination and filtering
   const getPageForGroup = (groupKey: string) => expandedItemPages[groupKey] || 1;
   const getSearchForGroup = (groupKey: string) => expandedItemSearch[groupKey] || '';
-  const getItemFilterForGroup = (groupKey: string) => expandedItemFilter[groupKey] || 'all';
+  const getItemFilterForGroup = (groupKey: string) => {
+    // If user has explicitly set a filter for this group, use it
+    if (expandedItemFilter[groupKey]) return expandedItemFilter[groupKey];
+    
+    // Otherwise, inherit from main filter
+    if (filterStatus === 'needs-attention' || filterStatus === 'unassigned') return 'unassigned';
+    if (filterStatus === 'assigned') return 'assigned';
+    return 'all';
+  };
 
   // Material codes list
   const allMaterialCodes = useMemo(() => {
