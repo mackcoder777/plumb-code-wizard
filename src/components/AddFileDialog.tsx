@@ -15,6 +15,9 @@ interface AddFileDialogProps {
   };
   onAppendData: (items: EstimateItem[], fileName: string) => Promise<void>;
   onReplaceData: (items: EstimateItem[], fileName: string) => Promise<void>;
+  // Optional preloaded items from Upload tab
+  preloadedItems?: any[] | null;
+  preloadedFileName?: string;
 }
 
 const AddFileDialog: React.FC<AddFileDialogProps> = ({
@@ -22,7 +25,9 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
   onClose,
   currentProject,
   onAppendData,
-  onReplaceData
+  onReplaceData,
+  preloadedItems = null,
+  preloadedFileName = ''
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedItems, setParsedItems] = useState<EstimateItem[]>([]);
@@ -31,6 +36,42 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [selectedAction, setSelectedAction] = useState<'append' | 'replace' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Handle preloaded items from Upload tab
+  React.useEffect(() => {
+    if (preloadedItems && preloadedItems.length > 0) {
+      // Transform preloaded items to EstimateItem format if needed
+      const transformedItems: EstimateItem[] = preloadedItems.map((item, index) => ({
+        id: item.id || `preloaded-${index}`,
+        drawing: item.drawing || '',
+        system: item.system || '',
+        floor: item.floor || '',
+        zone: item.zone || '',
+        materialSpec: item.materialSpec || '',
+        itemType: item.itemType || '',
+        trade: item.trade || '',
+        materialDesc: item.materialDesc || '',
+        itemName: item.itemName || '',
+        size: String(item.size || ''),
+        quantity: item.quantity || 0,
+        listPrice: item.listPrice || 0,
+        materialDollars: item.materialDollars || 0,
+        hours: item.hours || 0,
+        laborDollars: item.laborDollars || 0,
+        symbol: item.symbol || '',
+        estimator: item.estimator || '',
+        reportCat: item.reportCat || '',
+        weight: item.weight || 0,
+        costCode: item.costCode || '',
+        materialCostCode: item.materialCostCode || '',
+        suggestedCodes: item.suggestedCodes || [],
+        sourceFile: preloadedFileName || item.sourceFile || ''
+      }));
+      
+      setParsedItems(transformedItems);
+      setShowConfirmation(true);
+    }
+  }, [preloadedItems, preloadedFileName]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

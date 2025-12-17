@@ -425,6 +425,10 @@ const EnhancedCostCodeManager = () => {
   const appendEstimateItems = useAppendEstimateItems();
   const queryClient = useQueryClient();
   
+  // Pending upload state - for showing confirmation when existing data
+  const [pendingUploadItems, setPendingUploadItems] = useState<any[] | null>(null);
+  const [pendingUploadFileName, setPendingUploadFileName] = useState<string>('');
+  
   // Budget adjustments state
   const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
   const [bidLaborRate, setBidLaborRate] = useState(85); // Default rate
@@ -1079,7 +1083,18 @@ const EnhancedCostCodeManager = () => {
                 }
               });
             } else if (currentProject) {
-              // Update existing project and save items
+              // Check if project already has data - show confirmation dialog
+              if (estimateData.length > 0) {
+                // Store pending data and show AddFileDialog for user to choose
+                setPendingUploadItems(processedData);
+                setPendingUploadFileName(fileName);
+                setShowAddFileDialog(true);
+                setLoading(false);
+                setLoadingProgress(0);
+                return; // Exit early - let AddFileDialog handle the rest
+              }
+              
+              // No existing data - proceed with normal save
               updateProject.mutate({
                 id: currentProject.id,
                 file_name: fileName,
@@ -1790,29 +1805,54 @@ const EnhancedCostCodeManager = () => {
         <div className="p-6">
           {/* Upload Tab */}
           {activeTab === 'upload' && (
-            <div
-              className="border-3 border-dashed border-blue-400 rounded-xl p-16 text-center cursor-pointer hover:bg-blue-50 transition-all bg-gradient-to-br from-blue-50 to-indigo-50"
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files[0];
-                if (file) handleFileUpload(file);
-              }}
-            >
-              <div className="text-6xl mb-4">📁</div>
-              <h2 className="text-2xl font-semibold mb-2 text-blue-900">Upload Your Estimate File</h2>
-              <p className="text-gray-600">
-                Drag & drop your Excel file here or click to browse<br/>
-                <small className="text-gray-500">Supports .xlsx, .xlsm, and .xls files</small>
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xlsm,.xls"
-                onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-                className="hidden"
-              />
+            <div className="space-y-4">
+              {/* Warning Banner - Show when project has existing data */}
+              {currentProject && estimateData.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                  <span className="text-amber-600 text-xl flex-shrink-0">⚠️</span>
+                  <div className="flex-1">
+                    <p className="font-medium text-amber-800">
+                      This project already has {estimateData.length.toLocaleString()} items loaded
+                    </p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Uploading a new file will ask if you want to <strong>add to</strong> or <strong>replace</strong> the existing data.
+                      To safely add another file, you can also use the{' '}
+                      <button 
+                        onClick={() => setShowAddFileDialog(true)}
+                        className="text-purple-600 font-medium underline hover:text-purple-800"
+                      >
+                        Add File
+                      </button>{' '}
+                      button.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              <div
+                className="border-3 border-dashed border-blue-400 rounded-xl p-16 text-center cursor-pointer hover:bg-blue-50 transition-all bg-gradient-to-br from-blue-50 to-indigo-50"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleFileUpload(file);
+                }}
+              >
+                <div className="text-6xl mb-4">📁</div>
+                <h2 className="text-2xl font-semibold mb-2 text-blue-900">Upload Your Estimate File</h2>
+                <p className="text-gray-600">
+                  Drag & drop your Excel file here or click to browse<br/>
+                  <small className="text-gray-500">Supports .xlsx, .xlsm, and .xls files</small>
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xlsm,.xls"
+                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                  className="hidden"
+                />
+              </div>
             </div>
           )}
 
@@ -2903,7 +2943,12 @@ const EnhancedCostCodeManager = () => {
           {/* Add File Dialog */}
           <AddFileDialog
             isOpen={showAddFileDialog}
-            onClose={() => setShowAddFileDialog(false)}
+            onClose={() => {
+              setShowAddFileDialog(false);
+              // Clear pending upload state when dialog closes
+              setPendingUploadItems(null);
+              setPendingUploadFileName('');
+            }}
             currentProject={{
               id: currentProject?.id || '',
               name: currentProject?.name || '',
@@ -2912,6 +2957,8 @@ const EnhancedCostCodeManager = () => {
             }}
             onAppendData={handleAppendData}
             onReplaceData={handleReplaceData}
+            preloadedItems={pendingUploadItems}
+            preloadedFileName={pendingUploadFileName}
           />
         </div>
       </div>
