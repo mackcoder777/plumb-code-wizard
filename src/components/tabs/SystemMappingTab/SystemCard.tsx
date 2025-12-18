@@ -7,7 +7,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
-import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EstimateItem } from '@/types/estimate';
 
@@ -16,7 +16,7 @@ interface SystemCardProps {
   itemCount: number;
   laborCode?: string;
   suggestedLaborCode?: string;
-  appliedInfo?: { appliedAt: Date; itemCount: number; appliedLaborCode?: string };
+  appliedInfo?: { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean };
   onLaborCodeChange: (value: string) => void;
   onClear: () => void;
   onApplySuggestions?: () => void;
@@ -90,13 +90,58 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   };
 
   const getStatusBadge = () => {
-    if (appliedInfo) {
-      return <Badge className="bg-success text-success-foreground"><CheckCircle className="w-3 h-3 mr-1" /> Applied</Badge>;
+    const currentItemCount = itemCount;
+    const appliedItemCount = appliedInfo?.appliedItemCount || 0;
+    const hasBeenApplied = appliedInfo?.appliedAt != null;
+
+    // Case 1: Has been applied before, but new items added since
+    if (hasBeenApplied && currentItemCount > appliedItemCount) {
+      const newItems = currentItemCount - appliedItemCount;
+      return (
+        <Badge variant="outline" className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/50">
+          <AlertCircle className="w-3 h-3 mr-1" />
+          +{newItems} New Items
+        </Badge>
+      );
     }
+
+    // Case 2: Has been applied and verified, counts match
+    if (hasBeenApplied && appliedInfo?.isVerified) {
+      return (
+        <Badge variant="outline" className="bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/50">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Applied & Verified ({appliedItemCount})
+        </Badge>
+      );
+    }
+
+    // Case 3: Has been applied but not verified
+    if (hasBeenApplied) {
+      return (
+        <Badge variant="outline" className="bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/50">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Applied ({appliedItemCount})
+        </Badge>
+      );
+    }
+
+    // Case 4: Has a cost code assigned but never applied
     if (isMapped) {
-      return <Badge className="bg-success text-success-foreground">Mapped</Badge>;
+      return (
+        <Badge variant="outline" className="bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/50">
+          <Clock className="w-3 h-3 mr-1" />
+          Mapped - Click Apply
+        </Badge>
+      );
     }
-    return <Badge variant="outline">Unmapped</Badge>;
+
+    // Case 5: No mapping at all
+    return (
+      <Badge variant="outline" className="bg-muted text-muted-foreground">
+        <AlertCircle className="w-3 h-3 mr-1" />
+        Unmapped
+      </Badge>
+    );
   };
 
   const getCodeDisplay = (code: string | undefined, codes: Array<{ code: string; description: string }>, suggested?: string) => {
@@ -220,14 +265,12 @@ export const SystemCard: React.FC<SystemCardProps> = ({
         </div>
 
         {/* Current mapping info */}
-        {laborCode && (
+        {laborCode && appliedInfo && (
           <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded space-y-1">
-            {appliedInfo && (
-              <div className="flex items-center gap-1 text-success font-medium">
-                <CheckCircle className="w-3 h-3" />
-                Applied: {appliedInfo.itemCount} items at {appliedInfo.appliedAt.toLocaleTimeString()}
-              </div>
-            )}
+            <div className="flex items-center gap-1 text-success font-medium">
+              <CheckCircle className="w-3 h-3" />
+              Applied: {appliedInfo.appliedItemCount} items at {appliedInfo.appliedAt.toLocaleTimeString()}
+            </div>
           </div>
         )}
 
@@ -237,7 +280,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             {appliedInfo && !hasChangedSinceApplied ? (
               <div className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-success/10 border border-success/30 rounded-md text-success text-sm font-medium">
                 <CheckCircle className="w-4 h-4" />
-                Applied ({appliedInfo.itemCount} items)
+                Applied ({appliedInfo.appliedItemCount} items)
               </div>
             ) : (
               <Button

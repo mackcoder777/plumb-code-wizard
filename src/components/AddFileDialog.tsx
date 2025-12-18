@@ -200,14 +200,21 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
   };
 
   const handleConfirm = async () => {
-    if (!selectedFile || !selectedAction) return;
+    // Get file name from either selectedFile OR preloadedFileName
+    const fileNameToUse = selectedFile?.name || preloadedFileName || 'Unknown Source';
+
+    if (!selectedAction) return;
+    if (!parsedItems.length) {
+      console.error('No items to save');
+      return;
+    }
 
     setIsProcessing(true);
     try {
       if (selectedAction === 'append') {
-        await onAppendData(parsedItems, selectedFile.name);
+        await onAppendData(parsedItems, fileNameToUse);
       } else {
-        await onReplaceData(parsedItems, selectedFile.name);
+        await onReplaceData(parsedItems, fileNameToUse);
       }
       handleClose();
     } catch (error) {
@@ -325,7 +332,7 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
                   <span>✅</span> New File Parsed
                 </h3>
                 <p className="text-sm text-green-700 dark:text-green-300 mb-3 font-medium">
-                  {selectedFile?.name}
+                  {selectedFile?.name || preloadedFileName || 'Uploaded file'}
                 </p>
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
