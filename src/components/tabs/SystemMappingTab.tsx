@@ -47,7 +47,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [activeSystemFilter, setActiveSystemFilter] = useState<string | null>(null);
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
-  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedLaborCode?: string }>>({});
+  const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
 
   // Load system mappings from database to get applied status
   const { data: dbMappings = [] } = useSystemMappings(projectId);
@@ -57,13 +57,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Initialize appliedSystems from database on load
   useEffect(() => {
     if (dbMappings.length > 0) {
-      const appliedFromDb: Record<string, { appliedAt: Date; itemCount: number; appliedLaborCode?: string }> = {};
+      const appliedFromDb: Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }> = {};
       dbMappings.forEach(mapping => {
         if (mapping.applied_at) {
           appliedFromDb[mapping.system_name] = {
             appliedAt: new Date(mapping.applied_at),
-            itemCount: mapping.applied_item_count || 0,
+            appliedItemCount: mapping.applied_item_count || 0,
             appliedLaborCode: mapping.cost_head || undefined,
+            isVerified: mapping.is_verified || false,
           };
         }
       });
@@ -286,14 +287,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
 
     // Track which systems were applied
-    const newAppliedSystems: Record<string, { appliedAt: Date; itemCount: number }> = {};
+    const newAppliedSystems: Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string }> = {};
     const systemsToUpdate: Array<{ systemName: string; appliedItemCount: number }> = [];
     
     Object.keys(mappings).forEach(system => {
       if (systemItemCounts[system] || mappings[system]?.laborCode) {
         newAppliedSystems[system] = {
           appliedAt: new Date(),
-          itemCount: systemItemCounts[system] || 0,
+          appliedItemCount: systemItemCounts[system] || 0,
+          appliedLaborCode: mappings[system]?.laborCode,
         };
         systemsToUpdate.push({
           systemName: system,
@@ -349,7 +351,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       ...prev,
       [system]: {
         appliedAt: new Date(),
-        itemCount: itemsAffected,
+        appliedItemCount: itemsAffected,
         appliedLaborCode: systemMapping.laborCode,
       }
     }));
