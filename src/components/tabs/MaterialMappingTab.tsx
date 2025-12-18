@@ -24,8 +24,9 @@ import {
   X
 } from 'lucide-react';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
-import { useBatchUpdateMaterialCostCodes } from '@/hooks/useEstimateProjects';
+import { useBatchUpdateMaterialCostCodes, useDismissFromMaterialBudget } from '@/hooks/useEstimateProjects';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Ban } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -70,7 +71,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned' | 'needs-attention'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned' | 'needs-attention' | 'dismissed' | 'zero-value'>('all');
   const [systemFilter, setSystemFilter] = useState<string>('all');
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,6 +92,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
   const batchUpdateMaterialCodes = useBatchUpdateMaterialCostCodes();
+  const dismissFromBudget = useDismissFromMaterialBudget();
 
   // Get parent checkbox state (checked, unchecked, or indeterminate)
   const getParentCheckState = (spec: string, group: MaterialGroup): 'checked' | 'unchecked' | 'indeterminate' => {
@@ -366,6 +368,20 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (filterStatus === 'assigned' && group.assignmentStatus !== 'complete') return false;
       if (filterStatus === 'unassigned' && group.assignmentStatus !== 'none') return false;
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
+      if (filterStatus === 'dismissed') {
+        // Only show groups that have dismissed items
+        const hasDismissed = group.subGroups.some(sg => 
+          sg.items.some(i => i.excludedFromMaterialBudget)
+        );
+        if (!hasDismissed) return false;
+      }
+      if (filterStatus === 'zero-value') {
+        // Only show groups with $0 value items
+        const hasZeroValue = group.subGroups.some(sg => 
+          sg.items.some(i => (i.materialDollars || 0) <= 0)
+        );
+        if (!hasZeroValue) return false;
+      }
       return true;
     }).map(group => {
       // Apply child-level filtering based on filterStatus
@@ -375,6 +391,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         if (filterStatus === 'assigned') return sg.isFullyAssigned;
         if (filterStatus === 'unassigned') return !sg.assignedCode;
         if (filterStatus === 'needs-attention') return !sg.isFullyAssigned;
+        if (filterStatus === 'dismissed') {
+          return sg.items.some(i => i.excludedFromMaterialBudget);
+        }
+        if (filterStatus === 'zero-value') {
+          return sg.items.some(i => (i.materialDollars || 0) <= 0);
+        }
         return true;
       });
       
@@ -386,18 +408,51 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     });
   }, [groups, searchTerm, filterStatus, systemFilter]);
 
-  // Groups needing attention
+  // Groups needing attention (exclude $0 value and dismissed items)
   const groupsNeedingAttention = useMemo(() => {
-    return groups.filter(g => g.hasUnassignedChildren);
+    return groups.filter(g => {
+      // Check if group has unassigned children that actually need assignment
+      const needsAssignment = g.subGroups.some(sg => {
+        const activeItems = sg.items.filter(i => 
+          (i.materialDollars || 0) > 0 && !i.excludedFromMaterialBudget
+        );
+        return activeItems.some(i => !i.materialCostCode);
+      });
+      return needsAssignment;
+    });
   }, [groups]);
 
-  // Stats
+  // Stats - exclude $0 and dismissed items from "needing assignment"
   const stats = useMemo(() => {
     const total = data.length;
     const assigned = data.filter(i => i.materialCostCode).length;
     const totalMaterial = data.reduce((sum, i) => sum + (i.materialDollars || 0), 0);
     const assignedMaterial = data.filter(i => i.materialCostCode).reduce((sum, i) => sum + (i.materialDollars || 0), 0);
-    return { total, assigned, unassigned: total - assigned, totalMaterial, assignedMaterial };
+    
+    // Items that actually need assignment (have material value and not dismissed)
+    const itemsNeedingAssignment = data.filter(i => 
+      (i.materialDollars || 0) > 0 && !i.excludedFromMaterialBudget
+    );
+    const needingTotal = itemsNeedingAssignment.length;
+    const needingAssigned = itemsNeedingAssignment.filter(i => i.materialCostCode).length;
+    const needingUnassigned = needingTotal - needingAssigned;
+    
+    // Dismissed/excluded items
+    const dismissed = data.filter(i => i.excludedFromMaterialBudget).length;
+    const zeroValue = data.filter(i => (i.materialDollars || 0) <= 0).length;
+    
+    return { 
+      total, 
+      assigned, 
+      unassigned: total - assigned, 
+      totalMaterial, 
+      assignedMaterial,
+      needingTotal,
+      needingAssigned,
+      needingUnassigned,
+      dismissed,
+      zeroValue
+    };
   }, [data]);
 
   // Toggle expand
@@ -490,6 +545,57 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       });
     }
   }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
+
+  // Dismiss items from material budget (for $0 value groups)
+  const handleDismissGroup = useCallback(async (groupKey: string, dismissed: boolean = true) => {
+    const [spec, type] = groupKey.split('|');
+    let targetItems: EstimateItem[] = [];
+
+    if (type) {
+      const specGroup = groups.find(g => g.materialSpec === spec);
+      const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
+      targetItems = typeGroup?.items.filter(i => (i.materialDollars || 0) <= 0) || [];
+    } else {
+      const specGroup = groups.find(g => g.materialSpec === spec);
+      targetItems = specGroup?.subGroups.flatMap(g => g.items.filter(i => (i.materialDollars || 0) <= 0)) || [];
+    }
+
+    if (targetItems.length === 0) return;
+
+    const updatedData = data.map(item => {
+      if (targetItems.some(t => t.id === item.id)) {
+        return { ...item, excludedFromMaterialBudget: dismissed };
+      }
+      return item;
+    });
+
+    onDataUpdate(updatedData);
+
+    if (projectId) {
+      setIsSaving(true);
+      try {
+        const itemIds = targetItems.map(item => String(item.id));
+        await dismissFromBudget.mutateAsync({
+          projectId,
+          itemIds,
+          dismissed
+        });
+        toast({
+          title: dismissed ? 'Items Dismissed' : 'Items Restored',
+          description: `${targetItems.length} $0 items ${dismissed ? 'dismissed from' : 'restored to'} budget tracking`,
+        });
+      } catch (error) {
+        console.error('Failed to dismiss items:', error);
+        toast({
+          title: 'Operation Failed',
+          description: 'Failed to update items. Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  }, [groups, data, onDataUpdate, projectId, dismissFromBudget]);
 
   // Bulk assign to selected groups with auto-save
   const handleBulkAssign = useCallback(async (code: string) => {
@@ -807,29 +913,38 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           )}
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-5 gap-4 mb-6">
             <div className="bg-muted/50 rounded-lg p-4">
               <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
                 <Hash className="h-4 w-4" />
-                Total Items
+                Needing Assignment
               </div>
-              <div className="text-2xl font-bold text-foreground">{stats.total.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-foreground">{stats.needingTotal.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">of {stats.total.toLocaleString()} total</div>
             </div>
             <div className="bg-green-500/10 rounded-lg p-4">
               <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
                 <Check className="h-4 w-4" />
                 Assigned
               </div>
-              <div className="text-2xl font-bold text-green-600">{stats.assigned.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">{stats.total > 0 ? ((stats.assigned / stats.total) * 100).toFixed(1) : 0}%</div>
+              <div className="text-2xl font-bold text-green-600">{stats.needingAssigned.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">{stats.needingTotal > 0 ? ((stats.needingAssigned / stats.needingTotal) * 100).toFixed(1) : 0}%</div>
             </div>
             <div className="bg-destructive/10 rounded-lg p-4">
               <div className="flex items-center gap-2 text-destructive text-sm mb-1">
                 <AlertCircle className="h-4 w-4" />
-                Unassigned
+                Still Needed
               </div>
-              <div className="text-2xl font-bold text-destructive">{stats.unassigned.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">{stats.total > 0 ? ((stats.unassigned / stats.total) * 100).toFixed(1) : 0}%</div>
+              <div className="text-2xl font-bold text-destructive">{stats.needingUnassigned.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">{stats.needingTotal > 0 ? ((stats.needingUnassigned / stats.needingTotal) * 100).toFixed(1) : 0}%</div>
+            </div>
+            <div className="bg-muted/30 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                <Ban className="h-4 w-4" />
+                Excluded
+              </div>
+              <div className="text-2xl font-bold text-muted-foreground">{(stats.dismissed + stats.zeroValue).toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">{stats.dismissed} dismissed, {stats.zeroValue} $0</div>
             </div>
             <div className="bg-blue-500/10 rounded-lg p-4">
               <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
@@ -843,13 +958,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           {/* Progress Bar */}
           <div className="bg-muted/30 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-foreground">Assignment Progress</span>
-              <span className="text-sm text-muted-foreground">{stats.assigned} / {stats.total} items</span>
+              <span className="text-sm font-medium text-foreground">Assignment Progress (items with value)</span>
+              <span className="text-sm text-muted-foreground">{stats.needingAssigned} / {stats.needingTotal} items</span>
             </div>
             <div className="w-full bg-muted rounded-full h-3">
               <div 
                 className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-500"
-                style={{ width: `${stats.total > 0 ? (stats.assigned / stats.total) * 100 : 0}%` }}
+                style={{ width: `${stats.needingTotal > 0 ? (stats.needingAssigned / stats.needingTotal) * 100 : 0}%` }}
               />
             </div>
           </div>
@@ -878,6 +993,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                     <SelectItem value="unassigned">○ Unassigned Only</SelectItem>
                     <SelectItem value="needs-attention">⚠️ Needs Attention</SelectItem>
                     <SelectItem value="assigned">✓ Assigned Only</SelectItem>
+                    <SelectItem value="zero-value">$0 Zero Value</SelectItem>
+                    <SelectItem value="dismissed">🚫 Dismissed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1070,35 +1187,69 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
                               ${typeGroup.totalMaterial.toLocaleString()}
                             </div>
-                            <div className="col-span-3">
-                              <Popover 
-                                open={openCodePicker === `${group.materialSpec}|${typeGroup.itemType}`} 
-                                onOpenChange={(open) => setOpenCodePicker(open ? `${group.materialSpec}|${typeGroup.itemType}` : null)}
-                              >
-                                <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
-                                  <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
-                                    {renderChildStatusBadge(typeGroup)}
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80 p-0" align="start">
-                                  <CodePicker 
-                                    groupKey={`${group.materialSpec}|${typeGroup.itemType}`} 
-                                    onSelect={(code) => {
-                                      // If items are selected within this group, only update those
-                                      const groupItemIds = typeGroup.items.map(i => String(i.id));
-                                      const selectedInGroup = groupItemIds.filter(id => selectedItems.has(id));
-                                      
-                                      if (selectedInGroup.length > 0) {
-                                        // Update only selected items
-                                        handleItemLevelAssign(code);
-                                      } else {
-                                        // No items selected, update entire group
-                                        handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code);
-                                      }
-                                    }} 
-                                  />
-                                </PopoverContent>
-                              </Popover>
+                            <div className="col-span-3 flex items-center gap-2">
+                              {/* Show dismiss button for $0 value groups */}
+                              {typeGroup.totalMaterial <= 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const allDismissed = typeGroup.items.every(i => i.excludedFromMaterialBudget);
+                                    handleDismissGroup(`${group.materialSpec}|${typeGroup.itemType}`, !allDismissed);
+                                  }}
+                                  title={typeGroup.items.every(i => i.excludedFromMaterialBudget) ? "Restore to budget" : "Dismiss $0 items"}
+                                >
+                                  {typeGroup.items.every(i => i.excludedFromMaterialBudget) ? (
+                                    <>
+                                      <Check className="h-3 w-3 mr-1" />
+                                      Restore
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Ban className="h-3 w-3 mr-1" />
+                                      Dismiss
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                              {typeGroup.totalMaterial > 0 && (
+                                <Popover 
+                                  open={openCodePicker === `${group.materialSpec}|${typeGroup.itemType}`} 
+                                  onOpenChange={(open) => setOpenCodePicker(open ? `${group.materialSpec}|${typeGroup.itemType}` : null)}
+                                >
+                                  <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
+                                    <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
+                                      {renderChildStatusBadge(typeGroup)}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-80 p-0" align="start">
+                                    <CodePicker 
+                                      groupKey={`${group.materialSpec}|${typeGroup.itemType}`} 
+                                      onSelect={(code) => {
+                                        // If items are selected within this group, only update those
+                                        const groupItemIds = typeGroup.items.map(i => String(i.id));
+                                        const selectedInGroup = groupItemIds.filter(id => selectedItems.has(id));
+                                        
+                                        if (selectedInGroup.length > 0) {
+                                          // Update only selected items
+                                          handleItemLevelAssign(code);
+                                        } else {
+                                          // No items selected, update entire group
+                                          handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code);
+                                        }
+                                      }} 
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                              {/* Show N/A badge for $0 items */}
+                              {typeGroup.totalMaterial <= 0 && (
+                                <Badge variant="outline" className="text-muted-foreground border-muted bg-muted/30">
+                                  $0 - N/A
+                                </Badge>
+                              )}
                             </div>
                           </div>
 
