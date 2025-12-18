@@ -1955,12 +1955,14 @@ const EnhancedCostCodeManager = () => {
                 >
                   🤖 Auto-Assign All Codes
                 </button>
+                {/* IMPORTANT: Always use estimateData (all items), NOT filteredData */}
+                {/* UI filters are for display only - exports must include everything */}
                 <ExportDropdown
-                  items={filteredData}
+                  items={estimateData}
                   projectInfo={getProjectInfo()}
                   laborRate={bidLaborRate}
                   budgetAdjustments={budgetAdjustments}
-                  disabled={filteredData.length === 0}
+                  disabled={estimateData.length === 0}
                 />
                 <button
                   onClick={() => setShowCostCodeBrowser(true)}
