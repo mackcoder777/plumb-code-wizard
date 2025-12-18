@@ -738,3 +738,45 @@ export const useUpsertAndApplyMapping = () => {
     }
   });
 };
+
+// Dismiss items from material budget (for $0 value items)
+export const useDismissFromMaterialBudget = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      itemIds,
+      dismissed = true
+    }: { 
+      projectId: string; 
+      itemIds: string[];
+      dismissed?: boolean;
+    }) => {
+      if (itemIds.length === 0) return [];
+      
+      // Update in batches of 100
+      const BATCH_SIZE = 100;
+      const results: EstimateItem[] = [];
+      
+      for (let i = 0; i < itemIds.length; i += BATCH_SIZE) {
+        const batchIds = itemIds.slice(i, i + BATCH_SIZE);
+        
+        const { data, error } = await supabase
+          .from('estimate_items')
+          .update({ excluded_from_material_budget: dismissed })
+          .eq('project_id', projectId)
+          .in('id', batchIds)
+          .select();
+
+        if (error) throw error;
+        if (data) results.push(...(data as EstimateItem[]));
+      }
+      
+      return results;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+    },
+  });
+};

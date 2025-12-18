@@ -23,6 +23,7 @@ export interface EstimateItem {
   materialCostCode: string;   // Material cost code
   suggestedCodes: CostCodeSuggestion[];
   sourceFile?: string;        // Source Excel file name for auditing
+  excludedFromMaterialBudget?: boolean;  // Items excluded from material code assignment (e.g., $0 items)
 }
 
 export interface CostCodeSuggestion {

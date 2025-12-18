@@ -56,6 +56,7 @@ export type Database = {
           created_at: string | null
           drawing: string | null
           estimator: string | null
+          excluded_from_material_budget: boolean | null
           floor: string | null
           hours: number | null
           id: string
@@ -85,6 +86,7 @@ export type Database = {
           created_at?: string | null
           drawing?: string | null
           estimator?: string | null
+          excluded_from_material_budget?: boolean | null
           floor?: string | null
           hours?: number | null
           id?: string
@@ -114,6 +116,7 @@ export type Database = {
           created_at?: string | null
           drawing?: string | null
           estimator?: string | null
+          excluded_from_material_budget?: boolean | null
           floor?: string | null
           hours?: number | null
           id?: string
