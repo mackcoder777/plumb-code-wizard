@@ -1039,6 +1039,7 @@ const EnhancedCostCodeManager = () => {
                   labor_dollars: item.laborDollars || 0,
                   cost_code: item.costCode || '',
                   material_cost_code: item.materialCostCode || '',
+                  source_file: fileName,
                 }));
                 
                 setLoadingMessage(`Saving ${itemsToSave.length.toLocaleString()} items to database...`);

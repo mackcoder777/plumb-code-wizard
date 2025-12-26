@@ -427,6 +427,7 @@ export const useSaveEstimateItems = () => {
         labor_dollars: number;
         cost_code: string;
         material_cost_code?: string;
+        source_file?: string;
       }>;
       onProgress?: (progress: number) => void;
     }) => {
@@ -467,6 +468,7 @@ export const useSaveEstimateItems = () => {
           labor_dollars: item.labor_dollars || 0,
           cost_code: item.cost_code || '',
           material_cost_code: item.material_cost_code || '',
+          source_file: item.source_file || null,
         }));
 
         const { error } = await supabase
