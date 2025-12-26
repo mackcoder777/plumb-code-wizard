@@ -117,17 +117,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [importedCostCodes, dbLaborCodes]);
 
   // Extract unique systems and count items - OPTIMIZED: Only store counts, not full item arrays
+  // NOTE: No setState inside useMemo - that causes infinite loops!
   const systemMappings = useMemo(() => {
-    if (data.length > 5000) {
-      setIsProcessing(true);
-    }
-    
     const systemMap = new Map<string, number>();
     
-    data.forEach(item => {
-      const systemKey = item.system || 'Unknown';
+    for (let i = 0; i < data.length; i++) {
+      const systemKey = data[i].system || 'Unknown';
       systemMap.set(systemKey, (systemMap.get(systemKey) || 0) + 1);
-    });
+    }
 
     const result = Array.from(systemMap.entries())
       .map(([system, count]) => ({
@@ -139,9 +136,18 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       }))
       .sort((a, b) => b.itemCount - a.itemCount);
     
-    setIsProcessing(false);
     return result;
   }, [data, mappings, suggestions, appliedSystems]);
+  
+  // Set processing state based on data size (outside useMemo)
+  useEffect(() => {
+    if (data.length > 5000) {
+      setIsProcessing(true);
+      // Use requestIdleCallback to allow UI to update
+      const id = requestIdleCallback(() => setIsProcessing(false), { timeout: 100 });
+      return () => cancelIdleCallback(id);
+    }
+  }, [data.length]);
   
   // Lazy-load items for preview - only fetches when needed
   const getItemsForSystem = useCallback((system: string, limit = 5): EstimateItem[] => {
@@ -215,7 +221,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }));
   }, [systemMappings]);
 
-  const handleMappingChange = (system: string, type: 'laborCode', value: string) => {
+  const handleMappingChange = useCallback((system: string, type: 'laborCode', value: string) => {
     setMappings(prev => ({
       ...prev,
       [system]: {
@@ -223,9 +229,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         [type]: value === 'none' ? undefined : value,
       }
     }));
-  };
+  }, []);
 
-  const clearMapping = (system: string) => {
+  const clearMapping = useCallback((system: string) => {
     setMappings(prev => {
       const newMappings = { ...prev };
       delete newMappings[system];
@@ -235,9 +241,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Cleared",
       description: `Removed mapping for ${system}`,
     });
-  };
+  }, []);
 
-  const clearAllMappings = () => {
+  const clearAllMappings = useCallback(() => {
     setMappings({});
     setItemTypeMappings({});
     setSuggestions({});
@@ -245,9 +251,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "All Mappings Cleared",
       description: "All system mappings have been removed",
     });
-  };
+  }, []);
 
-  const handleItemTypeMappingChange = (system: string, itemType: string, type: 'laborCode', value: string) => {
+  const handleItemTypeMappingChange = useCallback((system: string, itemType: string, type: 'laborCode', value: string) => {
     setItemTypeMappings(prev => ({
       ...prev,
       [system]: {
@@ -258,7 +264,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         }
       }
     }));
-  };
+  }, []);
 
   const handleAutoSuggest = () => {
     setIsAutoSuggestLoading(true);
@@ -282,7 +288,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }, 800);
   };
 
-  const applySystemSuggestions = (system: string) => {
+  const applySystemSuggestions = useCallback((system: string) => {
     const suggestion = suggestions[system];
     if (!suggestion) return;
 
@@ -297,7 +303,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Suggestion Applied",
       description: `Applied smart suggestion for ${system}`,
     });
-  };
+  }, [suggestions]);
 
   const applyMappings = () => {
     let itemsAffected = 0;
@@ -364,7 +370,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   };
 
-  const applySystemMapping = (system: string) => {
+  const applySystemMapping = useCallback((system: string) => {
     const systemMapping = mappings[system];
     if (!systemMapping) return;
 
@@ -412,7 +418,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
-  };
+  }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus]);
 
   const getStatusBadge = (sm: typeof systemMappings[0]) => {
     if (sm.laborCode) {
@@ -500,7 +506,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                 />
               </div>
 
-              {/* Card View - Virtualized */}
+              {/* Card View - Virtualized single column for proper positioning */}
               {viewMode === 'cards' && (
                 <>
                   {isProcessing && (
@@ -521,40 +527,51 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                           position: 'relative',
                         }}
                       >
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                            const sm = filteredSystems[virtualRow.index];
-                            return enableItemTypeMappings ? (
-                              <ItemTypeMappingCard
-                                key={sm.system}
-                                system={sm.system}
-                                itemCount={sm.itemCount}
-                                items={getAllItemsForSystem(sm.system)}
-                                systemLaborCode={sm.laborCode}
-                                itemTypeMappings={itemTypeMappings[sm.system] || {}}
-                                onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                                onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
-                                laborCodes={allLaborCodes}
-                              />
-                            ) : (
-                              <SystemCard
-                                key={sm.system}
-                                system={sm.system}
-                                itemCount={sm.itemCount}
-                                laborCode={sm.laborCode}
-                                suggestedLaborCode={sm.suggestedLaborCode}
-                                appliedInfo={sm.appliedInfo}
-                                onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                                onClear={() => clearMapping(sm.system)}
-                                onApplySuggestions={() => applySystemSuggestions(sm.system)}
-                                onApplySystemMapping={() => applySystemMapping(sm.system)}
-                                onViewAllItems={onNavigateToEstimates}
-                                importedCostCodes={importedCostCodes}
-                                getPreviewItems={getItemsForSystem}
-                              />
-                            );
-                          })}
-                        </div>
+                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                          const sm = filteredSystems[virtualRow.index];
+                          return (
+                            <div
+                              key={sm.system}
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: `${virtualRow.size}px`,
+                                transform: `translateY(${virtualRow.start}px)`,
+                              }}
+                              className="pb-4"
+                            >
+                              {enableItemTypeMappings ? (
+                                <ItemTypeMappingCard
+                                  system={sm.system}
+                                  itemCount={sm.itemCount}
+                                  items={[]} // Pass empty - items loaded lazily inside component
+                                  systemLaborCode={sm.laborCode}
+                                  itemTypeMappings={itemTypeMappings[sm.system] || {}}
+                                  onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                                  onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
+                                  laborCodes={allLaborCodes}
+                                />
+                              ) : (
+                                <SystemCard
+                                  system={sm.system}
+                                  itemCount={sm.itemCount}
+                                  laborCode={sm.laborCode}
+                                  suggestedLaborCode={sm.suggestedLaborCode}
+                                  appliedInfo={sm.appliedInfo}
+                                  onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                                  onClear={() => clearMapping(sm.system)}
+                                  onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                                  onApplySystemMapping={() => applySystemMapping(sm.system)}
+                                  onViewAllItems={onNavigateToEstimates}
+                                  importedCostCodes={importedCostCodes}
+                                  getPreviewItems={getItemsForSystem}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

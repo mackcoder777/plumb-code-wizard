@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
 import { MaterialMappingTab } from '@/components/tabs/MaterialMappingTab';
+import { SystemMappingTab } from '@/components/tabs/SystemMappingTab';
 import { PdfImportTab } from '@/components/tabs/PdfImportTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
@@ -2242,337 +2243,29 @@ const EnhancedCostCodeManager = () => {
             </>
           )}
 
-          {/* Mapping Tab */}
-          {activeTab === 'mapping' && estimateData.length > 0 && (
-            <div className="space-y-6">
-              {/* System Audit Trail Section */}
-              <div className="bg-white rounded-lg border shadow-sm">
-                <div className="px-6 py-4 border-b flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">System Mapping Audit Trail</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Track all system mappings and their change history
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label className="text-sm text-gray-600">Item Type Overrides</label>
-                    <Switch
-                      checked={enableItemTypeMappings}
-                      onCheckedChange={setEnableItemTypeMappings}
-                    />
-                  </div>
+          {/* Mapping Tab - Using Optimized SystemMappingTab */}
+          {activeTab === 'mapping' && (
+            estimateData.length > 0 ? (
+              <SystemMappingTab
+                data={estimateData}
+                onDataUpdate={setEstimateData}
+                onNavigateToEstimates={(systemFilter) => {
+                  setFilters(prev => ({ ...prev, system: systemFilter }));
+                  setActiveTab('estimates');
+                }}
+                projectId={currentProject?.id}
+              />
+            ) : (
+              <div className="bg-card border border-border rounded-lg p-12 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                  <span className="text-3xl">🔗</span>
                 </div>
-                <div className="p-6">
-                  <div className="space-y-4">
-                    {Object.entries(
-                      estimateData.reduce((acc: Record<string, any>, item) => {
-                        const system = item.system || 'Unknown';
-                        if (!acc[system]) {
-                          const systemLower = system.toLowerCase().trim();
-                          const mapping = customMappings[systemLower] || {};
-                          acc[system] = {
-                            count: 0,
-                            materialCode: mapping.materialCode || '',
-                            laborCode: mapping.laborCode || item.suggestedCode?.costHead || '',
-                            autoDetected: !customMappings[systemLower],
-                            lastChanged: new Date().toISOString(),
-                            changeHistory: mappingHistory[systemLower] || [],
-                            isVerified: !!verifiedSystems[systemLower],
-                            verifiedAt: verifiedSystems[systemLower]?.verifiedAt,
-                            appliedInfo: appliedSystems[systemLower]
-                          };
-                        }
-                        acc[system].count++;
-                        return acc;
-                      }, {})
-                    ).map(([system, data]: [string, any]) => {
-                      const systemLower = system.toLowerCase().trim();
-                      const systemItems = estimateData.filter(item => (item.system || 'Unknown') === system);
-                      return (
-                      <div key={system} className={`border rounded-lg p-4 ${data.isVerified ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-3">
-                            {data.isVerified && (
-                              <span className="text-green-600 text-lg">✓</span>
-                            )}
-                            <span className="font-medium text-gray-900">{system}</span>
-                            <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                              {data.count} items
-                            </span>
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              data.autoDetected 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {data.autoDetected ? 'Auto-detected' : 'Manual override'}
-                            </span>
-                            {data.appliedInfo && (
-                              <span className="px-2 py-1 text-xs rounded-full bg-emerald-500 text-white font-medium">
-                                ✓ Applied & Verified ({data.appliedInfo.itemCount})
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {/* Contextual Apply Button */}
-                            {(() => {
-                              const hasChangedSinceApplied = data.appliedInfo && (
-                                data.appliedInfo.appliedMaterialCode !== data.materialCode ||
-                                data.appliedInfo.appliedLaborCode !== data.laborCode
-                              );
-                              
-                              if (data.appliedInfo && !hasChangedSinceApplied) {
-                                // Already applied and no changes - show static applied state
-                                return (
-                                  <div className="px-3 py-1 text-xs rounded font-medium bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                                    ✓ Applied ({data.appliedInfo.itemCount} items)
-                                  </div>
-                                );
-                              } else {
-                                // Not applied yet OR mapping has changed - show apply button
-                                const hasAnyCode = data.materialCode || data.laborCode;
-                                return (
-                                  <button
-                                    onClick={() => applyMappingToSystem(system, data.materialCode, data.laborCode)}
-                                    disabled={!hasAnyCode}
-                                    className={`px-3 py-1 text-xs rounded font-medium transition ${
-                                      hasAnyCode 
-                                        ? 'bg-green-600 text-white hover:bg-green-700' 
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    }`}
-                                  >
-                                    {hasChangedSinceApplied ? `Apply Changes (${data.count})` : `Apply to System (${data.count})`}
-                                  </button>
-                                );
-                              }
-                            })()}
-                            <button
-                              onClick={() => {
-                                setCustomMappings(prev => {
-                                  const updated = { ...prev };
-                                  delete updated[systemLower];
-                                  return updated;
-                                });
-                              }}
-                              className="px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
-                            >
-                              Reset
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Labor Code Selector (Material codes now in separate Material Mapping tab) */}
-                        <div className="mt-3">
-                          <div className="text-xs text-blue-600 font-medium mb-1">Labor Code:</div>
-                          <MappingCombobox
-                            value={data.laborCode}
-                            onChange={(value) => {
-                              setCustomMappings(prev => ({
-                                ...prev,
-                                [systemLower]: {
-                                  ...prev[systemLower],
-                                  laborCode: value
-                                }
-                              }));
-                            }}
-                            className="min-w-[200px]"
-                          />
-                        </div>
-                          
-                        <div className="mt-2 text-xs text-gray-500">
-                          Last modified: {new Date(data.lastChanged).toLocaleString()}
-                          {data.appliedInfo && (
-                            <span className="ml-3 text-emerald-600 font-medium">
-                              • Applied: {data.appliedInfo.appliedAt.toLocaleString()} ({data.appliedInfo.itemCount} items)
-                              {data.appliedInfo.appliedMaterialCode && ` | Material: ${data.appliedInfo.appliedMaterialCode}`}
-                              {data.appliedInfo.appliedLaborCode && ` | Labor: ${data.appliedInfo.appliedLaborCode}`}
-                            </span>
-                          )}
-                          
-                          {/* Breadcrumb trail - uses stored auto-suggestion */}
-                          <div className="text-xs text-gray-600 bg-white p-2 rounded border">
-                            <span className="font-medium">Change trail:</span>
-                            {(() => {
-                              const systemLower = system.toLowerCase().trim();
-                              // Get stored auto-suggestion or generate fresh
-                              const storedAutoSuggestion = systemAutoSuggestions[systemLower];
-                              const autoSuggested = storedAutoSuggestion || generateCostCode({ system }).costHead;
-                              
-                              if (data.laborCode === autoSuggested || (!data.laborCode && !autoSuggested)) {
-                                return <span className="ml-2">Auto-suggested: {autoSuggested || 'None'}</span>;
-                              }
-                              return (
-                                <span className="ml-2">
-                                  Auto-suggested: {autoSuggested || 'None'} → 
-                                  <span className="text-blue-600 font-medium"> Changed by user to: {data.laborCode || 'Cleared'}</span>
-                                </span>
-                              );
-                            })()}
-                          </div>
-
-                          {/* Item Type Breakdown - shown when toggle is enabled */}
-                          {enableItemTypeMappings && (() => {
-                            const itemTypeGroups = systemItems.reduce((acc: Record<string, any[]>, item) => {
-                              const itemType = item.itemType || 'Other';
-                              if (!acc[itemType]) acc[itemType] = [];
-                              acc[itemType].push(item);
-                              return acc;
-                            }, {});
-                            
-                            const itemTypes = Object.keys(itemTypeGroups);
-                            if (itemTypes.length <= 1) return null;
-                            
-                            return (
-                              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className="text-sm font-medium text-blue-900 mb-2">
-                                  📋 Item Type Overrides ({itemTypes.length} types)
-                                </div>
-                                <div className="space-y-2">
-                                  {itemTypes.map(itemType => {
-                                    const items = itemTypeGroups[itemType];
-                                    const currentOverride = itemTypeMappings[system]?.[itemType];
-                                    return (
-                                      <div key={itemType} className="flex items-center justify-between bg-white p-2 rounded border">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-sm font-medium text-gray-700">{itemType}</span>
-                                          <span className="text-xs text-gray-500">({items.length} items)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <MappingCombobox
-                                            value={currentOverride?.laborCode || ''}
-                                            onChange={(value) => {
-                                              setItemTypeMappings(prev => ({
-                                                ...prev,
-                                                [system]: {
-                                                  ...prev[system],
-                                                  [itemType]: {
-                                                    ...prev[system]?.[itemType],
-                                                    laborCode: value
-                                                  }
-                                                }
-                                              }));
-                                            }}
-                                            className="min-w-[180px]"
-                                          />
-                                          {currentOverride?.laborCode && (
-                                            <button
-                                              onClick={() => {
-                                                // Apply this item type override
-                                                const updated = estimateData.map(e => {
-                                                  if ((e.system || 'Unknown') === system && (e.itemType || 'Other') === itemType && !e.costCode) {
-                                                    return { ...e, costCode: currentOverride.laborCode };
-                                                  }
-                                                  return e;
-                                                });
-                                                setEstimateData(updated);
-                                                setNotification({ type: 'success', message: `Applied ${currentOverride.laborCode} to ${items.length} ${itemType} items in ${system}` });
-                                                setTimeout(() => setNotification(null), 3000);
-                                              }}
-                                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                                            >
-                                              Apply
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* Item Preview Section */}
-                          <details className="mt-3">
-                            <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900 flex items-center gap-2">
-                              <span>👁️ Preview Items ({systemItems.length})</span>
-                            </summary>
-                            <div className="mt-2 border rounded-lg overflow-hidden">
-                              <table className="w-full text-xs">
-                                <thead className="bg-gray-100">
-                                  <tr>
-                                    <th className="text-left p-2 font-medium">Drawing</th>
-                                    <th className="text-left p-2 font-medium">Material Desc</th>
-                                    <th className="text-left p-2 font-medium">Item Name</th>
-                                    <th className="text-right p-2 font-medium">Qty</th>
-                                    <th className="text-right p-2 font-medium">$ Value</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                  {systemItems.slice(0, 5).map((item, idx) => (
-                                    <tr key={item.id || idx} className="bg-white">
-                                      <td className="p-2 truncate max-w-[80px]" title={item.drawing}>{item.drawing || '-'}</td>
-                                      <td className="p-2 truncate max-w-[150px]" title={item.materialDesc}>{item.materialDesc || '-'}</td>
-                                      <td className="p-2 truncate max-w-[120px]" title={item.itemName}>{item.itemName || '-'}</td>
-                                      <td className="p-2 text-right tabular-nums">{item.quantity}</td>
-                                      <td className="p-2 text-right tabular-nums">${(item.materialDollars || 0).toLocaleString()}</td>
-                                    </tr>
-                                  ))}
-                                  {systemItems.length === 0 && (
-                                    <tr>
-                                      <td colSpan={5} className="p-4 text-center text-gray-500">
-                                        No items found
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                              {systemItems.length > 5 && (
-                                <div className="p-2 bg-gray-50 border-t text-center text-xs text-gray-600">
-                                  Showing 5 of {systemItems.length} items
-                                </div>
-                              )}
-                              <div className="p-2 bg-gray-50 border-t">
-                                <button
-                                  onClick={() => {
-                                    setFilters(prev => ({ ...prev, system }));
-                                    setActiveTab('estimates');
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-medium flex items-center justify-center gap-2"
-                                >
-                                  ↗️ View All {systemItems.length} Items in Estimates Tab
-                                </button>
-                              </div>
-                            </div>
-                          </details>
-                        </div>
-                      </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">No Estimate Data Loaded</h3>
+                <p className="text-muted-foreground mb-4">
+                  Upload an estimate file first to map systems to labor codes.
+                </p>
               </div>
-
-              {/* Mapping Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-green-600">
-                    {Object.keys(verifiedSystems).length}
-                  </div>
-                  <div className="text-sm text-gray-600">Verified Systems</div>
-                </div>
-                
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-orange-600">
-                    {uniqueSystems.length - Object.keys(verifiedSystems).length}
-                  </div>
-                  <div className="text-sm text-gray-600">Pending Review</div>
-                </div>
-                
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {Object.keys(customMappings).length}
-                  </div>
-                  <div className="text-sm text-gray-600">Custom Overrides</div>
-                </div>
-                
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-purple-600">
-                    {uniqueSystems.length}
-                  </div>
-                  <div className="text-sm text-gray-600">Total Systems</div>
-                </div>
-              </div>
-            </div>
+            )
           )}
 
           {/* Material Mapping Tab */}
