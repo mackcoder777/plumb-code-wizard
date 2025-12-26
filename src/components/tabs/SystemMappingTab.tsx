@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, startTransition } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus } from '@/hooks/useEstimateProjects';
+import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,9 +38,23 @@ interface SystemMappingTabProps {
 
 type ViewMode = 'cards' | 'table';
 
+// Stable style objects to avoid breaking React.memo
+const containerStyle: React.CSSProperties = {
+  position: 'relative',
+  width: '100%',
+};
+
+const getVirtualRowStyle = (start: number, size: number): React.CSSProperties => ({
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: size,
+  transform: `translateY(${start}px)`,
+});
+
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
   const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
@@ -50,18 +65,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
-  const [isProcessing, setIsProcessing] = useState(false);
   
   // Ref for virtualization container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // Debounce search term
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+  // Use deferred value for search to keep UI responsive
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const isSearchStale = searchTerm !== deferredSearchTerm;
+
+  // Use Web Worker-powered system index for large datasets
+  const { systemIndex, isProcessing, getPreviewItems } = useSystemIndex(data);
 
   // Load system mappings from database to get applied status
   const { data: dbMappings = [] } = useSystemMappings(projectId);
@@ -116,63 +129,24 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
   }, [importedCostCodes, dbLaborCodes]);
 
-  // Extract unique systems and count items - OPTIMIZED: Only store counts, not full item arrays
-  // NOTE: No setState inside useMemo - that causes infinite loops!
+  // Build system mappings from pre-computed index (very fast - just adds UI state)
   const systemMappings = useMemo(() => {
-    const systemMap = new Map<string, number>();
-    
-    for (let i = 0; i < data.length; i++) {
-      const systemKey = data[i].system || 'Unknown';
-      systemMap.set(systemKey, (systemMap.get(systemKey) || 0) + 1);
-    }
+    return systemIndex.map(entry => ({
+      system: entry.system,
+      itemCount: entry.itemCount,
+      laborCode: mappings[entry.system]?.laborCode,
+      suggestedLaborCode: suggestions[entry.system]?.laborCode,
+      appliedInfo: appliedSystems[entry.system],
+    }));
+  }, [systemIndex, mappings, suggestions, appliedSystems]);
 
-    const result = Array.from(systemMap.entries())
-      .map(([system, count]) => ({
-        system,
-        itemCount: count,
-        laborCode: mappings[system]?.laborCode,
-        suggestedLaborCode: suggestions[system]?.laborCode,
-        appliedInfo: appliedSystems[system],
-      }))
-      .sort((a, b) => b.itemCount - a.itemCount);
-    
-    return result;
-  }, [data, mappings, suggestions, appliedSystems]);
-  
-  // Set processing state based on data size (outside useMemo)
-  useEffect(() => {
-    if (data.length > 5000) {
-      setIsProcessing(true);
-      // Use requestIdleCallback to allow UI to update
-      const id = requestIdleCallback(() => setIsProcessing(false), { timeout: 100 });
-      return () => cancelIdleCallback(id);
-    }
-  }, [data.length]);
-  
-  // Lazy-load items for preview - only fetches when needed
-  const getItemsForSystem = useCallback((system: string, limit = 5): EstimateItem[] => {
-    const items: EstimateItem[] = [];
-    for (const item of data) {
-      if ((item.system || 'Unknown') === system) {
-        items.push(item);
-        if (items.length >= limit) break;
-      }
-    }
-    return items;
-  }, [data]);
-  
-  // Get all items for a system (for item type mappings)
-  const getAllItemsForSystem = useCallback((system: string): EstimateItem[] => {
-    return data.filter(item => (item.system || 'Unknown') === system);
-  }, [data]);
-
-  // Filter systems by search term and active filters - using debounced search
+  // Filter systems by search term and active filters - using deferred search
   const filteredSystems = useMemo(() => {
     let filtered = systemMappings;
 
-    // Apply search filter with debounced term
-    if (debouncedSearchTerm) {
-      const searchLower = debouncedSearchTerm.toLowerCase();
+    // Apply search filter with deferred term
+    if (deferredSearchTerm) {
+      const searchLower = deferredSearchTerm.toLowerCase();
       filtered = filtered.filter(sm => 
         sm.system.toLowerCase().includes(searchLower)
       );
@@ -193,14 +167,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }
 
     return filtered;
-  }, [systemMappings, debouncedSearchTerm, activeStatusFilter, activeSystemFilter]);
+  }, [systemMappings, deferredSearchTerm, activeStatusFilter, activeSystemFilter]);
   
-  // Virtualization for cards view
+  // Virtualization for cards view - increased overscan for smoother scrolling
   const rowVirtualizer = useVirtualizer({
     count: filteredSystems.length,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 320, // Approximate card height
-    overscan: 3,
+    estimateSize: () => 320,
+    overscan: 5, // Render 5 extra items above/below for smoother scrolling
   });
 
   // Statistics
@@ -221,14 +195,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }));
   }, [systemMappings]);
 
+  // Stable callback refs to avoid breaking React.memo
   const handleMappingChange = useCallback((system: string, type: 'laborCode', value: string) => {
-    setMappings(prev => ({
-      ...prev,
-      [system]: {
-        ...prev[system],
-        [type]: value === 'none' ? undefined : value,
-      }
-    }));
+    startTransition(() => {
+      setMappings(prev => ({
+        ...prev,
+        [system]: {
+          ...prev[system],
+          [type]: value === 'none' ? undefined : value,
+        }
+      }));
+    });
   }, []);
 
   const clearMapping = useCallback((system: string) => {
@@ -254,19 +231,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, []);
 
   const handleItemTypeMappingChange = useCallback((system: string, itemType: string, type: 'laborCode', value: string) => {
-    setItemTypeMappings(prev => ({
-      ...prev,
-      [system]: {
-        ...prev[system],
-        [itemType]: {
-          ...prev[system]?.[itemType],
-          [type]: value === 'none' ? undefined : value,
+    startTransition(() => {
+      setItemTypeMappings(prev => ({
+        ...prev,
+        [system]: {
+          ...prev[system],
+          [itemType]: {
+            ...prev[system]?.[itemType],
+            [type]: value === 'none' ? undefined : value,
+          }
         }
-      }
-    }));
+      }));
+    });
   }, []);
 
-  const handleAutoSuggest = () => {
+  const handleAutoSuggest = useCallback(() => {
     setIsAutoSuggestLoading(true);
     
     // Simulate processing time for better UX
@@ -286,18 +265,20 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         description: `Generated ${suggestionCount} suggestion${suggestionCount !== 1 ? 's' : ''} based on system names`,
       });
     }, 800);
-  };
+  }, [systemMappings]);
 
   const applySystemSuggestions = useCallback((system: string) => {
     const suggestion = suggestions[system];
     if (!suggestion) return;
 
-    setMappings(prev => ({
-      ...prev,
-      [system]: {
-        laborCode: suggestion.laborCode || prev[system]?.laborCode,
-      }
-    }));
+    startTransition(() => {
+      setMappings(prev => ({
+        ...prev,
+        [system]: {
+          laborCode: suggestion.laborCode || prev[system]?.laborCode,
+        }
+      }));
+    });
 
     toast({
       title: "Suggestion Applied",
@@ -305,7 +286,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   }, [suggestions]);
 
-  const applyMappings = () => {
+  const applyMappings = useCallback(() => {
     let itemsAffected = 0;
     const systemItemCounts: Record<string, number> = {};
 
@@ -368,7 +349,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mappings Applied Successfully",
       description: `Applied ${Object.keys(mappings).length} system mappings${itemTypeMappingCount > 0 ? ` and ${itemTypeMappingCount} item type overrides` : ''} to ${itemsAffected} items`,
     });
-  };
+  }, [data, mappings, itemTypeMappings, projectId, batchUpdateAppliedStatus, onDataUpdate]);
 
   const applySystemMapping = useCallback((system: string) => {
     const systemMapping = mappings[system];
@@ -420,15 +401,32 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus]);
 
-  const getStatusBadge = (sm: typeof systemMappings[0]) => {
+  const getStatusBadge = useCallback((sm: typeof systemMappings[0]) => {
     if (sm.laborCode) {
       return <Badge className="bg-success text-success-foreground"><Check className="w-3 h-3 mr-1" /> Mapped</Badge>;
     }
     return <Badge variant="outline">Unmapped</Badge>;
-  };
+  }, []);
 
   const totalItems = data.length;
   const hasMappings = Object.keys(mappings).length > 0 || Object.keys(itemTypeMappings).length > 0;
+
+  // Memoized handler creators to avoid breaking React.memo on cards
+  const createLaborCodeChangeHandler = useCallback((system: string) => {
+    return (value: string) => handleMappingChange(system, 'laborCode', value);
+  }, [handleMappingChange]);
+
+  const createClearHandler = useCallback((system: string) => {
+    return () => clearMapping(system);
+  }, [clearMapping]);
+
+  const createApplySuggestionsHandler = useCallback((system: string) => {
+    return () => applySystemSuggestions(system);
+  }, [applySystemSuggestions]);
+
+  const createApplyMappingHandler = useCallback((system: string) => {
+    return () => applySystemMapping(system);
+  }, [applySystemMapping]);
 
   return (
     <div className="space-y-6">
@@ -502,11 +500,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                   placeholder="Search systems..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
+                  className={cn("pl-9", isSearchStale && "opacity-70")}
                 />
+                {isSearchStale && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                )}
               </div>
 
-              {/* Card View - Virtualized single column for proper positioning */}
+              {/* Card View - Virtualized single column */}
               {viewMode === 'cards' && (
                 <>
                   {isProcessing && (
@@ -522,24 +523,18 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                     >
                       <div
                         style={{
-                          height: `${rowVirtualizer.getTotalSize()}px`,
-                          width: '100%',
-                          position: 'relative',
+                          ...containerStyle,
+                          height: rowVirtualizer.getTotalSize(),
                         }}
                       >
                         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                           const sm = filteredSystems[virtualRow.index];
+                          const rowStyle = getVirtualRowStyle(virtualRow.start, virtualRow.size);
+                          
                           return (
                             <div
                               key={sm.system}
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: `${virtualRow.size}px`,
-                                transform: `translateY(${virtualRow.start}px)`,
-                              }}
+                              style={rowStyle}
                               className="pb-4"
                             >
                               {enableItemTypeMappings ? (
@@ -549,7 +544,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                   items={[]} // Pass empty - items loaded lazily inside component
                                   systemLaborCode={sm.laborCode}
                                   itemTypeMappings={itemTypeMappings[sm.system] || {}}
-                                  onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                                  onSystemLaborCodeChange={createLaborCodeChangeHandler(sm.system)}
                                   onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
                                   laborCodes={allLaborCodes}
                                 />
@@ -560,13 +555,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                   laborCode={sm.laborCode}
                                   suggestedLaborCode={sm.suggestedLaborCode}
                                   appliedInfo={sm.appliedInfo}
-                                  onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                                  onClear={() => clearMapping(sm.system)}
-                                  onApplySuggestions={() => applySystemSuggestions(sm.system)}
-                                  onApplySystemMapping={() => applySystemMapping(sm.system)}
+                                  onLaborCodeChange={createLaborCodeChangeHandler(sm.system)}
+                                  onClear={createClearHandler(sm.system)}
+                                  onApplySuggestions={createApplySuggestionsHandler(sm.system)}
+                                  onApplySystemMapping={createApplyMappingHandler(sm.system)}
                                   onViewAllItems={onNavigateToEstimates}
                                   importedCostCodes={importedCostCodes}
-                                  getPreviewItems={getItemsForSystem}
+                                  getPreviewItems={getPreviewItems}
                                 />
                               )}
                             </div>
@@ -602,7 +597,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                 value={sm.laborCode}
                                 options={allLaborCodes}
                                 placeholder="Select labor code..."
-                                onValueChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                                onValueChange={createLaborCodeChangeHandler(sm.system)}
                               />
                             </td>
                             
@@ -613,7 +608,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => clearMapping(sm.system)}
+                                  onClick={createClearHandler(sm.system)}
                                 >
                                   <X className="w-4 h-4" />
                                 </Button>
@@ -627,7 +622,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                 </div>
               )}
 
-              {filteredSystems.length === 0 && (
+              {filteredSystems.length === 0 && !isProcessing && (
                 <div className="text-center py-12 text-muted-foreground">
                   <p className="text-lg font-medium">No systems found</p>
                   <p className="text-sm mt-1">
