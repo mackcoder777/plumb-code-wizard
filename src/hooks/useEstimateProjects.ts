@@ -355,19 +355,39 @@ export const useBatchSaveMappings = () => {
 };
 
 // Fetch estimate items for a project
+// NOTE: Supabase has a default limit of 1000 rows, so we must paginate for large datasets
 export const useEstimateItems = (projectId: string | null) => {
   return useQuery({
     queryKey: ['estimate_items', projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      const { data, error } = await supabase
-        .from('estimate_items')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('row_number', { ascending: true });
+      
+      // Fetch all items using pagination to overcome the 1000 row limit
+      const allItems: EstimateItem[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('estimate_items')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('row_number', { ascending: true })
+          .range(from, from + pageSize - 1);
 
-      if (error) throw error;
-      return data as EstimateItem[];
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allItems.push(...(data as EstimateItem[]));
+          from += pageSize;
+          hasMore = data.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allItems;
     },
     enabled: !!projectId,
   });
