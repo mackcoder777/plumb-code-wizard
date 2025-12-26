@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
-import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink, Clock } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink, Clock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EstimateItem } from '@/types/estimate';
 
@@ -22,7 +22,10 @@ interface SystemCardProps {
   onApplySuggestions?: () => void;
   onApplySystemMapping?: () => void;
   onViewAllItems?: (system: string) => void;
+  // Legacy prop - kept for compatibility but not used
   items?: EstimateItem[];
+  // New lazy-loading function
+  getPreviewItems?: (system: string, limit?: number) => EstimateItem[];
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -32,7 +35,7 @@ interface SystemCardProps {
   }>;
 }
 
-export const SystemCard: React.FC<SystemCardProps> = ({
+const SystemCardComponent: React.FC<SystemCardProps> = ({
   system,
   itemCount,
   laborCode,
@@ -43,11 +46,14 @@ export const SystemCard: React.FC<SystemCardProps> = ({
   onApplySuggestions,
   onApplySystemMapping,
   onViewAllItems,
-  items = [],
+  items: legacyItems = [],
+  getPreviewItems,
   importedCostCodes = [],
 }) => {
   const [laborOpen, setLaborOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItems, setPreviewItems] = useState<EstimateItem[]>([]);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   
   const isMapped = !!laborCode;
   const hasSuggestions = !!suggestedLaborCode;
@@ -83,6 +89,26 @@ export const SystemCard: React.FC<SystemCardProps> = ({
     
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
   }, [importedCostCodes, dbLaborCodes]);
+
+  // Lazy-load preview items when collapsible is opened
+  const handlePreviewToggle = useCallback((open: boolean) => {
+    setPreviewOpen(open);
+    if (open && previewItems.length === 0) {
+      setIsLoadingPreview(true);
+      // Use the lazy loading function if available, otherwise fall back to legacy items
+      if (getPreviewItems) {
+        // Use setTimeout to allow UI to update before potentially heavy operation
+        setTimeout(() => {
+          const items = getPreviewItems(system, 5);
+          setPreviewItems(items);
+          setIsLoadingPreview(false);
+        }, 0);
+      } else {
+        setPreviewItems(legacyItems.slice(0, 5));
+        setIsLoadingPreview(false);
+      }
+    }
+  }, [system, previewItems.length, getPreviewItems, legacyItems]);
 
   const getStatusIcon = () => {
     if (isMapped) return <CheckCircle className="w-5 h-5 text-success" />;
@@ -151,10 +177,10 @@ export const SystemCard: React.FC<SystemCardProps> = ({
     return found ? found.description : effectiveCode;
   };
 
-  const handleLaborSelect = (value: string) => {
+  const handleLaborSelect = useCallback((value: string) => {
     onLaborCodeChange(value);
     setLaborOpen(false);
-  };
+  }, [onLaborCodeChange]);
 
   return (
     <Card className={`
@@ -167,7 +193,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             {getStatusIcon()}
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg truncate">{system}</h3>
-              <p className="text-sm text-muted-foreground">{itemCount} items</p>
+              <p className="text-sm text-muted-foreground">{itemCount.toLocaleString()} items</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -299,8 +325,8 @@ export const SystemCard: React.FC<SystemCardProps> = ({
           </>
         )}
 
-        {/* Item Preview Section */}
-        <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
+        {/* Item Preview Section - Lazy Loaded */}
+        <Collapsible open={previewOpen} onOpenChange={handlePreviewToggle}>
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground hover:text-foreground">
               <span className="flex items-center gap-2">
@@ -311,42 +337,49 @@ export const SystemCard: React.FC<SystemCardProps> = ({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2">
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left p-2 font-medium">Drawing</th>
-                    <th className="text-left p-2 font-medium">Material Desc</th>
-                    <th className="text-right p-2 font-medium">Qty</th>
-                    <th className="text-right p-2 font-medium">Hours</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {items.slice(0, 5).map((item, idx) => (
-                    <tr key={item.id || idx} className="text-xs">
-                      <td className="p-2 truncate max-w-[80px]" title={item.drawing}>{item.drawing || '-'}</td>
-                      <td className="p-2 truncate max-w-[120px]" title={item.materialDesc}>{item.materialDesc || '-'}</td>
-                      <td className="p-2 text-right tabular-nums">{item.quantity}</td>
-                      <td className="p-2 text-right tabular-nums">{item.hours || 0}</td>
-                    </tr>
-                  ))}
-                  {items.length === 0 && (
+            {isLoadingPreview ? (
+              <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Loading preview...</span>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
                     <tr>
-                      <td colSpan={4} className="p-4 text-center text-muted-foreground">
-                        No items found
-                      </td>
+                      <th className="text-left p-2 font-medium">Drawing</th>
+                      <th className="text-left p-2 font-medium">Material Desc</th>
+                      <th className="text-right p-2 font-medium">Qty</th>
+                      <th className="text-right p-2 font-medium">Hours</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-              {items.length > 5 && (
-                <div className="p-2 border-t bg-muted/30 text-center">
-                  <span className="text-xs text-muted-foreground">
-                    Showing 5 of {items.length} items
-                  </span>
-                </div>
-              )}
-            </div>
+                  </thead>
+                  <tbody className="divide-y">
+                    {previewItems.map((item, idx) => (
+                      <tr key={item.id || idx} className="text-xs">
+                        <td className="p-2 truncate max-w-[80px]" title={item.drawing}>{item.drawing || '-'}</td>
+                        <td className="p-2 truncate max-w-[120px]" title={item.materialDesc}>{item.materialDesc || '-'}</td>
+                        <td className="p-2 text-right tabular-nums">{item.quantity}</td>
+                        <td className="p-2 text-right tabular-nums">{item.hours || 0}</td>
+                      </tr>
+                    ))}
+                    {previewItems.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                          No items found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                {itemCount > 5 && (
+                  <div className="p-2 border-t bg-muted/30 text-center">
+                    <span className="text-xs text-muted-foreground">
+                      Showing 5 of {itemCount.toLocaleString()} items
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             {onViewAllItems && (
               <Button 
                 variant="outline" 
@@ -355,7 +388,7 @@ export const SystemCard: React.FC<SystemCardProps> = ({
                 onClick={() => onViewAllItems(system)}
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
-                View All {itemCount} Items in Estimates
+                View All {itemCount.toLocaleString()} Items in Estimates
               </Button>
             )}
           </CollapsibleContent>
@@ -364,3 +397,17 @@ export const SystemCard: React.FC<SystemCardProps> = ({
     </Card>
   );
 };
+
+// Wrap in React.memo with custom comparison for performance
+export const SystemCard = memo(SystemCardComponent, (prevProps, nextProps) => {
+  // Only re-render if these key props change
+  return (
+    prevProps.system === nextProps.system &&
+    prevProps.itemCount === nextProps.itemCount &&
+    prevProps.laborCode === nextProps.laborCode &&
+    prevProps.suggestedLaborCode === nextProps.suggestedLaborCode &&
+    prevProps.appliedInfo?.appliedAt === nextProps.appliedInfo?.appliedAt &&
+    prevProps.appliedInfo?.appliedItemCount === nextProps.appliedInfo?.appliedItemCount &&
+    prevProps.appliedInfo?.isVerified === nextProps.appliedInfo?.isVerified
+  );
+});

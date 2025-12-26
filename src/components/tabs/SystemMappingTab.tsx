@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2 } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -19,6 +19,7 @@ import { ItemTypeMappingCard } from './SystemMappingTab/ItemTypeMappingCard';
 import { QuickActions } from './SystemMappingTab/QuickActions';
 import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
 import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -38,6 +39,7 @@ type ViewMode = 'cards' | 'table';
 
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
   const [suggestions, setSuggestions] = useState<Record<string, SuggestionResult>>({});
@@ -48,6 +50,18 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Ref for virtualization container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // Load system mappings from database to get applied status
   const { data: dbMappings = [] } = useSystemMappings(projectId);
@@ -102,40 +116,59 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return uniqueCodes.sort((a, b) => a.description.localeCompare(b.description));
   }, [importedCostCodes, dbLaborCodes]);
 
-  // Extract unique systems and count items
+  // Extract unique systems and count items - OPTIMIZED: Only store counts, not full item arrays
   const systemMappings = useMemo(() => {
-    const systemMap = new Map<string, { count: number; items: EstimateItem[] }>();
+    if (data.length > 5000) {
+      setIsProcessing(true);
+    }
+    
+    const systemMap = new Map<string, number>();
     
     data.forEach(item => {
       const systemKey = item.system || 'Unknown';
-      if (!systemMap.has(systemKey)) {
-        systemMap.set(systemKey, { count: 0, items: [] });
-      }
-      const entry = systemMap.get(systemKey)!;
-      entry.count++;
-      entry.items.push(item);
+      systemMap.set(systemKey, (systemMap.get(systemKey) || 0) + 1);
     });
 
-    return Array.from(systemMap.entries())
-      .map(([system, { count, items }]) => ({
+    const result = Array.from(systemMap.entries())
+      .map(([system, count]) => ({
         system,
         itemCount: count,
-        items,
         laborCode: mappings[system]?.laborCode,
         suggestedLaborCode: suggestions[system]?.laborCode,
         appliedInfo: appliedSystems[system],
       }))
       .sort((a, b) => b.itemCount - a.itemCount);
+    
+    setIsProcessing(false);
+    return result;
   }, [data, mappings, suggestions, appliedSystems]);
+  
+  // Lazy-load items for preview - only fetches when needed
+  const getItemsForSystem = useCallback((system: string, limit = 5): EstimateItem[] => {
+    const items: EstimateItem[] = [];
+    for (const item of data) {
+      if ((item.system || 'Unknown') === system) {
+        items.push(item);
+        if (items.length >= limit) break;
+      }
+    }
+    return items;
+  }, [data]);
+  
+  // Get all items for a system (for item type mappings)
+  const getAllItemsForSystem = useCallback((system: string): EstimateItem[] => {
+    return data.filter(item => (item.system || 'Unknown') === system);
+  }, [data]);
 
-  // Filter systems by search term and active filters
+  // Filter systems by search term and active filters - using debounced search
   const filteredSystems = useMemo(() => {
     let filtered = systemMappings;
 
-    // Apply search filter
-    if (searchTerm) {
+    // Apply search filter with debounced term
+    if (debouncedSearchTerm) {
+      const searchLower = debouncedSearchTerm.toLowerCase();
       filtered = filtered.filter(sm => 
-        sm.system.toLowerCase().includes(searchTerm.toLowerCase())
+        sm.system.toLowerCase().includes(searchLower)
       );
     }
 
@@ -154,7 +187,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }
 
     return filtered;
-  }, [systemMappings, searchTerm, activeStatusFilter, activeSystemFilter]);
+  }, [systemMappings, debouncedSearchTerm, activeStatusFilter, activeSystemFilter]);
+  
+  // Virtualization for cards view
+  const rowVirtualizer = useVirtualizer({
+    count: filteredSystems.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 320, // Approximate card height
+    overscan: 3,
+  });
 
   // Statistics
   const stats = useMemo(() => {
@@ -459,41 +500,65 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                 />
               </div>
 
-              {/* Card View */}
+              {/* Card View - Virtualized */}
               {viewMode === 'cards' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredSystems.map((sm) => (
-                    enableItemTypeMappings ? (
-                      <ItemTypeMappingCard
-                        key={sm.system}
-                        system={sm.system}
-                        itemCount={sm.itemCount}
-                        items={sm.items}
-                        systemLaborCode={sm.laborCode}
-                        itemTypeMappings={itemTypeMappings[sm.system] || {}}
-                        onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                        onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
-                        laborCodes={allLaborCodes}
-                      />
-                    ) : (
-                      <SystemCard
-                        key={sm.system}
-                        system={sm.system}
-                        itemCount={sm.itemCount}
-                        items={sm.items}
-                        laborCode={sm.laborCode}
-                        suggestedLaborCode={sm.suggestedLaborCode}
-                        appliedInfo={sm.appliedInfo}
-                        onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
-                        onClear={() => clearMapping(sm.system)}
-                        onApplySuggestions={() => applySystemSuggestions(sm.system)}
-                        onApplySystemMapping={() => applySystemMapping(sm.system)}
-                        onViewAllItems={onNavigateToEstimates}
-                        importedCostCodes={importedCostCodes}
-                      />
-                    )
-                  ))}
-                </div>
+                <>
+                  {isProcessing && (
+                    <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Processing {data.length.toLocaleString()} items...</span>
+                    </div>
+                  )}
+                  {!isProcessing && filteredSystems.length > 0 && (
+                    <div 
+                      ref={scrollContainerRef}
+                      className="h-[600px] overflow-auto"
+                    >
+                      <div
+                        style={{
+                          height: `${rowVirtualizer.getTotalSize()}px`,
+                          width: '100%',
+                          position: 'relative',
+                        }}
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                            const sm = filteredSystems[virtualRow.index];
+                            return enableItemTypeMappings ? (
+                              <ItemTypeMappingCard
+                                key={sm.system}
+                                system={sm.system}
+                                itemCount={sm.itemCount}
+                                items={getAllItemsForSystem(sm.system)}
+                                systemLaborCode={sm.laborCode}
+                                itemTypeMappings={itemTypeMappings[sm.system] || {}}
+                                onSystemLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                                onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
+                                laborCodes={allLaborCodes}
+                              />
+                            ) : (
+                              <SystemCard
+                                key={sm.system}
+                                system={sm.system}
+                                itemCount={sm.itemCount}
+                                laborCode={sm.laborCode}
+                                suggestedLaborCode={sm.suggestedLaborCode}
+                                appliedInfo={sm.appliedInfo}
+                                onLaborCodeChange={(value) => handleMappingChange(sm.system, 'laborCode', value)}
+                                onClear={() => clearMapping(sm.system)}
+                                onApplySuggestions={() => applySystemSuggestions(sm.system)}
+                                onApplySystemMapping={() => applySystemMapping(sm.system)}
+                                onViewAllItems={onNavigateToEstimates}
+                                importedCostCodes={importedCostCodes}
+                                getPreviewItems={getItemsForSystem}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Table View */}
