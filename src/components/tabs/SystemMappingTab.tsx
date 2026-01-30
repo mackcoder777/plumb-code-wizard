@@ -141,11 +141,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [systemIndex, mappings, suggestions, appliedSystems]);
 
   // Filter systems by search term and active filters - using deferred search
+  // Note: When a specific system is selected from FilterCards, the text search should
+  // NOT further filter (it would be redundant and cause "no results" issues)
   const filteredSystems = useMemo(() => {
     let filtered = systemMappings;
 
-    // Apply search filter with deferred term
-    if (deferredSearchTerm) {
+    // Apply system filter FIRST - if a specific system is selected, only show that one
+    // and skip the text search filter (they're mutually exclusive in practice)
+    if (activeSystemFilter) {
+      filtered = filtered.filter(sm => sm.system === activeSystemFilter);
+    } else if (deferredSearchTerm) {
+      // Only apply text search if no system filter is active
       const searchLower = deferredSearchTerm.toLowerCase();
       filtered = filtered.filter(sm => 
         sm.system.toLowerCase().includes(searchLower)
@@ -159,11 +165,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       } else if (activeStatusFilter === 'unmapped') {
         filtered = filtered.filter(sm => !sm.laborCode);
       }
-    }
-
-    // Apply system filter
-    if (activeSystemFilter) {
-      filtered = filtered.filter(sm => sm.system === activeSystemFilter);
     }
 
     return filtered;
