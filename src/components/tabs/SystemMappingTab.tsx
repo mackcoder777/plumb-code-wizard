@@ -651,52 +651,90 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                 </Button>
               </div>
 
-              {/* Floating Bulk Assignment Toolbar */}
+              {/* Multi-Select Consolidated View */}
               {selectedSystems.size > 0 && (
-                <div className="sticky top-0 z-10 flex items-center justify-between gap-4 p-3 bg-primary/10 border border-primary/30 rounded-lg animate-in slide-in-from-top-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="font-semibold">
-                      {selectedSystems.size} systems selected
-                    </Badge>
-                    <Button variant="ghost" size="sm" onClick={clearSelection}>
-                      <X className="w-4 h-4 mr-1" />
-                      Clear
-                    </Button>
+                <div className="border-2 border-primary/30 rounded-lg overflow-hidden animate-in slide-in-from-top-2 bg-primary/5">
+                  {/* Header with bulk action */}
+                  <div className="flex items-center justify-between gap-4 p-4 bg-primary/10 border-b border-primary/20">
+                    <div className="flex items-center gap-3">
+                      <Badge className="font-semibold text-base px-3 py-1">
+                        {selectedSystems.size} systems selected
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={clearSelection}>
+                        <X className="w-4 h-4 mr-1" />
+                        Clear Selection
+                      </Button>
+                    </div>
                   </div>
                   
-                  <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
-                    <PopoverTrigger asChild>
-                      <Button size="sm">
-                        Assign Labor Code
-                        <ChevronDown className="w-4 h-4 ml-2" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="end">
-                      <Command>
-                        <CommandInput placeholder="Search labor codes..." />
-                        <CommandList>
-                          <CommandEmpty>No code found.</CommandEmpty>
-                          <CommandGroup>
-                            {allLaborCodes.map((code) => (
-                              <CommandItem
-                                key={code.code}
-                                value={`${code.code} ${code.description}`}
-                                onSelect={() => handleBulkAssign(code.code)}
-                              >
-                                <span className="font-mono text-xs mr-2">{code.code}</span>
-                                <span className="truncate">{code.description}</span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  {/* Selected Systems Summary */}
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {filteredSystems.map((sm) => (
+                        <div 
+                          key={sm.system}
+                          className="flex items-center justify-between p-3 bg-background rounded-lg border"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={true}
+                              onCheckedChange={() => toggleSystemSelection(sm.system)}
+                            />
+                            <span className="font-medium text-sm">{sm.system}</span>
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            {sm.itemCount} items
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Total Items Summary */}
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <span className="text-sm font-medium text-muted-foreground">Total Items</span>
+                      <span className="text-lg font-bold tabular-nums">
+                        {filteredSystems.reduce((sum, sm) => sum + sm.itemCount, 0).toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    {/* Single Labor Code Assignment */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Assign Labor Code to All Selected Systems</Label>
+                      <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between h-12 text-left">
+                            <span className="text-muted-foreground">Select a labor code to apply...</span>
+                            <ChevronDown className="w-4 h-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search labor codes..." />
+                            <CommandList className="max-h-[300px]">
+                              <CommandEmpty>No code found.</CommandEmpty>
+                              <CommandGroup>
+                                {allLaborCodes.map((code) => (
+                                  <CommandItem
+                                    key={code.code}
+                                    value={`${code.code} ${code.description}`}
+                                    onSelect={() => handleBulkAssign(code.code)}
+                                  >
+                                    <span className="font-mono text-xs mr-2">{code.code}</span>
+                                    <span className="truncate">{code.description}</span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* Card View - Virtualized single column */}
-              {viewMode === 'cards' && (
+              {/* Card View - Virtualized single column (hidden when multi-select active) */}
+              {viewMode === 'cards' && selectedSystems.size === 0 && (
                 <>
                   {isProcessing && (
                     <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
@@ -772,8 +810,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                 </>
               )}
 
-              {/* Table View */}
-              {viewMode === 'table' && (
+              {/* Table View (hidden when multi-select active) */}
+              {viewMode === 'table' && selectedSystems.size === 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -839,7 +877,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                 </div>
               )}
 
-              {filteredSystems.length === 0 && !isProcessing && (
+              {filteredSystems.length === 0 && !isProcessing && selectedSystems.size === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   <p className="text-lg font-medium">No systems found</p>
                   <p className="text-sm mt-1">
