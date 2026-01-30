@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredVa
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
-import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus } from '@/hooks/useEstimateProjects';
+import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -80,6 +80,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const { data: dbMappings = [] } = useSystemMappings(projectId);
   const updateAppliedStatus = useUpdateAppliedStatus();
   const batchUpdateAppliedStatus = useBatchUpdateAppliedStatus();
+  const saveMapping = useSaveMapping();
 
   // Initialize mappings and appliedSystems from database on load
   useEffect(() => {
@@ -215,16 +216,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   // Stable callback refs to avoid breaking React.memo
   const handleMappingChange = useCallback((system: string, type: 'laborCode', value: string) => {
+    const newValue = value === 'none' ? undefined : value;
+    
     startTransition(() => {
       setMappings(prev => ({
         ...prev,
         [system]: {
           ...prev[system],
-          [type]: value === 'none' ? undefined : value,
+          [type]: newValue,
         }
       }));
     });
-  }, []);
+    
+    // Auto-save to database
+    if (projectId && newValue) {
+      saveMapping.mutate({
+        projectId,
+        systemName: system,
+        costHead: newValue,
+      });
+    }
+  }, [projectId, saveMapping]);
 
   const clearMapping = useCallback((system: string) => {
     setMappings(prev => {
