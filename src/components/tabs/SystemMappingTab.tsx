@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredVa
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
-import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping } from '@/hooks/useEstimateProjects';
+import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping, useBatchSaveMappings } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2 } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -68,6 +71,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
   
+  // Multi-select state
+  const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  
   // Ref for virtualization container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
@@ -84,6 +91,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const batchUpdateAppliedStatus = useBatchUpdateAppliedStatus();
   const saveMapping = useSaveMapping();
   const deleteMapping = useDeleteMapping();
+  const batchSaveMappings = useBatchSaveMappings();
 
   // Initialize mappings and appliedSystems from database on load
   useEffect(() => {
@@ -269,6 +277,69 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       description: "All system mappings have been removed",
     });
   }, []);
+
+  // Multi-select handlers
+  const toggleSystemSelection = useCallback((system: string) => {
+    const systemKey = normalizeSystemKey(system);
+    setSelectedSystems(prev => {
+      const next = new Set(prev);
+      if (next.has(systemKey)) {
+        next.delete(systemKey);
+      } else {
+        next.add(systemKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedSystems.size === filteredSystems.length) {
+      setSelectedSystems(new Set());
+    } else {
+      setSelectedSystems(new Set(filteredSystems.map(sm => normalizeSystemKey(sm.system))));
+    }
+  }, [filteredSystems, selectedSystems.size]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedSystems(new Set());
+  }, []);
+
+  const handleBulkAssign = useCallback((laborCode: string) => {
+    if (selectedSystems.size === 0) return;
+    
+    const systemsToUpdate = Array.from(selectedSystems);
+    
+    // Update local state
+    startTransition(() => {
+      setMappings(prev => {
+        const next = { ...prev };
+        systemsToUpdate.forEach(systemKey => {
+          next[systemKey] = { laborCode };
+        });
+        return next;
+      });
+    });
+
+    // Persist to database
+    if (projectId) {
+      batchSaveMappings.mutate({
+        projectId,
+        mappings: systemsToUpdate.map(systemKey => ({
+          systemName: systemKey,
+          costHead: laborCode,
+        })),
+      });
+    }
+
+    // Clear selection after assignment
+    setSelectedSystems(new Set());
+    setBulkAssignOpen(false);
+    
+    toast({
+      title: "Bulk Assignment Complete",
+      description: `Assigned labor code to ${systemsToUpdate.length} systems`,
+    });
+  }, [selectedSystems, projectId, batchSaveMappings]);
 
   const handleItemTypeMappingChange = useCallback((system: string, itemType: string, type: 'laborCode', value: string) => {
     startTransition(() => {
@@ -536,19 +607,85 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search systems..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className={cn("pl-9", isSearchStale && "opacity-70")}
-                />
-                {isSearchStale && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-                )}
+              {/* Search Bar + Multi-Select Controls */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search systems..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={cn("pl-9", isSearchStale && "opacity-70")}
+                  />
+                  {isSearchStale && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                
+                {/* Multi-Select Toggle */}
+                <Button
+                  variant={selectedSystems.size > 0 ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleSelectAll}
+                  className="shrink-0"
+                >
+                  {selectedSystems.size === filteredSystems.length && filteredSystems.length > 0 ? (
+                    <>
+                      <CheckSquare className="w-4 h-4 mr-2" />
+                      Deselect All
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-4 h-4 mr-2" />
+                      Select All ({filteredSystems.length})
+                    </>
+                  )}
+                </Button>
               </div>
+
+              {/* Floating Bulk Assignment Toolbar */}
+              {selectedSystems.size > 0 && (
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-4 p-3 bg-primary/10 border border-primary/30 rounded-lg animate-in slide-in-from-top-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="font-semibold">
+                      {selectedSystems.size} systems selected
+                    </Badge>
+                    <Button variant="ghost" size="sm" onClick={clearSelection}>
+                      <X className="w-4 h-4 mr-1" />
+                      Clear
+                    </Button>
+                  </div>
+                  
+                  <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+                    <PopoverTrigger asChild>
+                      <Button size="sm">
+                        Assign Labor Code
+                        <ChevronDown className="w-4 h-4 ml-2" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="end">
+                      <Command>
+                        <CommandInput placeholder="Search labor codes..." />
+                        <CommandList>
+                          <CommandEmpty>No code found.</CommandEmpty>
+                          <CommandGroup>
+                            {allLaborCodes.map((code) => (
+                              <CommandItem
+                                key={code.code}
+                                value={`${code.code} ${code.description}`}
+                                onSelect={() => handleBulkAssign(code.code)}
+                              >
+                                <span className="font-mono text-xs mr-2">{code.code}</span>
+                                <span className="truncate">{code.description}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
 
               {/* Card View - Virtualized single column */}
               {viewMode === 'cards' && (
@@ -580,33 +717,44 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                               style={rowStyle}
                               className="pb-4"
                             >
-                              {enableItemTypeMappings ? (
-                                <ItemTypeMappingCard
-                                  system={sm.system}
-                                  itemCount={sm.itemCount}
-                                  items={[]} // Pass empty - items loaded lazily inside component
-                                  systemLaborCode={sm.laborCode}
-                                  itemTypeMappings={itemTypeMappings[sm.system] || {}}
-                                  onSystemLaborCodeChange={createLaborCodeChangeHandler(sm.system)}
-                                  onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
-                                  laborCodes={allLaborCodes}
-                                />
-                              ) : (
-                                <SystemCard
-                                  system={sm.system}
-                                  itemCount={sm.itemCount}
-                                  laborCode={sm.laborCode}
-                                  suggestedLaborCode={sm.suggestedLaborCode}
-                                  appliedInfo={sm.appliedInfo}
-                                  onLaborCodeChange={createLaborCodeChangeHandler(sm.system)}
-                                  onClear={createClearHandler(sm.system)}
-                                  onApplySuggestions={createApplySuggestionsHandler(sm.system)}
-                                  onApplySystemMapping={createApplyMappingHandler(sm.system)}
-                                  onViewAllItems={onNavigateToEstimates}
-                                  importedCostCodes={importedCostCodes}
-                                  getPreviewItems={getPreviewItems}
-                                />
-                              )}
+                              <div className="flex gap-3 items-start">
+                                {/* Checkbox for multi-select */}
+                                <div className="pt-4">
+                                  <Checkbox
+                                    checked={selectedSystems.has(normalizeSystemKey(sm.system))}
+                                    onCheckedChange={() => toggleSystemSelection(sm.system)}
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  {enableItemTypeMappings ? (
+                                    <ItemTypeMappingCard
+                                      system={sm.system}
+                                      itemCount={sm.itemCount}
+                                      items={[]} // Pass empty - items loaded lazily inside component
+                                      systemLaborCode={sm.laborCode}
+                                      itemTypeMappings={itemTypeMappings[sm.system] || {}}
+                                      onSystemLaborCodeChange={createLaborCodeChangeHandler(sm.system)}
+                                      onItemTypeMappingChange={(itemType, type, value) => handleItemTypeMappingChange(sm.system, itemType, type, value)}
+                                      laborCodes={allLaborCodes}
+                                    />
+                                  ) : (
+                                    <SystemCard
+                                      system={sm.system}
+                                      itemCount={sm.itemCount}
+                                      laborCode={sm.laborCode}
+                                      suggestedLaborCode={sm.suggestedLaborCode}
+                                      appliedInfo={sm.appliedInfo}
+                                      onLaborCodeChange={createLaborCodeChangeHandler(sm.system)}
+                                      onClear={createClearHandler(sm.system)}
+                                      onApplySuggestions={createApplySuggestionsHandler(sm.system)}
+                                      onApplySystemMapping={createApplyMappingHandler(sm.system)}
+                                      onViewAllItems={onNavigateToEstimates}
+                                      importedCostCodes={importedCostCodes}
+                                      getPreviewItems={getPreviewItems}
+                                    />
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })}
@@ -623,6 +771,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                     <table className="w-full">
                       <thead className="bg-muted/50 sticky top-0">
                         <tr>
+                          <th className="w-10 p-3">
+                            <Checkbox
+                              checked={selectedSystems.size === filteredSystems.length && filteredSystems.length > 0}
+                              onCheckedChange={toggleSelectAll}
+                            />
+                          </th>
                           <th className="text-left p-3 font-medium">System</th>
                           <th className="text-left p-3 font-medium">Labor Code</th>
                           <th className="text-right p-3 font-medium">Items</th>
@@ -632,7 +786,19 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                       </thead>
                       <tbody className="divide-y">
                         {filteredSystems.map((sm) => (
-                          <tr key={sm.system} className="hover:bg-muted/30 transition-colors">
+                          <tr 
+                            key={sm.system} 
+                            className={cn(
+                              "hover:bg-muted/30 transition-colors",
+                              selectedSystems.has(normalizeSystemKey(sm.system)) && "bg-primary/5"
+                            )}
+                          >
+                            <td className="p-3">
+                              <Checkbox
+                                checked={selectedSystems.has(normalizeSystemKey(sm.system))}
+                                onCheckedChange={() => toggleSystemSelection(sm.system)}
+                              />
+                            </td>
                             <td className="p-3 font-medium">{sm.system}</td>
                             
                             <td className="p-3">
