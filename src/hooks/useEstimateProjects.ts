@@ -284,6 +284,36 @@ export const useSaveMapping = () => {
   });
 };
 
+// Delete system mapping
+export const useDeleteMapping = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      systemName,
+    }: {
+      projectId: string;
+      systemName: string;
+    }) => {
+      const normalizedSystem = systemName.toLowerCase().trim();
+
+      const { error } = await supabase
+        .from('system_mappings')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('system_name', normalizedSystem);
+
+      if (error) throw error;
+      return { success: true };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['system_mappings', variables.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['mapping_history', variables.projectId] });
+    },
+  });
+};
+
 // Verify mapping
 export const useVerifyMapping = () => {
   const queryClient = useQueryClient();

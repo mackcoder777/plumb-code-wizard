@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredVa
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
-import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping } from '@/hooks/useEstimateProjects';
+import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,8 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
   transform: `translateY(${start}px)`,
 });
 
+const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
+
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
@@ -81,6 +83,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const updateAppliedStatus = useUpdateAppliedStatus();
   const batchUpdateAppliedStatus = useBatchUpdateAppliedStatus();
   const saveMapping = useSaveMapping();
+  const deleteMapping = useDeleteMapping();
 
   // Initialize mappings and appliedSystems from database on load
   useEffect(() => {
@@ -108,11 +111,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       });
       
       // Only update if we have data from DB (don't overwrite user edits)
-      setMappings(prev => {
-        // If user has already made edits, keep those; otherwise use DB values
-        const hasUserEdits = Object.keys(prev).length > 0;
-        return hasUserEdits ? prev : mappingsFromDb;
-      });
+      setMappings(prev => ({ ...mappingsFromDb, ...prev }));
       setAppliedSystems(prev => ({ ...appliedFromDb, ...prev }));
     }
   }, [dbMappings]);
@@ -152,9 +151,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return systemIndex.map(entry => ({
       system: entry.system,
       itemCount: entry.itemCount,
-      laborCode: mappings[entry.system]?.laborCode,
-      suggestedLaborCode: suggestions[entry.system]?.laborCode,
-      appliedInfo: appliedSystems[entry.system],
+      laborCode: mappings[normalizeSystemKey(entry.system)]?.laborCode,
+      suggestedLaborCode: suggestions[normalizeSystemKey(entry.system)]?.laborCode,
+      appliedInfo: appliedSystems[normalizeSystemKey(entry.system)],
     }));
   }, [systemIndex, mappings, suggestions, appliedSystems]);
 
@@ -216,16 +215,22 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   // Stable callback refs to avoid breaking React.memo
   const handleMappingChange = useCallback((system: string, type: 'laborCode', value: string) => {
+    const systemKey = normalizeSystemKey(system);
     const newValue = value === 'none' ? undefined : value;
     
     startTransition(() => {
-      setMappings(prev => ({
-        ...prev,
-        [system]: {
-          ...prev[system],
-          [type]: newValue,
+      setMappings(prev => {
+        const next = { ...prev };
+        if (!newValue) {
+          delete next[systemKey];
+          return next;
         }
-      }));
+        next[systemKey] = {
+          ...next[systemKey],
+          [type]: newValue,
+        };
+        return next;
+      });
     });
     
     // Auto-save to database
@@ -239,16 +244,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [projectId, saveMapping]);
 
   const clearMapping = useCallback((system: string) => {
+    const systemKey = normalizeSystemKey(system);
     setMappings(prev => {
       const newMappings = { ...prev };
-      delete newMappings[system];
+      delete newMappings[systemKey];
       return newMappings;
     });
+
+    if (projectId) {
+      deleteMapping.mutate({ projectId, systemName: system });
+    }
     toast({
       title: "Mapping Cleared",
       description: `Removed mapping for ${system}`,
     });
-  }, []);
+  }, [deleteMapping, projectId]);
 
   const clearAllMappings = useCallback(() => {
     setMappings({});
@@ -282,7 +292,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     setTimeout(() => {
       const systemNames = systemMappings
         .filter(sm => !sm.laborCode) // Only suggest for unmapped systems
-        .map(sm => sm.system);
+        .map(sm => normalizeSystemKey(sm.system));
       
       const newSuggestions = generateAllSuggestions(systemNames);
       setSuggestions(newSuggestions);
@@ -298,14 +308,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [systemMappings]);
 
   const applySystemSuggestions = useCallback((system: string) => {
-    const suggestion = suggestions[system];
+    const systemKey = normalizeSystemKey(system);
+    const suggestion = suggestions[systemKey];
     if (!suggestion) return;
 
     startTransition(() => {
       setMappings(prev => ({
         ...prev,
-        [system]: {
-          laborCode: suggestion.laborCode || prev[system]?.laborCode,
+        [systemKey]: {
+          laborCode: suggestion.laborCode || prev[systemKey]?.laborCode,
         }
       }));
     });
@@ -321,7 +332,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemItemCounts: Record<string, number> = {};
 
     const updatedData = data.map(item => {
-      const systemMapping = mappings[item.system];
+      const systemKey = normalizeSystemKey(item.system);
+      const systemMapping = mappings[systemKey];
       const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
       
       // Priority: Item type mapping > System mapping > Existing code
@@ -338,7 +350,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       
       if (changed) {
         itemsAffected++;
-        systemItemCounts[item.system] = (systemItemCounts[item.system] || 0) + 1;
+        systemItemCounts[systemKey] = (systemItemCounts[systemKey] || 0) + 1;
         return { ...item, costCode: newLaborCode };
       }
       return item;
@@ -382,12 +394,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [data, mappings, itemTypeMappings, projectId, batchUpdateAppliedStatus, onDataUpdate]);
 
   const applySystemMapping = useCallback((system: string) => {
-    const systemMapping = mappings[system];
+    const systemKey = normalizeSystemKey(system);
+    const systemMapping = mappings[systemKey];
     if (!systemMapping) return;
 
     let itemsAffected = 0;
     const updatedData = data.map(item => {
-      if (item.system !== system) return item;
+      if (normalizeSystemKey(item.system) !== systemKey) return item;
       
       let newLaborCode = item.costCode;
       let changed = false;
@@ -407,7 +420,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Track this system as applied
     setAppliedSystems(prev => ({
       ...prev,
-      [system]: {
+      [systemKey]: {
         appliedAt: new Date(),
         appliedItemCount: itemsAffected,
         appliedLaborCode: systemMapping.laborCode,
