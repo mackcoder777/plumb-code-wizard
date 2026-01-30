@@ -311,6 +311,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     if (selectedSystems.size === 0) return;
     
     const systemsToUpdate = Array.from(selectedSystems);
+    const systemCount = systemsToUpdate.length;
     
     // Update local state
     startTransition(() => {
@@ -334,13 +335,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       });
     }
 
-    // Clear selection after assignment
-    setSelectedSystems(new Set());
+    // Keep selection visible after assignment so user can see all mapped systems
+    // Just close the popover, don't clear selection
     setBulkAssignOpen(false);
+    
+    // Clear the single-system filter to avoid confusion (multi-select takes priority)
+    setActiveSystemFilter(null);
     
     toast({
       title: "Bulk Assignment Complete",
-      description: `Assigned labor code to ${systemsToUpdate.length} systems`,
+      description: `Assigned labor code to ${systemCount} systems. Selection maintained to show all mapped systems.`,
     });
   }, [selectedSystems, projectId, batchSaveMappings]);
 
