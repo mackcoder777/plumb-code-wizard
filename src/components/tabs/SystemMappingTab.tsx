@@ -561,6 +561,11 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             onSystemFilterChange={setActiveSystemFilter}
             showAllSystems={showAllSystems}
             onToggleShowAllSystems={() => setShowAllSystems(!showAllSystems)}
+            selectedSystems={selectedSystems}
+            onToggleSystemSelection={toggleSystemSelection}
+            onBulkAssign={handleBulkAssign}
+            onClearSelection={clearSelection}
+            laborCodes={allLaborCodes}
           />
 
           {/* System Mapping Content */}

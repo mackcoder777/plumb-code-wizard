@@ -2,7 +2,10 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, AlertCircle, XCircle, Grid3x3, X } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { CheckCircle, AlertCircle, XCircle, Grid3x3, X, ChevronDown } from 'lucide-react';
 
 interface FilterCardsProps {
   stats: {
@@ -18,6 +21,12 @@ interface FilterCardsProps {
   onSystemFilterChange: (system: string | null) => void;
   showAllSystems: boolean;
   onToggleShowAllSystems: () => void;
+  // Multi-select support
+  selectedSystems?: Set<string>;
+  onToggleSystemSelection?: (system: string) => void;
+  onBulkAssign?: (laborCode: string) => void;
+  onClearSelection?: () => void;
+  laborCodes?: Array<{ code: string; description: string }>;
 }
 
 export const FilterCards: React.FC<FilterCardsProps> = ({
@@ -29,7 +38,14 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
   onSystemFilterChange,
   showAllSystems,
   onToggleShowAllSystems,
+  selectedSystems = new Set(),
+  onToggleSystemSelection,
+  onBulkAssign,
+  onClearSelection,
+  laborCodes = [],
 }) => {
+  const [bulkAssignOpen, setBulkAssignOpen] = React.useState(false);
+  
   const statusFilters = [
     {
       id: 'all' as const,
@@ -70,10 +86,63 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
   const activeFilterCount = (activeStatusFilter && activeStatusFilter !== 'all' ? 1 : 0) + 
                            (activeSystemFilter ? 1 : 0);
 
+  const handleBulkAssign = (laborCode: string) => {
+    if (onBulkAssign) {
+      onBulkAssign(laborCode);
+    }
+    setBulkAssignOpen(false);
+  };
+
+  const isMultiSelectMode = selectedSystems.size > 0;
+
   return (
     <div className="space-y-4">
+      {/* Multi-Select Bulk Assignment Banner */}
+      {isMultiSelectMode && onBulkAssign && (
+        <div className="flex items-center justify-between p-3 bg-primary/10 border border-primary/30 rounded-lg animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <Badge variant="default" className="font-semibold">
+              {selectedSystems.size} systems selected
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={onClearSelection}>
+              <X className="w-4 h-4 mr-1" />
+              Clear
+            </Button>
+          </div>
+          
+          <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+            <PopoverTrigger asChild>
+              <Button size="sm">
+                Assign Same Labor Code to All
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[400px] p-0" align="end">
+              <Command>
+                <CommandInput placeholder="Search labor codes..." />
+                <CommandList>
+                  <CommandEmpty>No code found.</CommandEmpty>
+                  <CommandGroup>
+                    {laborCodes.map((code) => (
+                      <CommandItem
+                        key={code.code}
+                        value={`${code.code} ${code.description}`}
+                        onSelect={() => handleBulkAssign(code.code)}
+                      >
+                        <span className="font-mono text-xs mr-2">{code.code}</span>
+                        <span className="truncate">{code.description}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+
       {/* Active Filters Banner */}
-      {activeFilterCount > 0 && (
+      {activeFilterCount > 0 && !isMultiSelectMode && (
         <div className="flex items-center justify-between p-3 bg-primary/10 border border-primary/20 rounded-lg">
           <div className="flex items-center gap-2">
             <Badge variant="default">{activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}</Badge>
@@ -154,11 +223,18 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
         </div>
       </div>
 
-      {/* System Filter Cards */}
+      {/* System Filter Cards with Multi-Select */}
       {topSystems.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-muted-foreground">Filter by System</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground">
+              Filter by System 
+              {onToggleSystemSelection && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  (Click checkbox to select multiple, click card to filter)
+                </span>
+              )}
+            </h3>
             <Button
               variant="ghost"
               size="sm"
@@ -170,19 +246,33 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {(showAllSystems ? topSystems : topSystems.slice(0, 8)).map((system) => {
               const isActive = activeSystemFilter === system.system;
+              const isSelected = selectedSystems.has(system.system.toLowerCase().trim());
               
               return (
                 <Card
                   key={system.system}
                   className={`
                     cursor-pointer transition-all hover:scale-105 hover:shadow-md
-                    ${isActive ? 'ring-2 ring-primary bg-primary/10' : 'hover:border-primary/50'}
+                    ${isActive ? 'ring-2 ring-primary bg-primary/10' : ''}
+                    ${isSelected ? 'ring-2 ring-primary bg-primary/5' : ''}
+                    ${!isActive && !isSelected ? 'hover:border-primary/50' : ''}
                   `}
-                  onClick={() => onSystemFilterChange(isActive ? null : system.system)}
+                  onClick={() => {
+                    if (!isMultiSelectMode) {
+                      onSystemFilterChange(isActive ? null : system.system);
+                    }
+                  }}
                 >
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2 min-w-0">
+                        {onToggleSystemSelection && (
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => onToggleSystemSelection(system.system)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDot(system.status)}`} />
                         <span className="font-medium text-sm truncate">{system.system}</span>
                       </div>
