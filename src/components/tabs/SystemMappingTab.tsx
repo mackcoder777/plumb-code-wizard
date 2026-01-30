@@ -81,11 +81,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const updateAppliedStatus = useUpdateAppliedStatus();
   const batchUpdateAppliedStatus = useBatchUpdateAppliedStatus();
 
-  // Initialize appliedSystems from database on load
+  // Initialize mappings and appliedSystems from database on load
   useEffect(() => {
     if (dbMappings.length > 0) {
       const appliedFromDb: Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }> = {};
+      const mappingsFromDb: Record<string, { laborCode?: string }> = {};
+      
       dbMappings.forEach(mapping => {
+        // Restore labor code mappings
+        if (mapping.cost_head) {
+          mappingsFromDb[mapping.system_name] = {
+            laborCode: mapping.cost_head,
+          };
+        }
+        
+        // Restore applied status
         if (mapping.applied_at) {
           appliedFromDb[mapping.system_name] = {
             appliedAt: new Date(mapping.applied_at),
@@ -94,6 +104,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             isVerified: mapping.is_verified || false,
           };
         }
+      });
+      
+      // Only update if we have data from DB (don't overwrite user edits)
+      setMappings(prev => {
+        // If user has already made edits, keep those; otherwise use DB values
+        const hasUserEdits = Object.keys(prev).length > 0;
+        return hasUserEdits ? prev : mappingsFromDb;
       });
       setAppliedSystems(prev => ({ ...appliedFromDb, ...prev }));
     }
