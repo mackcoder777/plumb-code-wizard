@@ -166,17 +166,20 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [systemIndex, mappings, suggestions, appliedSystems]);
 
   // Filter systems by search term and active filters - using deferred search
-  // Note: When a specific system is selected from FilterCards, the text search should
-  // NOT further filter (it would be redundant and cause "no results" issues)
+  // Multi-select mode takes priority: when systems are selected via checkboxes, show only those
   const filteredSystems = useMemo(() => {
     let filtered = systemMappings;
 
-    // Apply system filter FIRST - if a specific system is selected, only show that one
-    // and skip the text search filter (they're mutually exclusive in practice)
-    if (activeSystemFilter) {
+    // PRIORITY 1: Multi-select mode - show only selected systems
+    if (selectedSystems.size > 0) {
+      filtered = filtered.filter(sm => selectedSystems.has(normalizeSystemKey(sm.system)));
+    }
+    // PRIORITY 2: Single system filter from clicking on a filter card
+    else if (activeSystemFilter) {
       filtered = filtered.filter(sm => sm.system === activeSystemFilter);
-    } else if (deferredSearchTerm) {
-      // Only apply text search if no system filter is active
+    } 
+    // PRIORITY 3: Text search filter
+    else if (deferredSearchTerm) {
       const searchLower = deferredSearchTerm.toLowerCase();
       filtered = filtered.filter(sm => 
         sm.system.toLowerCase().includes(searchLower)
@@ -193,7 +196,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }
 
     return filtered;
-  }, [systemMappings, deferredSearchTerm, activeStatusFilter, activeSystemFilter]);
+  }, [systemMappings, deferredSearchTerm, activeStatusFilter, activeSystemFilter, selectedSystems]);
   
   // Virtualization for cards view - increased overscan for smoother scrolling
   const rowVirtualizer = useVirtualizer({
