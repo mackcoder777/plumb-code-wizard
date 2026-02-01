@@ -225,6 +225,39 @@ export type Database = {
           },
         ]
       }
+      mapping_patterns: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          labor_code: string
+          last_used_at: string
+          system_name_pattern: string
+          usage_count: number
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          labor_code: string
+          last_used_at?: string
+          system_name_pattern: string
+          usage_count?: number
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          labor_code?: string
+          last_used_at?: string
+          system_name_pattern?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       material_code_rules: {
         Row: {
           created_at: string | null

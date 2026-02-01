@@ -5,7 +5,15 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { CheckCircle, AlertCircle, XCircle, Grid3x3, X, ChevronDown } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { CheckCircle, AlertCircle, XCircle, Grid3x3, X, ChevronDown, Sparkles, Check } from 'lucide-react';
+
+interface SystemSuggestion {
+  laborCode: string;
+  confidence: number;
+  usageCount: number;
+  matchType: 'exact' | 'fuzzy';
+}
 
 interface FilterCardsProps {
   stats: {
@@ -27,6 +35,9 @@ interface FilterCardsProps {
   onBulkAssign?: (laborCode: string) => void;
   onClearSelection?: () => void;
   laborCodes?: Array<{ code: string; description: string }>;
+  // Suggestions from learning system
+  suggestions?: Record<string, SystemSuggestion>;
+  onAcceptSuggestion?: (system: string, laborCode: string) => void;
 }
 
 export const FilterCards: React.FC<FilterCardsProps> = ({
@@ -43,6 +54,8 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
   onBulkAssign,
   onClearSelection,
   laborCodes = [],
+  suggestions = {},
+  onAcceptSuggestion,
 }) => {
   const [bulkAssignOpen, setBulkAssignOpen] = React.useState(false);
   
@@ -251,6 +264,9 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
             {(showAllSystems ? topSystems : topSystems.slice(0, 8)).map((system) => {
               const isActive = activeSystemFilter === system.system;
               const isSelected = selectedSystems.has(system.system.toLowerCase().trim());
+              const systemKey = system.system.toLowerCase().trim();
+              const suggestion = suggestions[systemKey];
+              const hasSuggestion = system.status === 'unmapped' && suggestion;
               
               return (
                 <Card
@@ -259,7 +275,8 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                     cursor-pointer transition-all hover:scale-105 hover:shadow-md
                     ${isActive ? 'ring-2 ring-primary bg-primary/10' : ''}
                     ${isSelected ? 'ring-2 ring-primary bg-primary/5' : ''}
-                    ${!isActive && !isSelected ? 'hover:border-primary/50' : ''}
+                    ${hasSuggestion ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/20' : ''}
+                    ${!isActive && !isSelected && !hasSuggestion ? 'hover:border-primary/50' : ''}
                   `}
                   onClick={() => {
                     if (onToggleSystemSelection) {
@@ -285,9 +302,44 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                       </div>
                       {isActive && <Badge variant="default" className="text-xs flex-shrink-0">Active</Badge>}
                     </div>
-                    <Badge variant="secondary" className="text-xs">
-                      {system.itemCount} items
-                    </Badge>
+                    
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {system.itemCount} items
+                      </Badge>
+                      
+                      {/* Show suggestion badge for unmapped systems */}
+                      {hasSuggestion && onAcceptSuggestion && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-900/50 dark:hover:bg-amber-900 dark:text-amber-200 gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAcceptSuggestion(system.system, suggestion.laborCode);
+                              }}
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              {suggestion.laborCode}
+                              <Check className="w-3 h-3 ml-1" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[200px]">
+                            <p className="text-xs">
+                              Suggested: <span className="font-mono font-bold">{suggestion.laborCode}</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Used {suggestion.usageCount}x • {Math.round(suggestion.confidence * 100)}% confidence
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Click to accept
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   </div>
                 </Card>
               );

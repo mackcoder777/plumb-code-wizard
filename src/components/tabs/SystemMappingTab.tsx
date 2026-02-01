@@ -4,6 +4,7 @@ import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping, useBatchSaveMappings } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
+import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatterns } from '@/hooks/useMappingPatterns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -92,6 +93,55 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const saveMapping = useSaveMapping();
   const deleteMapping = useDeleteMapping();
   const batchSaveMappings = useBatchSaveMappings();
+  
+  // Learning system hooks
+  const { data: mappingPatterns = [] } = useMappingPatterns();
+  const recordMappingPattern = useRecordMappingPattern();
+  const batchRecordMappingPatterns = useBatchRecordMappingPatterns();
+
+  // Build learned suggestions from historical patterns
+  const learnedSuggestions = useMemo(() => {
+    const suggestions: Record<string, { laborCode: string; confidence: number; usageCount: number; matchType: 'exact' | 'fuzzy' }> = {};
+    
+    if (mappingPatterns.length === 0) return suggestions;
+    
+    for (const entry of systemIndex) {
+      const normalizedName = normalizeSystemKey(entry.system);
+      
+      // Skip already mapped systems
+      if (mappings[normalizedName]?.laborCode) continue;
+      
+      // Exact match first
+      const exactMatch = mappingPatterns.find(p => p.system_name_pattern === normalizedName);
+      if (exactMatch) {
+        suggestions[normalizedName] = {
+          laborCode: exactMatch.labor_code,
+          confidence: Math.min(0.95, 0.5 + (exactMatch.usage_count * 0.1)),
+          usageCount: exactMatch.usage_count,
+          matchType: 'exact',
+        };
+        continue;
+      }
+      
+      // Fuzzy match - find patterns that contain or are contained in the system name
+      const fuzzyMatches = mappingPatterns.filter(p => {
+        const pattern = p.system_name_pattern;
+        return normalizedName.includes(pattern) || pattern.includes(normalizedName);
+      });
+      
+      if (fuzzyMatches.length > 0) {
+        const bestMatch = fuzzyMatches.sort((a, b) => b.usage_count - a.usage_count)[0];
+        suggestions[normalizedName] = {
+          laborCode: bestMatch.labor_code,
+          confidence: Math.min(0.85, 0.3 + (bestMatch.usage_count * 0.05)),
+          usageCount: bestMatch.usage_count,
+          matchType: 'fuzzy',
+        };
+      }
+    }
+    
+    return suggestions;
+  }, [mappingPatterns, systemIndex, mappings]);
 
   // Initialize mappings and appliedSystems from database on load
   useEffect(() => {
@@ -334,6 +384,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         })),
       });
     }
+    
+    // Record patterns for learning system
+    batchRecordMappingPatterns.mutate(
+      systemsToUpdate.map(systemKey => ({
+        systemName: systemKey,
+        laborCode,
+      }))
+    );
 
     // Keep selection visible after assignment so user can see all mapped systems
     // Just close the popover, don't clear selection
@@ -346,7 +404,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Bulk Assignment Complete",
       description: `Assigned labor code to ${systemCount} systems. Selection maintained to show all mapped systems.`,
     });
-  }, [selectedSystems, projectId, batchSaveMappings]);
+  }, [selectedSystems, projectId, batchSaveMappings, batchRecordMappingPatterns]);
 
   const handleItemTypeMappingChange = useCallback((system: string, itemType: string, type: 'laborCode', value: string) => {
     startTransition(() => {
@@ -513,6 +571,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         appliedItemCount: itemsAffected 
       });
     }
+    
+    // Record pattern for learning system
+    if (systemMapping.laborCode) {
+      recordMappingPattern.mutate({
+        systemName: system,
+        laborCode: systemMapping.laborCode,
+      });
+    }
 
     onDataUpdate(updatedData);
     
@@ -520,7 +586,34 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
-  }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus]);
+  }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern]);
+
+  // Handler to accept a suggestion from the filter cards
+  const handleAcceptSuggestion = useCallback((system: string, laborCode: string) => {
+    const systemKey = normalizeSystemKey(system);
+    
+    // Update local state
+    startTransition(() => {
+      setMappings(prev => ({
+        ...prev,
+        [systemKey]: { laborCode },
+      }));
+    });
+    
+    // Auto-save to database
+    if (projectId) {
+      saveMapping.mutate({
+        projectId,
+        systemName: system,
+        costHead: laborCode,
+      });
+    }
+    
+    toast({
+      title: "Suggestion Accepted",
+      description: `Applied suggested code "${laborCode}" to ${system}`,
+    });
+  }, [projectId, saveMapping]);
 
   const getStatusBadge = useCallback((sm: typeof systemMappings[0]) => {
     if (sm.laborCode) {
@@ -573,6 +666,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             onBulkAssign={handleBulkAssign}
             onClearSelection={clearSelection}
             laborCodes={allLaborCodes}
+            suggestions={learnedSuggestions}
+            onAcceptSuggestion={handleAcceptSuggestion}
           />
 
           {/* System Mapping Content */}
