@@ -77,10 +77,14 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
     },
   ];
 
-  const getStatusDot = (status: 'mapped' | 'partial' | 'unmapped') => {
-    if (status === 'mapped') return 'bg-success';
-    if (status === 'partial') return 'bg-warning';
-    return 'bg-muted-foreground';
+  const getStatusIndicator = (status: 'mapped' | 'partial' | 'unmapped') => {
+    if (status === 'mapped') {
+      return <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />;
+    }
+    if (status === 'partial') {
+      return <AlertCircle className="w-4 h-4 text-warning flex-shrink-0" />;
+    }
+    return <div className="w-3 h-3 rounded-full bg-muted-foreground/50 flex-shrink-0" />;
   };
 
   const activeFilterCount = (activeStatusFilter && activeStatusFilter !== 'all' ? 1 : 0) + 
@@ -273,7 +277,7 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                             onClick={(e) => e.stopPropagation()}
                           />
                         )}
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusDot(system.status)}`} />
+                        {getStatusIndicator(system.status)}
                         <span className="font-medium text-sm truncate">{system.system}</span>
                       </div>
                       {isActive && <Badge variant="default" className="text-xs flex-shrink-0">Active</Badge>}
