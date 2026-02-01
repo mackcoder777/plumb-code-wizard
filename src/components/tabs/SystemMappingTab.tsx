@@ -23,7 +23,7 @@ import { SystemCard } from './SystemMappingTab/SystemCard';
 import { ItemTypeMappingCard } from './SystemMappingTab/ItemTypeMappingCard';
 import { QuickActions } from './SystemMappingTab/QuickActions';
 import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
-import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
+import { generateAllSuggestions, SuggestionResult, suggestCodesForSystem } from './SystemMappingTab/autoSuggestLogic';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface SystemMappingTabProps {
@@ -99,11 +99,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const recordMappingPattern = useRecordMappingPattern();
   const batchRecordMappingPatterns = useBatchRecordMappingPatterns();
 
-  // Build learned suggestions from historical patterns
+  // Build suggestions combining learned patterns AND static keyword-based rules
   const learnedSuggestions = useMemo(() => {
-    const suggestions: Record<string, { laborCode: string; confidence: number; usageCount: number; matchType: 'exact' | 'fuzzy' }> = {};
-    
-    if (mappingPatterns.length === 0) return suggestions;
+    const suggestions: Record<string, { laborCode: string; confidence: number; usageCount: number; matchType: 'exact' | 'fuzzy' | 'keyword' }> = {};
     
     for (const entry of systemIndex) {
       const normalizedName = normalizeSystemKey(entry.system);
@@ -111,7 +109,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Skip already mapped systems
       if (mappings[normalizedName]?.laborCode) continue;
       
-      // Exact match first
+      // Priority 1: Exact match from learned patterns
       const exactMatch = mappingPatterns.find(p => p.system_name_pattern === normalizedName);
       if (exactMatch) {
         suggestions[normalizedName] = {
@@ -123,7 +121,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         continue;
       }
       
-      // Fuzzy match - find patterns that contain or are contained in the system name
+      // Priority 2: Fuzzy match from learned patterns
       const fuzzyMatches = mappingPatterns.filter(p => {
         const pattern = p.system_name_pattern;
         return normalizedName.includes(pattern) || pattern.includes(normalizedName);
@@ -136,6 +134,18 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           confidence: Math.min(0.85, 0.3 + (bestMatch.usage_count * 0.05)),
           usageCount: bestMatch.usage_count,
           matchType: 'fuzzy',
+        };
+        continue;
+      }
+      
+      // Priority 3: Static keyword-based suggestions (fallback)
+      const staticSuggestion = suggestCodesForSystem(entry.system);
+      if (staticSuggestion.laborCode) {
+        suggestions[normalizedName] = {
+          laborCode: staticSuggestion.laborCode,
+          confidence: staticSuggestion.confidence === 'high' ? 0.85 : staticSuggestion.confidence === 'medium' ? 0.65 : 0.45,
+          usageCount: 0, // Static rule, not from user patterns
+          matchType: 'keyword',
         };
       }
     }
