@@ -4,7 +4,8 @@ import {
   exportBudgetPacket, 
   exportAuditReport, 
   ExportEstimateItem, 
-  ProjectInfo 
+  ProjectInfo,
+  FloorSectionMap 
 } from '@/utils/budgetExportSystem';
 import { toast } from '@/components/ui/use-toast';
 import { BudgetAdjustments } from './BudgetAdjustmentsPanel';
@@ -17,6 +18,7 @@ interface ExportDropdownProps {
   laborRate?: number;
   disabled?: boolean;
   budgetAdjustments?: BudgetAdjustments | null;
+  floorMappings?: FloorSectionMap;
 }
 
 export const ExportDropdown: React.FC<ExportDropdownProps> = ({ 
@@ -25,6 +27,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   laborRate = 0,
   disabled = false,
   budgetAdjustments = null,
+  floorMappings = {},
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [includeAdjustments, setIncludeAdjustments] = useState(true);
@@ -43,7 +46,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   const handleExportBudgetPacket = () => {
     try {
       const adjustmentsToUse = includeAdjustments && hasAdjustments ? budgetAdjustments : null;
-      const result = exportBudgetPacket(items, projectInfo, laborRate, adjustmentsToUse);
+      const result = exportBudgetPacket(items, projectInfo, laborRate, adjustmentsToUse, floorMappings);
       toast({
         title: "Budget Packet Exported",
         description: includeAdjustments && hasAdjustments
@@ -62,7 +65,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
 
   const handleExportAuditReport = () => {
     try {
-      const result = exportAuditReport(items, projectInfo);
+      const result = exportAuditReport(items, projectInfo, floorMappings);
       toast({
         title: "Audit Report Exported",
         description: `Exported ${result.laborItems} labor items and ${result.materialItems} material items across 3 tabs.`,

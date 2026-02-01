@@ -10,6 +10,10 @@ import { BudgetAdjustments } from '../components/BudgetAdjustmentsPanel';
 // TYPES
 // ============================================
 
+export interface FloorSectionMap {
+  [floorPattern: string]: string; // floor -> section code (e.g., "Club Level" -> "02")
+}
+
 export interface ExportEstimateItem {
   id: string | number;
   drawing?: string;
@@ -75,17 +79,58 @@ interface AggregatedMaterial {
 }
 
 // ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Get section code from floor value using floor mappings
+ */
+function getSectionFromFloor(floor: string | undefined, floorMappings: FloorSectionMap): string {
+  if (!floor || Object.keys(floorMappings).length === 0) return '01';
+  
+  const normalizedFloor = floor.toLowerCase().trim();
+  
+  // Try exact match first
+  for (const [pattern, section] of Object.entries(floorMappings)) {
+    if (pattern.toLowerCase().trim() === normalizedFloor) {
+      return section;
+    }
+  }
+  
+  // Try partial match
+  for (const [pattern, section] of Object.entries(floorMappings)) {
+    const normalizedPattern = pattern.toLowerCase().trim();
+    if (normalizedFloor.includes(normalizedPattern) || normalizedPattern.includes(normalizedFloor)) {
+      return section;
+    }
+  }
+  
+  return '01'; // Default section
+}
+
+// ============================================
 // AGGREGATION FUNCTIONS
 // ============================================
 
 /**
  * Aggregates labor data by full cost code (SEC ACT COSTHEAD)
+ * @param items - Estimate items to aggregate
+ * @param floorMappings - Optional floor-to-section mappings to derive section from floor
  */
-export function aggregateLaborByCostCode(items: ExportEstimateItem[]): AggregatedLabor[] {
+export function aggregateLaborByCostCode(
+  items: ExportEstimateItem[],
+  floorMappings: FloorSectionMap = {}
+): AggregatedLabor[] {
   const aggregated = new Map<string, AggregatedLabor>();
 
   items.forEach(item => {
-    const sec = item.laborSec || item.suggestedCode?.section || '01';
+    // Priority: explicit laborSec > floor mapping > suggested section > default
+    let sec = item.laborSec || item.suggestedCode?.section;
+    if (!sec && item.floor) {
+      sec = getSectionFromFloor(item.floor, floorMappings);
+    }
+    sec = sec || '01';
+    
     const act = item.laborAct || item.suggestedCode?.activity || '0000';
     const costHead = item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '';
     
@@ -158,12 +203,14 @@ export function aggregateMaterialByCostCode(items: ExportEstimateItem[]): Aggreg
 /**
  * Exports Budget Packet matching Murray Company Budget_Packet.xls format exactly
  * Now accepts optional budgetAdjustments to use adjusted labor/material data
+ * @param floorMappings - Optional floor-to-section mappings for deriving section from floor
  */
 export function exportBudgetPacket(
   items: ExportEstimateItem[],
   projectInfo: ProjectInfo,
   laborRate: number = 0,
-  budgetAdjustments?: BudgetAdjustments | null
+  budgetAdjustments?: BudgetAdjustments | null,
+  floorMappings: FloorSectionMap = {}
 ): { laborCodes: number; materialCodes: number; totalLaborHours: number; totalLaborDollars: number; totalMaterialDollars: number; grandTotal: number } {
   const wb = XLSX.utils.book_new();
   const ws: XLSX.WorkSheet = {};
@@ -205,7 +252,7 @@ export function exportBudgetPacket(
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
-    const rawLaborSummary = aggregateLaborByCostCode(items);
+    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings);
     laborData = rawLaborSummary.map(item => ({
       code: item.costCode,
       description: item.description,
@@ -521,10 +568,12 @@ function prepareMaterialReportData(items: ExportEstimateItem[]): any[] {
 
 /**
  * Exports detailed Audit Report with Labor and Material tabs
+ * @param floorMappings - Optional floor-to-section mappings for deriving section from floor
  */
 export function exportAuditReport(
   items: ExportEstimateItem[],
-  projectInfo: ProjectInfo
+  projectInfo: ProjectInfo,
+  floorMappings: FloorSectionMap = {}
 ): { laborItems: number; materialItems: number; totalItems: number } {
   const wb = XLSX.utils.book_new();
 
@@ -577,7 +626,7 @@ export function exportAuditReport(
   }
 
   // Summary tab
-  const laborSummary = aggregateLaborByCostCode(items);
+  const laborSummary = aggregateLaborByCostCode(items, floorMappings);
   const materialSummary = aggregateMaterialByCostCode(items);
 
   const summaryData = [
