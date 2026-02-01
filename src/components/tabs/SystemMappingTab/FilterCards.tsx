@@ -262,7 +262,10 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                     ${!isActive && !isSelected ? 'hover:border-primary/50' : ''}
                   `}
                   onClick={() => {
-                    if (!isMultiSelectMode) {
+                    if (onToggleSystemSelection) {
+                      // Always toggle selection when clicking the card
+                      onToggleSystemSelection(system.system);
+                    } else {
                       onSystemFilterChange(isActive ? null : system.system);
                     }
                   }}
