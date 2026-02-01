@@ -184,6 +184,41 @@ export type Database = {
         }
         Relationships: []
       }
+      floor_section_mappings: {
+        Row: {
+          created_at: string | null
+          floor_pattern: string
+          id: string
+          project_id: string
+          section_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          floor_pattern: string
+          id?: string
+          project_id: string
+          section_code?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          floor_pattern?: string
+          id?: string
+          project_id?: string
+          section_code?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_section_mappings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mapping_history: {
         Row: {
           change_reason: string | null

@@ -6,7 +6,7 @@ import { SystemMappingTab } from '@/components/tabs/SystemMappingTab';
 import { PdfImportTab } from '@/components/tabs/PdfImportTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
-import { ProjectInfo } from '@/utils/budgetExportSystem';
+import { ProjectInfo, FloorSectionMap } from '@/utils/budgetExportSystem';
 import BudgetAdjustmentsPanel, { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
 import SourceFileSummary from '@/components/SourceFileSummary';
 import { 
@@ -23,6 +23,7 @@ import {
   useUpsertAndApplyMapping,
   EstimateProject
 } from '@/hooks/useEstimateProjects';
+import { useFloorSectionMappings, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
 import { useAuth } from '@/hooks/useAuth';
 import { Auth } from '@/components/Auth';
 import { useCostCodes } from '@/hooks/useCostCodes';
@@ -449,6 +450,18 @@ const EnhancedCostCodeManager = () => {
   
   // Fetch cost codes from database for smart matching
   const { data: dbCostCodes = [] } = useCostCodes();
+  
+  // Fetch floor-to-section mappings for labor code section derivation
+  const { data: dbFloorMappings = [] } = useFloorSectionMappings(currentProject?.id || null);
+  
+  // Convert DB floor mappings to a simple key-value map for easy lookup
+  const floorSectionMap = useMemo<FloorSectionMap>(() => {
+    const map: FloorSectionMap = {};
+    dbFloorMappings.forEach(m => {
+      map[m.floor_pattern] = m.section_code;
+    });
+    return map;
+  }, [dbFloorMappings]);
 
   // Load saved mappings when project changes - MERGE with existing local state to prevent reset
   useEffect(() => {
@@ -1965,6 +1978,7 @@ const EnhancedCostCodeManager = () => {
                   laborRate={bidLaborRate}
                   budgetAdjustments={budgetAdjustments}
                   disabled={estimateData.length === 0}
+                  floorMappings={floorSectionMap}
                 />
                 <button
                   onClick={() => setShowCostCodeBrowser(true)}
@@ -2322,18 +2336,24 @@ const EnhancedCostCodeManager = () => {
                   laborSummary={(() => {
                     const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
                     estimateData.forEach((item: any) => {
-                      const code = item.costCode || item.laborCostCode;
-                      if (!code) return;
-                      if (!summary[code]) {
-                        const codeInfo = COST_CODES.find(c => c.code === code);
-                        summary[code] = {
-                          code,
-                          description: codeInfo?.description || code,
+                      const costHead = item.costCode || item.laborCostCode;
+                      if (!costHead) return;
+                      
+                      // Derive section from floor using floor mappings
+                      const section = getSectionFromFloor(item.floor, dbFloorMappings);
+                      const activity = '0000';
+                      const fullCode = `${section} ${activity} ${costHead}`;
+                      
+                      if (!summary[fullCode]) {
+                        const codeInfo = COST_CODES.find(c => c.code === costHead);
+                        summary[fullCode] = {
+                          code: fullCode,
+                          description: codeInfo?.description || costHead,
                           fieldHours: 0,
                           rate: bidLaborRate
                         };
                       }
-                      summary[code].fieldHours += item.hours || 0;
+                      summary[fullCode].fieldHours += item.hours || 0;
                     });
                     return summary;
                   })()}

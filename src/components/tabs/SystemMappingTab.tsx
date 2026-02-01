@@ -14,9 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -25,6 +26,7 @@ import { QuickActions } from './SystemMappingTab/QuickActions';
 import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
 import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -75,6 +77,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Multi-select state
   const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set());
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  
+  // Floor section mapping state
+  const [floorSectionOpen, setFloorSectionOpen] = useState(false);
+  const [floorMappings, setFloorMappings] = useState<Record<string, string>>({});
   
   // Ref for virtualization container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -649,6 +655,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       {/* Progress Header */}
       <SystemMappingHeader stats={stats} totalItems={totalItems} />
 
+      {/* Floor to Section Mapping - Collapsible */}
+      <Collapsible open={floorSectionOpen} onOpenChange={setFloorSectionOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Floor to Section Mapping
+            </div>
+            <ChevronRight className={cn("h-4 w-4 transition-transform", floorSectionOpen && "rotate-90")} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-4">
+          <FloorSectionMappingPanel
+            estimateData={data}
+            projectId={projectId}
+            onMappingsChange={setFloorMappings}
+          />
+        </CollapsibleContent>
+      </Collapsible>
+
       {/* Main Content with Sidebar Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Content Area */}
@@ -671,6 +697,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             suggestions={learnedSuggestions}
             onAcceptSuggestion={handleAcceptSuggestion}
           />
+
 
           {/* System Mapping Content */}
           <Card>
