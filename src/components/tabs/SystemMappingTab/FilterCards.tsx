@@ -12,7 +12,7 @@ interface SystemSuggestion {
   laborCode: string;
   confidence: number;
   usageCount: number;
-  matchType: 'exact' | 'fuzzy';
+  matchType: 'exact' | 'fuzzy' | 'keyword';
 }
 
 interface FilterCardsProps {
@@ -331,7 +331,10 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                               Suggested: <span className="font-mono font-bold">{suggestion.laborCode}</span>
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Used {suggestion.usageCount}x • {Math.round(suggestion.confidence * 100)}% confidence
+                              {suggestion.matchType === 'keyword' 
+                                ? `Keyword match • ${Math.round(suggestion.confidence * 100)}% confidence`
+                                : `Used ${suggestion.usageCount}x • ${Math.round(suggestion.confidence * 100)}% confidence`
+                              }
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Click to accept
