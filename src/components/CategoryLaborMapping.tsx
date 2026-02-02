@@ -1,28 +1,32 @@
 import React, { useState, useMemo } from 'react';
 import { EstimateItem } from '@/types/estimate';
-import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping } from '@/hooks/useCategoryMappings';
+import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface CategoryLaborMappingPanelProps {
   data: EstimateItem[];
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
+  onViewCategoryItems?: (category: string) => void;
 }
 
 export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps> = ({
   data,
   projectId,
   onMappingsChange,
+  onViewCategoryItems,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   
   // Get category index from estimate data
   const categoryIndex = useCategoryIndex(data);
@@ -44,21 +48,32 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     return lookup;
   }, [dbMappings]);
   
+  // Filter out "Unknown" category if it exists (must be before stats calculation)
+  const filteredCategories = useMemo(() => {
+    return categoryIndex.filter(c => c.category !== 'Unknown' && c.category.trim() !== '');
+  }, [categoryIndex]);
+  
+  // Statistics with three states: mapped, useSystem, unset
+  const stats = useMemo(() => {
+    const total = filteredCategories.length;
+    const mapped = filteredCategories.filter(c => {
+      const code = mappingsLookup[c.category.toLowerCase().trim()];
+      return code && !isUsingSystemMapping(code);
+    }).length;
+    const useSystem = filteredCategories.filter(c => {
+      const code = mappingsLookup[c.category.toLowerCase().trim()];
+      return isUsingSystemMapping(code);
+    }).length;
+    const unset = total - mapped - useSystem;
+    return { total, mapped, useSystem, unset };
+  }, [filteredCategories, mappingsLookup]);
+  
   // Notify parent when mappings change
   React.useEffect(() => {
     if (onMappingsChange) {
       onMappingsChange(mappingsLookup);
     }
   }, [mappingsLookup, onMappingsChange]);
-  
-  // Statistics
-  const stats = useMemo(() => {
-    const total = categoryIndex.length;
-    const mapped = categoryIndex.filter(c => 
-      mappingsLookup[c.category.toLowerCase().trim()]
-    ).length;
-    return { total, mapped, unmapped: total - mapped };
-  }, [categoryIndex, mappingsLookup]);
   
   // Handle mapping change
   const handleMappingChange = (category: string, laborCode: string) => {
@@ -85,14 +100,17 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
         }
       );
     } else {
-      // Save mapping
+      // Save mapping (including __SYSTEM__ value)
       saveMappingMutation.mutate(
         { projectId, categoryName: category, laborCode },
         {
           onSuccess: () => {
+            const message = isUsingSystemMapping(laborCode)
+              ? `"${category}" will use System Mapping`
+              : `Assigned ${laborCode} to "${category}"`;
             toast({
               title: "Mapping Saved",
-              description: `Assigned ${laborCode} to "${category}"`,
+              description: message,
             });
           },
         }
@@ -105,8 +123,25 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     return mappingsLookup[category.toLowerCase().trim()];
   };
   
-  // Filter out "Unknown" category if it exists
-  const filteredCategories = categoryIndex.filter(c => c.category !== 'Unknown' && c.category.trim() !== '');
+  // Toggle category expansion
+  const toggleCategoryExpansion = (category: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+  
+  // Get preview items for a category (first 5)
+  const getPreviewItems = (category: string): EstimateItem[] => {
+    return data
+      .filter(item => item.reportCat === category)
+      .slice(0, 5);
+  };
   
   if (filteredCategories.length === 0) {
     return null; // Don't show panel if no categories
@@ -133,11 +168,16 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="bg-background">
-                {stats.mapped}/{stats.total} mapped
+                {stats.mapped} mapped
               </Badge>
-              {stats.unmapped > 0 && (
-                <Badge variant="secondary">
-                  {stats.unmapped} unmapped
+              {stats.useSystem > 0 && (
+                <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
+                  {stats.useSystem} use system
+                </Badge>
+              )}
+              {stats.unset > 0 && (
+                <Badge variant="outline">
+                  {stats.unset} unset
                 </Badge>
               )}
             </div>
@@ -155,60 +195,133 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
               <div className="space-y-2">
                 <div className="text-xs text-muted-foreground mb-3 flex items-center gap-2">
                   <AlertCircle className="h-3 w-3" />
-                  Category mappings override System mappings for labor code assignment
+                  Category mappings override System mappings for labor code assignment. Select "Use System Mapping" to defer to system-level codes.
                 </div>
                 
                 <div className="grid gap-2">
                   {filteredCategories.map((cat) => {
                     const currentCode = getLaborCode(cat.category);
-                    const isMapped = !!currentCode;
+                    const isMapped = !!currentCode && !isUsingSystemMapping(currentCode);
+                    const usesSystem = isUsingSystemMapping(currentCode);
+                    const isExpanded = expandedCategories.has(cat.category);
+                    const previewItems = isExpanded ? getPreviewItems(cat.category) : [];
                     
                     return (
                       <div
                         key={cat.category}
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
-                          isMapped ? "bg-accent/50 border-primary/30" : "bg-muted/30"
+                          "rounded-lg border transition-colors",
+                          isMapped ? "bg-accent/50 border-primary/30" : 
+                          usesSystem ? "bg-secondary/50 border-secondary" : 
+                          "bg-muted/30"
                         )}
                       >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          {isMapped ? (
-                            <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                          ) : (
-                            <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <span className="font-medium truncate block">{cat.category}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {cat.itemCount.toLocaleString()} items • {cat.totalHours.toFixed(1)} hrs
-                            </span>
+                        {/* Category Header Row */}
+                        <div className="flex items-center justify-between p-3">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <button
+                              onClick={() => toggleCategoryExpansion(cat.category)}
+                              className="p-1 hover:bg-muted rounded transition-colors"
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+                            {isMapped ? (
+                              <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                            ) : usesSystem ? (
+                              <Link2 className="h-4 w-4 text-secondary-foreground flex-shrink-0" />
+                            ) : (
+                              <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className="font-medium truncate block">{cat.category}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {cat.itemCount.toLocaleString()} items • {cat.totalHours.toFixed(1)} hrs
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex-shrink-0 w-64">
+                            <Select
+                              value={currentCode || 'none'}
+                              onValueChange={(value) => handleMappingChange(cat.category, value)}
+                            >
+                              <SelectTrigger className={cn(
+                                "h-9",
+                                isMapped && "border-primary/50",
+                                usesSystem && "border-secondary"
+                              )}>
+                                <SelectValue placeholder="Select labor code..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">
+                                  <span className="text-muted-foreground">No mapping (unset)</span>
+                                </SelectItem>
+                                <SelectItem value={SYSTEM_MAPPING_VALUE}>
+                                  <span className="flex items-center gap-2">
+                                    <Link2 className="h-3 w-3 text-secondary-foreground" />
+                                    <span className="text-secondary-foreground font-medium">Use System Mapping</span>
+                                  </span>
+                                </SelectItem>
+                                <SelectSeparator />
+                                {laborCodes.map((code) => (
+                                  <SelectItem key={code.id} value={code.code}>
+                                    <span className="font-mono">{code.code}</span>
+                                    <span className="ml-2 text-muted-foreground">- {code.description}</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                         
-                        <div className="flex-shrink-0 w-64">
-                          <Select
-                            value={currentCode || 'none'}
-                            onValueChange={(value) => handleMappingChange(cat.category, value)}
-                          >
-                            <SelectTrigger className={cn(
-                              "h-9",
-                              isMapped && "border-primary/50"
-                            )}>
-                              <SelectValue placeholder="Select labor code..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">
-                                <span className="text-muted-foreground">No mapping</span>
-                              </SelectItem>
-                              {laborCodes.map((code) => (
-                                <SelectItem key={code.id} value={code.code}>
-                                  <span className="font-mono">{code.code}</span>
-                                  <span className="ml-2 text-muted-foreground">- {code.description}</span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {/* Expanded Preview Section */}
+                        {isExpanded && (
+                          <div className="border-t px-3 pb-3 pt-2 bg-muted/20">
+                            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                              <Eye className="h-3 w-3" />
+                              Preview Items ({Math.min(5, cat.itemCount)} of {cat.itemCount})
+                            </div>
+                            <div className="rounded border overflow-hidden">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-muted/50">
+                                    <TableHead className="h-8 text-xs">Drawing</TableHead>
+                                    <TableHead className="h-8 text-xs">System</TableHead>
+                                    <TableHead className="h-8 text-xs">Material Desc</TableHead>
+                                    <TableHead className="h-8 text-xs text-right">Qty</TableHead>
+                                    <TableHead className="h-8 text-xs text-right">Hours</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {previewItems.map((item, idx) => (
+                                    <TableRow key={`${item.id}-${idx}`} className="text-xs">
+                                      <TableCell className="py-1.5">{item.drawing || '-'}</TableCell>
+                                      <TableCell className="py-1.5">{item.system || '-'}</TableCell>
+                                      <TableCell className="py-1.5 max-w-[200px] truncate">{item.materialDesc || '-'}</TableCell>
+                                      <TableCell className="py-1.5 text-right">{item.quantity?.toLocaleString() || 0}</TableCell>
+                                      <TableCell className="py-1.5 text-right">{item.hours?.toFixed(1) || '0.0'}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                            {onViewCategoryItems && cat.itemCount > 5 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="mt-2 text-xs h-7"
+                                onClick={() => onViewCategoryItems(cat.category)}
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                View All {cat.itemCount} Items in Estimates
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

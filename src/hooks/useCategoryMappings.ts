@@ -3,6 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMemo } from 'react';
 import { EstimateItem } from '@/types/estimate';
 
+// Special value indicating category should use system mapping
+export const SYSTEM_MAPPING_VALUE = '__SYSTEM__';
+
 export interface CategoryLaborMapping {
   id: string;
   project_id: string;
@@ -16,6 +19,13 @@ export interface CategoryIndexEntry {
   category: string;
   itemCount: number;
   totalHours: number;
+}
+
+/**
+ * Check if a labor code value indicates "use system mapping"
+ */
+export function isUsingSystemMapping(laborCode: string | undefined | null): boolean {
+  return laborCode === SYSTEM_MAPPING_VALUE;
 }
 
 export function useCategoryMappings(projectId: string | null) {
@@ -129,6 +139,7 @@ export function useCategoryIndex(data: EstimateItem[]): CategoryIndexEntry[] {
 
 /**
  * Get labor code for a category from mappings
+ * Returns null if no mapping exists OR if mapping is __SYSTEM__ (defer to system)
  */
 export function getLaborCodeFromCategory(
   reportCat: string,
@@ -142,7 +153,14 @@ export function getLaborCodeFromCategory(
   const exactMatch = mappings.find(
     m => m.category_name.toLowerCase().trim() === normalizedCat
   );
-  if (exactMatch) return exactMatch.labor_code;
+  
+  if (exactMatch) {
+    // If it's the system mapping sentinel, return null to defer to system mapping
+    if (isUsingSystemMapping(exactMatch.labor_code)) {
+      return null;
+    }
+    return exactMatch.labor_code;
+  }
   
   return null;
 }

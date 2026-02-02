@@ -113,8 +113,12 @@ function getSectionFromFloor(floor: string | undefined, floorMappings: FloorSect
   return '01'; // Default section
 }
 
+// Special value indicating category should use system mapping
+const SYSTEM_MAPPING_VALUE = '__SYSTEM__';
+
 /**
  * Get labor code from category mapping (priority over system mapping)
+ * Returns null if category is set to "Use System Mapping" (__SYSTEM__)
  */
 function getLaborCodeFromCategory(reportCat: string | undefined, categoryMappings: CategoryLaborMap): string | null {
   if (!reportCat || Object.keys(categoryMappings).length === 0) return null;
@@ -124,6 +128,10 @@ function getLaborCodeFromCategory(reportCat: string | undefined, categoryMapping
   // Try exact match first
   for (const [pattern, laborCode] of Object.entries(categoryMappings)) {
     if (pattern.toLowerCase().trim() === normalizedCat) {
+      // If set to __SYSTEM__, return null to defer to system mapping
+      if (laborCode === SYSTEM_MAPPING_VALUE) {
+        return null;
+      }
       return laborCode;
     }
   }
