@@ -14,6 +14,10 @@ export interface FloorSectionMap {
   [floorPattern: string]: string; // floor -> section code (e.g., "Club Level" -> "02")
 }
 
+export interface CategoryLaborMap {
+  [categoryName: string]: string; // report_cat -> labor code (e.g., "Drains/Cleanouts" -> "DRNS")
+}
+
 export interface ExportEstimateItem {
   id: string | number;
   drawing?: string;
@@ -22,6 +26,7 @@ export interface ExportEstimateItem {
   zone?: string;
   materialSpec?: string;
   itemType?: string;
+  reportCat?: string; // Added for category-based labor mapping
   trade?: string;
   materialDesc?: string;
   materialDescription?: string;
@@ -108,6 +113,24 @@ function getSectionFromFloor(floor: string | undefined, floorMappings: FloorSect
   return '01'; // Default section
 }
 
+/**
+ * Get labor code from category mapping (priority over system mapping)
+ */
+function getLaborCodeFromCategory(reportCat: string | undefined, categoryMappings: CategoryLaborMap): string | null {
+  if (!reportCat || Object.keys(categoryMappings).length === 0) return null;
+  
+  const normalizedCat = reportCat.toLowerCase().trim();
+  
+  // Try exact match first
+  for (const [pattern, laborCode] of Object.entries(categoryMappings)) {
+    if (pattern.toLowerCase().trim() === normalizedCat) {
+      return laborCode;
+    }
+  }
+  
+  return null;
+}
+
 // ============================================
 // AGGREGATION FUNCTIONS
 // ============================================
@@ -116,10 +139,12 @@ function getSectionFromFloor(floor: string | undefined, floorMappings: FloorSect
  * Aggregates labor data by full cost code (SEC ACT COSTHEAD)
  * @param items - Estimate items to aggregate
  * @param floorMappings - Optional floor-to-section mappings to derive section from floor
+ * @param categoryMappings - Optional category-to-labor-code mappings (takes priority over item's costCode)
  */
 export function aggregateLaborByCostCode(
   items: ExportEstimateItem[],
-  floorMappings: FloorSectionMap = {}
+  floorMappings: FloorSectionMap = {},
+  categoryMappings: CategoryLaborMap = {}
 ): AggregatedLabor[] {
   const aggregated = new Map<string, AggregatedLabor>();
 
@@ -132,7 +157,15 @@ export function aggregateLaborByCostCode(
     sec = sec || '01';
     
     const act = item.laborAct || item.suggestedCode?.activity || '0000';
-    const costHead = item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '';
+    
+    // LABOR CODE PRIORITY:
+    // 1. Category mapping (if reportCat has assigned code)
+    // 2. Item's existing costCode/laborCostHead (from system mapping)
+    // 3. Suggested code
+    let costHead = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+    if (!costHead) {
+      costHead = item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '';
+    }
     
     if (!costHead) return; // Skip items without labor code
     
@@ -204,13 +237,15 @@ export function aggregateMaterialByCostCode(items: ExportEstimateItem[]): Aggreg
  * Exports Budget Packet matching Murray Company Budget_Packet.xls format exactly
  * Now accepts optional budgetAdjustments to use adjusted labor/material data
  * @param floorMappings - Optional floor-to-section mappings for deriving section from floor
+ * @param categoryMappings - Optional category-to-labor-code mappings (takes priority over system mappings)
  */
 export function exportBudgetPacket(
   items: ExportEstimateItem[],
   projectInfo: ProjectInfo,
   laborRate: number = 0,
   budgetAdjustments?: BudgetAdjustments | null,
-  floorMappings: FloorSectionMap = {}
+  floorMappings: FloorSectionMap = {},
+  categoryMappings: CategoryLaborMap = {}
 ): { laborCodes: number; materialCodes: number; totalLaborHours: number; totalLaborDollars: number; totalMaterialDollars: number; grandTotal: number } {
   const wb = XLSX.utils.book_new();
   const ws: XLSX.WorkSheet = {};
@@ -252,7 +287,7 @@ export function exportBudgetPacket(
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
-    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings);
+    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, categoryMappings);
     laborData = rawLaborSummary.map(item => ({
       code: item.costCode,
       description: item.description,

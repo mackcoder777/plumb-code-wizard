@@ -27,6 +27,7 @@ import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
 import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
+import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -674,6 +675,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           />
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Category Labor Mapping Panel */}
+      <CategoryLaborMappingPanel
+        data={data}
+        projectId={projectId || null}
+      />
 
       {/* Main Content with Sidebar Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
