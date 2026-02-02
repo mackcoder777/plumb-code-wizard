@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      category_labor_mappings: {
+        Row: {
+          category_name: string
+          created_at: string | null
+          id: string
+          labor_code: string
+          project_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          category_name: string
+          created_at?: string | null
+          id?: string
+          labor_code: string
+          project_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          category_name?: string
+          created_at?: string | null
+          id?: string
+          labor_code?: string
+          project_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_labor_mappings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_codes: {
         Row: {
           category: string
