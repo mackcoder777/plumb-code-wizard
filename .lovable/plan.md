@@ -1,57 +1,86 @@
-# Floor-to-Section Mapping Feature
 
-## Status: ✅ IMPLEMENTED
+# Report Category Labor Code Mapping
 
-## Overview
-Implemented a configurable floor-to-section mapping system that allows users to define which section number (01, 02, 03, etc.) each floor value maps to. This ensures labor codes are correctly aggregated by both section AND cost head in the budget export.
+## Problem
+Labor codes are currently assigned only by **System** (e.g., "Cold Water" → DIW). However, the estimate data has a **Report Cat** field that should take priority for certain categories:
 
-## What Was Built
+- Items with Report Cat = "Drains/Cleanouts" should get labor code **DRNS** regardless of their system
+- Items with Report Cat = "Plumbing Equipment" should get labor code **SEQP** regardless of their system
+- Other categories like "Fixtures", "Valves", "Pipe", etc. may have their own mappings
 
-### Phase 1: Database Schema ✅
-Created `floor_section_mappings` table with:
-- `id` (uuid, primary key)
-- `project_id` (uuid, references estimate_projects)
-- `floor_pattern` (text) - The floor value to match
-- `section_code` (text) - The section number (01, 02, etc.)
-- `created_at`, `updated_at`
-- RLS policies for user access
-- Unique constraint on (project_id, floor_pattern)
+## Solution
+Add a **Category-based Labor Code Mapping** feature that:
+1. Extracts unique Report Categories from the estimate
+2. Allows users to assign labor codes to each category
+3. Category mappings take **priority** over system mappings during code assignment
 
-### Phase 2: Floor Mapping Configuration UI ✅
-Added collapsible "Floor to Section Mapping" panel in System Mapping tab:
-- Auto-detects all unique floor values from the estimate
-- Shows item count per floor
-- Section dropdown with options: 01-10, BG, RF, P1-P3
-- Auto-suggest button to guess sections from floor names
-- Save All button to persist to database
-- Reset button to revert unsaved changes
+## Technical Implementation
 
-### Phase 3: Integrate Section into Labor Code Assignment ✅
-- `aggregateLaborByCostCode()` now accepts `floorMappings` parameter
-- Derives section from floor using configured mappings
-- Falls back to '01' if no mapping found
-- Groups labor by full code: `${section} ${activity} ${costHead}`
+### Phase 1: Database Schema
+Create a new table for category-level labor mappings:
 
-### Phase 4: Update Exports ✅
-- Budget Packet export uses floor mappings for section derivation
-- Audit Report export uses floor mappings for summary aggregation
-- Budget Builder labor summary uses floor mappings for proper grouping
+```text
+category_labor_mappings
+├── id (uuid, primary key)
+├── project_id (uuid, references estimate_projects)
+├── category_name (text) - The report_cat value
+├── labor_code (text) - The assigned labor code
+├── created_at, updated_at
+└── RLS policies for user access
+```
 
-## Files Created
-1. `src/hooks/useFloorSectionMappings.ts` - CRUD operations for floor mappings
-2. `src/components/FloorSectionMapping.tsx` - Configuration UI component
+### Phase 2: New React Hook
+Create `src/hooks/useCategoryMappings.ts`:
+- Query/save category-to-labor-code mappings
+- Build category index from estimate data
+- Functions: `useCategoryMappings`, `useSaveCategoryMapping`, `useDeleteCategoryMapping`
 
-## Files Modified
-1. `src/pages/Index.tsx` - Added floor mappings hook and passed to relevant components
-2. `src/utils/budgetExportSystem.ts` - Updated aggregation to use floor mappings
-3. `src/components/ExportDropdown.tsx` - Added floorMappings prop
-4. `src/components/tabs/SystemMappingTab.tsx` - Added collapsible floor mapping panel
+### Phase 3: UI Component - Category Mapping Panel
+Create `src/components/CategoryLaborMapping.tsx`:
+- Collapsible panel in System Mapping tab (similar to Floor Section Mapping)
+- Shows all unique Report Categories from the estimate with item counts
+- Dropdown to assign labor code to each category
+- Visual indicators for mapped vs unmapped categories
+
+Example UI layout:
+```text
+Category Labor Mapping (expands/collapses)
+├── Drains/Cleanouts     │ 45 items │ [DRNS - Drains & Floor Sinks ▼]
+├── Plumbing Equipment   │ 32 items │ [SEQP - Equipment Setting ▼]  
+├── Fixtures             │ 178 items│ [Select labor code... ▼]
+├── Pipe                 │ 89 items │ [Select labor code... ▼]
+└── Valves               │ 23 items │ [Select labor code... ▼]
+```
+
+### Phase 4: Update Labor Code Assignment Logic
+Modify `src/pages/Index.tsx` and `src/utils/budgetExportSystem.ts`:
+- New priority order for labor code assignment:
+  1. **Category mapping** (if Report Cat has assigned code)
+  2. **System mapping** (current behavior)
+  3. **Manual override**
+- Update `aggregateLaborByCostCode` to use category mappings
+- Update "Apply All Mappings" to respect the priority order
+
+### Phase 5: Build Category Index
+Add to `useSystemIndex.ts` or create separate hook:
+- Extract unique `reportCat` values from estimate items
+- Track item counts per category
+- Support real-time filtering
+
+## Files to Create
+1. `src/hooks/useCategoryMappings.ts` - CRUD operations for category mappings
+2. `src/components/CategoryLaborMapping.tsx` - UI panel component
+3. Database migration for `category_labor_mappings` table
+
+## Files to Modify
+1. `src/components/tabs/SystemMappingTab.tsx` - Add Category Mapping panel
+2. `src/pages/Index.tsx` - Integrate category mappings into code assignment
+3. `src/utils/budgetExportSystem.ts` - Use category mappings in export/aggregation
 
 ## User Workflow
-1. Upload estimate with floor data (Club Level, Low Roof, etc.)
-2. Go to System Mapping tab
-3. Click "Floor to Section Mapping" collapsible button
-4. See auto-detected floors with item counts
-5. Assign section numbers (01, 02, 03...) to each floor
-6. Click "Save All" to persist mappings
-7. Export shows correct section-based labor aggregation (e.g., "02 0000 SNWV" for Club Level)
+1. Upload estimate with Report Cat data
+2. Expand "Category Labor Mapping" panel in System Mapping tab
+3. See auto-detected categories (Drains/Cleanouts, Plumbing Equipment, etc.)
+4. Assign labor codes: Drains/Cleanouts → DRNS, Plumbing Equipment → SEQP
+5. Apply mappings - items get coded by category first, then by system for uncategorized items
+6. Export shows correct labor codes based on category priority
