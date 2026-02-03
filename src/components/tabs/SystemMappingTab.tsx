@@ -481,7 +481,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Helper to build full labor code with section prefix
   const buildFullLaborCode = useCallback((costHead: string, floor: string): string => {
     const section = getSectionFromFloor(floor, floorSectionMappings);
-    const activity = '01'; // Default activity code
+    const activity = '0000'; // Default activity code (4 characters)
     return `${section} ${activity} ${costHead}`;
   }, [floorSectionMappings]);
 
@@ -511,7 +511,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       }
       
       // Build new full code
-      const newFullCode = `${newSection} 01 ${costHead}`;
+      const newFullCode = `${newSection} 0000 ${costHead}`;
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
