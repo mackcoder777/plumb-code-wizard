@@ -648,89 +648,72 @@ const EnhancedCostCodeManager = () => {
     };
   }, [customMappings, dbCostCodes]);
 
-  // Load saved items when project changes or savedItems updates
+  // Load saved items when project changes - apply category mappings during load
   useEffect(() => {
     if (savedItems.length > 0 && currentProject?.id) {
       // Transform database items to the format used by the UI
-      const transformedItems = savedItems.map((item) => ({
-        id: item.id,
-        drawing: item.drawing || '',
-        system: item.system || '',
-        floor: item.floor || '',
-        zone: item.zone || '',
-        symbol: item.symbol || '',
-        estimator: item.estimator || '',
-        materialSpec: item.material_spec || '',
-        itemType: item.item_type || '',
-        reportCat: item.report_cat || '',
-        trade: item.trade || '',
-        materialDesc: item.material_desc || '',
-        itemName: item.item_name || '',
-        size: item.size || '',
-        quantity: item.quantity || 0,
-        listPrice: item.list_price || 0,
-        materialDollars: item.material_dollars || 0,
-        weight: item.weight || 0,
-        hours: item.hours || 0,
-        laborDollars: item.labor_dollars || 0,
-        costCode: item.cost_code || '',
-        materialCostCode: (item as any).material_cost_code || '',
-        sourceFile: item.source_file || '',
-        suggestedCode: generateCostCode({
+      // AND apply category labor mappings during transformation
+      const transformedItems = savedItems.map((item) => {
+        // Start with base transformation
+        const baseItem = {
+          id: item.id,
+          drawing: item.drawing || '',
           system: item.system || '',
-          floor: item.floor || ''
-        })
-      }));
+          floor: item.floor || '',
+          zone: item.zone || '',
+          symbol: item.symbol || '',
+          estimator: item.estimator || '',
+          materialSpec: item.material_spec || '',
+          itemType: item.item_type || '',
+          reportCat: item.report_cat || '',
+          trade: item.trade || '',
+          materialDesc: item.material_desc || '',
+          itemName: item.item_name || '',
+          size: item.size || '',
+          quantity: item.quantity || 0,
+          listPrice: item.list_price || 0,
+          materialDollars: item.material_dollars || 0,
+          weight: item.weight || 0,
+          hours: item.hours || 0,
+          laborDollars: item.labor_dollars || 0,
+          costCode: item.cost_code || '',
+          materialCostCode: (item as any).material_cost_code || '',
+          sourceFile: item.source_file || '',
+          excludedFromMaterialBudget: (item as any).excluded_from_material_budget || false,
+          suggestedCode: generateCostCode({
+            system: item.system || '',
+            floor: item.floor || ''
+          })
+        };
+        
+        // Apply category labor mapping if available (highest priority)
+        if (dbCategoryMappings.length > 0 && item.report_cat) {
+          const categoryCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
+          if (categoryCode) {
+            // Build the full cost code with section
+            const floorText = (item.floor || '').toLowerCase().trim();
+            let section = '01';
+            for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
+              if (patterns.some(pattern => pattern.test(floorText))) {
+                section = code;
+                break;
+              }
+            }
+            baseItem.costCode = `${section} 0000 ${categoryCode}`;
+          }
+        }
+        
+        return baseItem;
+      });
+      
+      const appliedCount = transformedItems.filter(i => i.costCode).length;
+      console.log(`[Load] Loaded ${transformedItems.length} items, ${appliedCount} have labor codes from category mappings`);
       
       setEstimateData(transformedItems);
       setFilteredData(transformedItems);
       setFileName(currentProject.file_name || '');
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode]);
-
-  // Apply category labor mappings to estimate items when mappings are loaded
-  // This ensures previously saved category mappings are reflected in the UI
-  useEffect(() => {
-    if (dbCategoryMappings.length > 0 && estimateData.length > 0 && currentProject?.id) {
-      let hasChanges = false;
-      
-      const updatedItems = estimateData.map((item) => {
-        // Check if this item's category has a mapping
-        const categoryCode = getLaborCodeFromCategory(item.reportCat, dbCategoryMappings);
-        
-        if (categoryCode && categoryCode !== item.costCode) {
-          // Category mapping should override the current code
-          // Build the full cost code with section
-          const floorText = (item.floor || '').toLowerCase().trim();
-          let section = '01';
-          for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
-            if (patterns.some(pattern => pattern.test(floorText))) {
-              section = code;
-              break;
-            }
-          }
-          
-          const newCostCode = `${section} 0000 ${categoryCode}`;
-          
-          if (newCostCode !== item.costCode) {
-            hasChanges = true;
-            return { ...item, costCode: newCostCode };
-          }
-        }
-        return item;
-      });
-      
-      if (hasChanges) {
-        console.log('[Category Mapping] Applied category labor mappings to estimate items');
-        setEstimateData(updatedItems);
-        setFilteredData(prev => {
-          // Re-apply any filters to the updated data
-          const itemIds = new Set(prev.map(i => i.id));
-          return updatedItems.filter(i => itemIds.has(i.id));
-        });
-      }
-    }
-  }, [dbCategoryMappings, currentProject?.id]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
