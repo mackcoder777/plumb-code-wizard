@@ -481,6 +481,48 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return `${section} ${activity} ${costHead}`;
   }, [floorSectionMappings]);
 
+  // Handler to apply section codes to all items that already have labor codes
+  const handleApplySectionCodes = useCallback((floorMappingsToApply: Record<string, string>) => {
+    let itemsUpdated = 0;
+    
+    const updatedData = data.map(item => {
+      if (!item.costCode || !item.costCode.trim()) return item;
+      
+      // Parse existing code to extract the cost head (last part)
+      // Format: "SECTION ACTIVITY COSTHEAD" or just "COSTHEAD"
+      const parts = item.costCode.trim().split(/\s+/);
+      const costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
+      
+      // Get new section from floor mapping
+      const floor = item.floor || '';
+      const normalizedFloor = floor.toLowerCase().trim();
+      let newSection = '01'; // Default
+      
+      // Check floor mappings
+      for (const [floorPattern, sectionCode] of Object.entries(floorMappingsToApply)) {
+        if (floorPattern.toLowerCase().trim() === normalizedFloor) {
+          newSection = sectionCode;
+          break;
+        }
+      }
+      
+      // Build new full code
+      const newFullCode = `${newSection} 01 ${costHead}`;
+      
+      if (newFullCode !== item.costCode) {
+        itemsUpdated++;
+        return { ...item, costCode: newFullCode };
+      }
+      return item;
+    });
+
+    if (itemsUpdated > 0) {
+      onDataUpdate(updatedData);
+    }
+    
+    return itemsUpdated;
+  }, [data, onDataUpdate]);
+
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
     const systemItemCounts: Record<string, number> = {};
@@ -681,6 +723,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             estimateData={data}
             projectId={projectId}
             onMappingsChange={setFloorMappings}
+            onApplySectionCodes={handleApplySectionCodes}
           />
         </CollapsibleContent>
       </Collapsible>
