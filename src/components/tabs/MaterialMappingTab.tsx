@@ -786,8 +786,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     }
     
     setSelectedItems(new Set());
+    setSelectedGroups(new Set());
   }, [selectedItems, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
 
+  // Clear all selections
+  const clearAllSelections = () => {
+    setSelectedItems(new Set());
+    setSelectedGroups(new Set());
+  };
+  
   // Select all visible groups AND their items
   const selectAllVisible = () => {
     const newGroups = new Set<string>();
@@ -1098,6 +1105,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               <Button variant="outline" size="sm" onClick={selectAllVisible}>
                 Select All Visible ({visibleSubGroupCount})
               </Button>
+              {(selectedGroups.size > 0 || selectedItems.size > 0) && (
+                <Button variant="outline" size="sm" onClick={clearAllSelections}>
+                  <X className="h-4 w-4 mr-1" />
+                  Deselect All
+                </Button>
+              )}
               {expandedSpecs.size > 0 && (
                 <Button variant="ghost" size="sm" onClick={collapseAll}>
                   <ChevronUp className="h-4 w-4 mr-1" />
@@ -1106,7 +1119,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               )}
             </div>
 
-            {selectedGroups.size > 0 && (
+            {(selectedGroups.size > 0 || selectedItems.size > 0) && (
               <div className="flex items-center gap-2 bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/20">
                 <span className="text-sm font-medium text-primary">
                   {getSelectedItemCount.toLocaleString()} items selected
@@ -1121,7 +1134,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                     <CodePicker groupKey="bulk" onSelect={handleBulkAssign} />
                   </PopoverContent>
                 </Popover>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedGroups(new Set())}>
+                <Button variant="ghost" size="sm" onClick={clearAllSelections}>
                   Clear
                 </Button>
               </div>
