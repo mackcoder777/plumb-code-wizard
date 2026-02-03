@@ -897,8 +897,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               onSelect={() => onSelect(code.code)}
               className="cursor-pointer"
             >
-              <span className="font-mono font-semibold text-primary">{code.code}</span>
-              <span className="ml-2 text-muted-foreground truncate">{code.description}</span>
+              <span className="font-mono font-semibold">{code.code}</span>
+              <span className="ml-2 opacity-70 truncate">{code.description}</span>
             </CommandItem>
           ))}
         </CommandGroup>
