@@ -40,6 +40,9 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
     zone: '',
     itemType: '',
     costCode: '',
+    section: '',
+    activity: '',
+    costHead: '',
     search: ''
   });
   const [sortField, setSortField] = useState<string>('');
@@ -51,12 +54,31 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
   const { columns, visibleColumns, toggleColumn, resetToDefaults } = useColumnConfig();
 
   // Filter options
-  const filterOptions = useMemo(() => ({
-    systems: [...new Set(data.map(item => item.system))].filter(item => item && item.trim()).sort(),
-    floors: [...new Set(data.map(item => item.floor))].filter(item => item && item.trim()).sort(),
-    zones: [...new Set(data.map(item => item.zone))].filter(item => item && item.trim()).sort(),
-    itemTypes: [...new Set(data.map(item => item.itemType))].filter(item => item && item.trim()).sort(),
-  }), [data]);
+  const filterOptions = useMemo(() => {
+    // Extract unique sections, activities, and cost heads from labor codes
+    const sections = new Set<string>();
+    const activities = new Set<string>();
+    const costHeads = new Set<string>();
+    
+    data.forEach(item => {
+      if (item.costCode) {
+        const parts = item.costCode.split('-');
+        if (parts.length >= 1 && parts[0]) sections.add(parts[0]);
+        if (parts.length >= 2 && parts[1]) activities.add(parts[1]);
+        if (parts.length >= 3 && parts[2]) costHeads.add(parts[2]);
+      }
+    });
+    
+    return {
+      systems: [...new Set(data.map(item => item.system))].filter(item => item && item.trim()).sort(),
+      floors: [...new Set(data.map(item => item.floor))].filter(item => item && item.trim()).sort(),
+      zones: [...new Set(data.map(item => item.zone))].filter(item => item && item.trim()).sort(),
+      itemTypes: [...new Set(data.map(item => item.itemType))].filter(item => item && item.trim()).sort(),
+      sections: [...sections].sort(),
+      activities: [...activities].sort(),
+      costHeads: [...costHeads].sort(),
+    };
+  }, [data]);
 
   // Filtered and sorted data
   const filteredData = useMemo(() => {
@@ -67,13 +89,25 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       const matchesItemType = !filters.itemType || item.itemType === filters.itemType;
       const matchesCostCode = !filters.costCode || 
         (filters.costCode === 'unassigned' ? !item.costCode : item.costCode === filters.costCode);
+      
+      // Parse labor code parts for section/activity/costHead filtering
+      const codeParts = item.costCode ? item.costCode.split('-') : [];
+      const itemSection = codeParts[0] || '';
+      const itemActivity = codeParts[1] || '';
+      const itemCostHead = codeParts[2] || '';
+      
+      const matchesSection = !filters.section || itemSection === filters.section;
+      const matchesActivity = !filters.activity || itemActivity === filters.activity;
+      const matchesCostHead = !filters.costHead || itemCostHead === filters.costHead;
+      
       const matchesSearch = !filters.search || 
         item.materialDesc.toLowerCase().includes(filters.search.toLowerCase()) ||
         item.itemName.toLowerCase().includes(filters.search.toLowerCase()) ||
         item.drawing.toLowerCase().includes(filters.search.toLowerCase());
       
       return matchesSystem && matchesFloor && matchesZone && 
-             matchesItemType && matchesCostCode && matchesSearch;
+             matchesItemType && matchesCostCode && matchesSearch &&
+             matchesSection && matchesActivity && matchesCostHead;
     });
 
     if (sortField) {
@@ -110,6 +144,9 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       zone: '',
       itemType: '',
       costCode: '',
+      section: '',
+      activity: '',
+      costHead: '',
       search: ''
     });
   };
@@ -233,7 +270,7 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
           <Search className="w-5 h-5" />
           Filters
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
           <Select value={filters.system} onValueChange={(value) => setFilters(prev => ({ ...prev, system: value }))}>
             <SelectTrigger>
               <SelectValue placeholder="All Systems" />
@@ -281,13 +318,52 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
               ))}
             </SelectContent>
           </Select>
+        </div>
+        
+        {/* Labor Code Part Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          <Select value={filters.section} onValueChange={(value) => setFilters(prev => ({ ...prev, section: value }))}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Sections" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Sections</SelectItem>
+              {filterOptions.sections.map((section, index) => (
+                <SelectItem key={`section-${index}-${section}`} value={section}>{section}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filters.activity} onValueChange={(value) => setFilters(prev => ({ ...prev, activity: value }))}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Activities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Activities</SelectItem>
+              {filterOptions.activities.map((activity, index) => (
+                <SelectItem key={`activity-${index}-${activity}`} value={activity}>{activity}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filters.costHead} onValueChange={(value) => setFilters(prev => ({ ...prev, costHead: value }))}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Cost Heads" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Cost Heads</SelectItem>
+              {filterOptions.costHeads.map((head, index) => (
+                <SelectItem key={`head-${index}-${head}`} value={head}>{head}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Select value={filters.costCode} onValueChange={(value) => setFilters(prev => ({ ...prev, costCode: value }))}>
             <SelectTrigger>
-              <SelectValue placeholder="All Cost Codes" />
+              <SelectValue placeholder="All Codes" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Cost Codes</SelectItem>
+              <SelectItem value="">All Codes</SelectItem>
               <SelectItem value="unassigned">⚠️ Unassigned Only</SelectItem>
             </SelectContent>
           </Select>
