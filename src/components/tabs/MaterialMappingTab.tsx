@@ -104,19 +104,40 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     return 'indeterminate';
   };
 
-  // Toggle parent selection with cascade to children
+  // Toggle parent selection with cascade to children AND item-level selection
   const toggleParentSelection = (spec: string, group: MaterialGroup, e: React.MouseEvent) => {
     e.stopPropagation();
+    const currentState = getParentCheckState(spec, group);
+    
+    // Collect ALL item IDs from ALL sub-groups
+    const allItemIds = group.subGroups.flatMap(sg => 
+      sg.items.map(i => String(i.id))
+    );
+    
+    // Update group-level selection
     setSelectedGroups(prev => {
       const next = new Set(prev);
-      const currentState = getParentCheckState(spec, group);
-
       if (currentState === 'checked' || currentState === 'indeterminate') {
+        // Deselect parent and all children
         next.delete(spec);
         group.subGroups.forEach(sg => next.delete(`${spec}|${sg.itemType}`));
       } else {
+        // Select parent and all children
         next.add(spec);
         group.subGroups.forEach(sg => next.add(`${spec}|${sg.itemType}`));
+      }
+      return next;
+    });
+    
+    // CASCADE to item-level selection
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (currentState === 'checked' || currentState === 'indeterminate') {
+        // Deselect all items
+        allItemIds.forEach(id => next.delete(id));
+      } else {
+        // Select all items
+        allItemIds.forEach(id => next.add(id));
       }
       return next;
     });
