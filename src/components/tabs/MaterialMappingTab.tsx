@@ -860,9 +860,14 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   // Render child status badge
   const renderChildStatusBadge = (typeGroup: ItemTypeGroup) => {
-    const { assignedCode, isFullyAssigned, items } = typeGroup;
+    const { assignedCode, items } = typeGroup;
     
-    if (!assignedCode) {
+    // Calculate isFullyAssigned directly from current items
+    const hasUnassignedItems = items.some(i => !i.materialCostCode);
+    const hasSomeAssigned = items.some(i => i.materialCostCode);
+    const isFullyAssigned = !hasUnassignedItems && hasSomeAssigned;
+    
+    if (!assignedCode && !hasSomeAssigned) {
       return (
         <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
           <AlertCircle className="h-3 w-3 mr-1" />
@@ -871,10 +876,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       );
     }
     
-    if (assignedCode === 'MIXED') {
-      // Get unique codes for display
-      const uniqueCodes = [...new Set(items.map(i => i.materialCostCode).filter(Boolean))].sort();
-      
+    // Get unique codes for display
+    const uniqueCodes = [...new Set(items.map(i => i.materialCostCode).filter(Boolean))].sort();
+    
+    if (uniqueCodes.length > 1 || assignedCode === 'MIXED') {
       if (isFullyAssigned) {
         // Fully assigned with multiple codes - show green
         return (
@@ -894,11 +899,12 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       );
     }
     
-    const codeInfo = allMaterialCodes.find(c => c.code === assignedCode);
+    // Single code assigned to all
+    const codeInfo = allMaterialCodes.find(c => c.code === uniqueCodes[0]);
     return (
       <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono">
         <Check className="h-3 w-3 mr-1" />
-        {assignedCode}
+        {uniqueCodes[0]}
         {codeInfo && <span className="ml-1 font-normal opacity-75 truncate max-w-32">- {codeInfo.description}</span>}
       </Badge>
     );
