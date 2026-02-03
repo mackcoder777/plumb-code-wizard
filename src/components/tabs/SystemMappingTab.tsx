@@ -28,12 +28,14 @@ import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/aut
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
+import { FloorSectionMapping, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
   onNavigateToEstimates?: (systemFilter: string) => void;
   projectId?: string | null;
+  floorSectionMappings?: FloorSectionMapping[];
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -62,7 +64,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, importedCostCodes = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -472,6 +474,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   }, [suggestions]);
 
+  // Helper to build full labor code with section prefix
+  const buildFullLaborCode = useCallback((costHead: string, floor: string): string => {
+    const section = getSectionFromFloor(floor, floorSectionMappings);
+    const activity = '01'; // Default activity code
+    return `${section} ${activity} ${costHead}`;
+  }, [floorSectionMappings]);
+
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
     const systemItemCounts: Record<string, number> = {};
@@ -482,21 +491,22 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
       
       // Priority: Item type mapping > System mapping > Existing code
-      let newLaborCode = item.costCode;
+      let costHead: string | undefined;
       let changed = false;
       
       if (itemTypeMapping?.laborCode && !item.costCode) {
-        newLaborCode = itemTypeMapping.laborCode;
+        costHead = itemTypeMapping.laborCode;
         changed = true;
       } else if (systemMapping?.laborCode && !item.costCode) {
-        newLaborCode = systemMapping.laborCode;
+        costHead = systemMapping.laborCode;
         changed = true;
       }
       
-      if (changed) {
+      if (changed && costHead) {
         itemsAffected++;
         systemItemCounts[systemKey] = (systemItemCounts[systemKey] || 0) + 1;
-        return { ...item, costCode: newLaborCode };
+        const fullCode = buildFullLaborCode(costHead, item.floor || '');
+        return { ...item, costCode: fullCode };
       }
       return item;
     });
@@ -536,7 +546,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mappings Applied Successfully",
       description: `Applied ${Object.keys(mappings).length} system mappings${itemTypeMappingCount > 0 ? ` and ${itemTypeMappingCount} item type overrides` : ''} to ${itemsAffected} items`,
     });
-  }, [data, mappings, itemTypeMappings, projectId, batchUpdateAppliedStatus, onDataUpdate]);
+  }, [data, mappings, itemTypeMappings, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
 
   const applySystemMapping = useCallback((system: string) => {
     const systemKey = normalizeSystemKey(system);
@@ -547,17 +557,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
       
-      let newLaborCode = item.costCode;
       let changed = false;
       
       if (systemMapping.laborCode && !item.costCode) {
-        newLaborCode = systemMapping.laborCode;
         changed = true;
       }
       
       if (changed) {
         itemsAffected++;
-        return { ...item, costCode: newLaborCode };
+        const fullCode = buildFullLaborCode(systemMapping.laborCode!, item.floor || '');
+        return { ...item, costCode: fullCode };
       }
       return item;
     });
@@ -595,7 +604,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
-  }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern]);
+  }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
   // Handler to accept a suggestion from the filter cards
   const handleAcceptSuggestion = useCallback((system: string, laborCode: string) => {
