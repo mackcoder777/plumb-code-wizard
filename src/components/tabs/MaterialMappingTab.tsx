@@ -412,7 +412,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       }
       
       if (filterStatus === 'assigned' && group.assignmentStatus !== 'complete') return false;
-      if (filterStatus === 'unassigned' && group.assignmentStatus !== 'none') return false;
+      // Show groups that have ANY unassigned children (not just completely unassigned groups)
+      if (filterStatus === 'unassigned' && group.assignmentStatus === 'complete') return false;
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
       if (filterStatus === 'dismissed') {
         // Only show groups that have dismissed items
@@ -435,7 +436,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       
       const filteredSubGroups = group.subGroups.filter(sg => {
         if (filterStatus === 'assigned') return sg.isFullyAssigned;
-        if (filterStatus === 'unassigned') return !sg.assignedCode;
+        // Show subgroups that have ANY unassigned items (not just completely unassigned)
+        if (filterStatus === 'unassigned') return !sg.isFullyAssigned;
         if (filterStatus === 'needs-attention') return !sg.isFullyAssigned;
         if (filterStatus === 'dismissed') {
           return sg.items.some(i => i.excludedFromMaterialBudget);
