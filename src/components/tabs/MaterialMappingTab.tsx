@@ -1604,7 +1604,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                         onSelect={() => handleItemLevelAssign(code.code)}
                       >
                         <span className="font-mono mr-2">{code.code}</span>
-                        <span className="text-muted-foreground truncate">{code.description}</span>
+                        <span className="opacity-70 truncate">{code.description}</span>
                       </CommandItem>
                     ))}
                   </CommandGroup>
