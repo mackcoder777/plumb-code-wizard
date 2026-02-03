@@ -33,6 +33,7 @@ import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import AddFileDialog from '@/components/AddFileDialog';
 import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
 import { useQueryClient } from '@tanstack/react-query';
@@ -435,6 +436,7 @@ const EnhancedCostCodeManager = () => {
   // Budget adjustments state
   const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
   const [bidLaborRate, setBidLaborRate] = useState(85); // Default rate
+  const [bidLaborRateInput, setBidLaborRateInput] = useState('85'); // String for input
 
   // Database hooks for persistence
   const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
@@ -2351,13 +2353,27 @@ const EnhancedCostCodeManager = () => {
                     <label className="text-sm font-medium text-gray-700">Bid Labor Rate:</label>
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500">$</span>
-                      <input
-                        type="number"
-                        value={bidLaborRate}
-                        onChange={(e) => setBidLaborRate(Number(e.target.value) || 85)}
-                        className="w-20 px-3 py-2 border rounded-lg font-mono text-right"
-                        min="0"
-                        step="5"
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={bidLaborRateInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                            setBidLaborRateInput(val);
+                            const parsed = parseFloat(val);
+                            if (!isNaN(parsed) && parsed > 0) {
+                              setBidLaborRate(parsed);
+                            }
+                          }
+                        }}
+                        onBlur={() => {
+                          const parsed = parseFloat(bidLaborRateInput);
+                          if (isNaN(parsed) || parsed <= 0) {
+                            setBidLaborRateInput(bidLaborRate.toString());
+                          }
+                        }}
+                        className="w-20 px-3 py-2 font-mono text-right"
                       />
                       <span className="text-gray-500">/hr</span>
                     </div>
