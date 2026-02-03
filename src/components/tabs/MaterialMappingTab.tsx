@@ -21,7 +21,8 @@ import {
   Loader2,
   Save,
   AlertTriangle,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
 import { useMaterialCodes } from '@/hooks/useCostCodes';
 import { useBatchUpdateMaterialCostCodes, useDismissFromMaterialBudget } from '@/hooks/useEstimateProjects';
@@ -30,6 +31,8 @@ import { Ban } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns } from '@/hooks/useMaterialMappingPatterns';
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
@@ -103,6 +106,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
   const batchUpdateMaterialCodes = useBatchUpdateMaterialCostCodes();
   const dismissFromBudget = useDismissFromMaterialBudget();
+  
+  // Material code learning system
+  const getMaterialSuggestion = useGetMaterialSuggestions();
+  const batchLearnPatterns = useBatchLearnMaterialPatterns();
 
   // Get parent checkbox state (checked, unchecked, or indeterminate)
   const getParentCheckState = (spec: string, group: MaterialGroup): 'checked' | 'unchecked' | 'indeterminate' => {
@@ -584,6 +591,14 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           title: 'Code Saved',
           description: `Applied ${code} to ${targetItems.length} items and saved to database`,
         });
+        
+        // Learn from this assignment
+        const patterns = targetItems.map(item => ({
+          materialSpec: item.materialSpec,
+          itemType: item.itemType,
+          materialCode: code
+        }));
+        batchLearnPatterns.mutate(patterns);
       } catch (error) {
         console.error('Failed to save material codes:', error);
         toast({
@@ -600,7 +615,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         description: `Applied ${code} to ${targetItems.length} items (not saved - no project selected)`,
       });
     }
-  }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
+  }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes, batchLearnPatterns]);
 
   // Dismiss items from material budget (for $0 value groups)
   const handleDismissGroup = useCallback(async (groupKey: string, dismissed: boolean = true) => {
@@ -768,6 +783,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           title: 'Items Updated',
           description: `Applied ${code} to ${itemIds.length} selected items`,
         });
+        
+        // Learn from this assignment
+        const selectedItemObjects = data.filter(item => itemIds.includes(String(item.id)));
+        const patterns = selectedItemObjects.map(item => ({
+          materialSpec: item.materialSpec,
+          itemType: item.itemType,
+          materialCode: code
+        }));
+        batchLearnPatterns.mutate(patterns);
       } catch (error) {
         console.error('Failed to save material codes:', error);
         toast({
@@ -787,7 +811,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     
     setSelectedItems(new Set());
     setSelectedGroups(new Set());
-  }, [selectedItems, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
+  }, [selectedItems, data, onDataUpdate, projectId, batchUpdateMaterialCodes, batchLearnPatterns]);
 
   // Clear all selections
   const clearAllSelections = () => {
@@ -858,16 +882,44 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     );
   };
 
-  // Render child status badge
-  const renderChildStatusBadge = (typeGroup: ItemTypeGroup) => {
-    const { assignedCode, items } = typeGroup;
+  // Render child status badge with suggestions
+  const renderChildStatusBadge = (typeGroup: ItemTypeGroup, materialSpec: string) => {
+    const { assignedCode, items, itemType } = typeGroup;
     
     // Calculate isFullyAssigned directly from current items
     const hasUnassignedItems = items.some(i => !i.materialCostCode);
     const hasSomeAssigned = items.some(i => i.materialCostCode);
     const isFullyAssigned = !hasUnassignedItems && hasSomeAssigned;
     
+    // Get suggestion for unassigned groups
+    const suggestion = getMaterialSuggestion(materialSpec, itemType);
+    
     if (!assignedCode && !hasSomeAssigned) {
+      // Show suggestion if available
+      if (suggestion) {
+        const codeInfo = allMaterialCodes.find(c => c.code === suggestion.code);
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30 font-mono cursor-help">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {suggestion.code}
+                  {codeInfo && <span className="ml-1 font-normal opacity-75 truncate max-w-24">- {codeInfo.description}</span>}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">
+                  Suggested based on {suggestion.usageCount} previous {suggestion.matchType === 'exact' ? 'exact' : 'similar'} assignment{suggestion.usageCount > 1 ? 's' : ''}
+                  <br />
+                  Confidence: {Math.round(suggestion.confidence * 100)}%
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      }
+      
       return (
         <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
           <AlertCircle className="h-3 w-3 mr-1" />
@@ -1334,7 +1386,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                 >
                                   <PopoverTrigger asChild onClick={e => e.stopPropagation()}>
                                     <Button variant="ghost" className="h-auto p-1 hover:bg-muted">
-                                      {renderChildStatusBadge(typeGroup)}
+                                      {renderChildStatusBadge(typeGroup, group.materialSpec)}
                                     </Button>
                                   </PopoverTrigger>
                                   <PopoverContent className="w-80 p-0" align="start">
