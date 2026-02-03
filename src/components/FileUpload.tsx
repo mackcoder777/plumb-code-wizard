@@ -127,6 +127,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     };
     
     // Build column map - CRITICAL: Look for "field hours" NOT "hours"
+    // FIXED COLUMN POSITIONS: Z=25 (Material w/Factor), AA=26 (Hours w/Factor)
     const colMap = {
       drawing: findCol('drawing'),
       system: findCol('=system'),
@@ -143,11 +144,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       size: findCol('=size'),
       quantity: findCol('quantity', 'qty'),
       listPrice: findCol('list price'),
-      materialDollars: findCol('material dollar'),
+      // Material Dollars: Try header detection first, fallback to Column Z (index 25)
+      materialDollars: findCol('material w/factor', 'material dollar') !== -1 
+        ? findCol('material w/factor', 'material dollar') 
+        : 25,
       weight: findCol('=weight'),
-      // CRITICAL: Field Hours (Column AA) - Total hours for line item
-      // Try multiple variations - "Field Hours", "Total Hours", "Labor Hours", "Hours w/Factor", etc.
-      fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
+      // CRITICAL: Total Hours - Try header detection first, fallback to Column AA (index 26)
+      fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours') !== -1
+        ? findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours')
+        : 26,
       // Unit Hours (Column U) - Per-item hours (backup only) - must be EXACT "hours"
       unitHours: findCol('=hours'),
       laborDollars: findCol('labor dollar'),
