@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -28,9 +28,10 @@ interface FloorData {
 }
 
 interface FloorSectionMappingPanelProps {
-  estimateData: Array<{ floor?: string }>;
+  estimateData: Array<{ floor?: string; costCode?: string }>;
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
+  onApplySectionCodes?: (mappings: Record<string, string>) => void;
 }
 
 // Common section code suggestions
@@ -226,6 +227,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   estimateData,
   projectId,
   onMappingsChange,
+  onApplySectionCodes,
 }) => {
   // Local state for unsaved changes
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
@@ -327,6 +329,22 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     }
   }, [projectId, localMappings, batchSave]);
 
+  // Count items that have labor codes and would be affected by section updates
+  const itemsWithCodes = useMemo(() => {
+    return estimateData.filter(item => item.costCode && item.costCode.trim()).length;
+  }, [estimateData]);
+
+  // Apply section codes to all items with labor codes
+  const handleApplySectionCodes = useCallback(() => {
+    if (onApplySectionCodes) {
+      onApplySectionCodes(localMappings);
+      toast({
+        title: "Section Codes Applied",
+        description: `Updated section codes on ${itemsWithCodes} items based on floor mappings.`,
+      });
+    }
+  }, [localMappings, onApplySectionCodes, itemsWithCodes]);
+
   const handleReset = useCallback(() => {
     const mappingsFromDb: Record<string, string> = {};
     dbMappings.forEach(m => {
@@ -421,6 +439,16 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             >
               Auto-Suggest
             </Button>
+            {itemsWithCodes > 0 && onApplySectionCodes && !hasChanges && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleApplySectionCodes}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Apply to {itemsWithCodes} Items
+              </Button>
+            )}
             {hasChanges && (
               <>
                 <Button
