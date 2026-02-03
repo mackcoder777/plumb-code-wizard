@@ -679,64 +679,89 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">FAB</TableHead>
-                <TableHead>Labor Code</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Original Hours</TableHead>
-                <TableHead className="text-center w-32">Strip %</TableHead>
-                <TableHead className="text-right">Field Hours</TableHead>
-                <TableHead className="text-right">Fab Hours</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Object.entries(laborSummary).map(([code, data]) => {
-                const fabConfig = fabricationConfigs[code];
-                const isEnabled = fabConfig?.enabled || false;
-                const fabPercent = fabConfig?.percentage || 15;
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">FAB</TableHead>
+                  <TableHead>Labor Code</TableHead>
+                  <TableHead className="text-right">Original Hours</TableHead>
+                  {foremanBonusEnabled && (
+                    <>
+                      <TableHead className="text-center bg-amber-50 dark:bg-amber-950">Foreman Strip %</TableHead>
+                      <TableHead className="text-right bg-amber-50 dark:bg-amber-950">Foreman Hrs</TableHead>
+                      <TableHead className="text-right bg-amber-50 dark:bg-amber-950">After Foreman</TableHead>
+                    </>
+                  )}
+                  <TableHead className="text-center bg-purple-50 dark:bg-purple-950 w-24">Fab Strip %</TableHead>
+                  <TableHead className="text-right bg-purple-50 dark:bg-purple-950">Fab Hours</TableHead>
+                  <TableHead className="text-right font-bold">Final Field Hrs</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(laborSummary).map(([code, data]) => {
+                  const fabConfig = fabricationConfigs[code];
+                  const isEnabled = fabConfig?.enabled || false;
+                  const fabPercent = fabConfig?.percentage || 15;
 
-                const originalHours = data.fieldHours || 0;
-                const foremanStripRatio = foremanBonusEnabled ? (1 - foremanBonusPercent / 100) : 1;
-                const hoursAfterForeman = originalHours * foremanStripRatio;
-                const fabHours = isEnabled ? hoursAfterForeman * (fabPercent / 100) : 0;
-                const fieldHours = hoursAfterForeman - fabHours;
+                  const originalHours = data.fieldHours || 0;
+                  const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
+                  const hoursAfterForeman = originalHours - foremanStripHours;
+                  const fabHours = isEnabled ? hoursAfterForeman * (fabPercent / 100) : 0;
+                  const finalFieldHours = hoursAfterForeman - fabHours;
 
-                return (
-                  <TableRow key={code} className={isEnabled ? 'bg-purple-50 dark:bg-purple-950' : ''}>
-                    <TableCell>
-                      <Switch checked={isEnabled} onCheckedChange={(checked) => toggleFabForCode(code, checked)} />
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{code}</TableCell>
-                    <TableCell>{data.description}</TableCell>
-                    <TableCell className="text-right font-mono">{originalHours.toFixed(1)}</TableCell>
-                    <TableCell>
-                      {isEnabled ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            type="number"
-                            min="1"
-                            max="50"
-                            value={fabPercent}
-                            onChange={(e) => setFabPercentForCode(code, parseInt(e.target.value) || 15)}
-                            className="w-16 h-8 text-center font-mono"
-                          />
-                          <span className="text-muted-foreground">%</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
+                  return (
+                    <TableRow key={code} className={isEnabled ? 'bg-purple-50/30 dark:bg-purple-950/30' : ''}>
+                      <TableCell>
+                        <Switch checked={isEnabled} onCheckedChange={(checked) => toggleFabForCode(code, checked)} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-mono text-sm">{code}</div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[150px]">{data.description}</div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{originalHours.toFixed(1)}</TableCell>
+                      {foremanBonusEnabled && (
+                        <>
+                          <TableCell className="text-center font-mono text-amber-600 bg-amber-50/50 dark:bg-amber-950/50">
+                            {foremanBonusPercent}%
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-amber-600 bg-amber-50/50 dark:bg-amber-950/50">
+                            -{foremanStripHours.toFixed(1)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono bg-amber-50/50 dark:bg-amber-950/50">
+                            {hoursAfterForeman.toFixed(1)}
+                          </TableCell>
+                        </>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-medium text-green-600">{fieldHours.toFixed(1)}</TableCell>
-                    <TableCell className="text-right font-mono font-medium text-purple-600">
-                      {isEnabled ? fabHours.toFixed(1) : '—'}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                      <TableCell className="bg-purple-50/50 dark:bg-purple-950/50">
+                        {isEnabled ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <Input
+                              type="number"
+                              min="1"
+                              max="50"
+                              value={fabPercent}
+                              onChange={(e) => setFabPercentForCode(code, parseInt(e.target.value) || 15)}
+                              className="w-14 h-7 text-center font-mono text-sm"
+                            />
+                            <span className="text-muted-foreground text-xs">%</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-center block">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-purple-600 bg-purple-50/50 dark:bg-purple-950/50">
+                        {isEnabled ? `-${fabHours.toFixed(1)}` : '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-bold text-green-600">
+                        {finalFieldHours.toFixed(1)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
           {calculations.totalFabHours > 0 && (
             <div className="bg-purple-50 dark:bg-purple-950 rounded-lg p-4 border border-purple-200 dark:border-purple-800 mt-4">
