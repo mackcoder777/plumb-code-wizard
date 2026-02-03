@@ -5,6 +5,7 @@ import { useLaborCodes } from '@/hooks/useCostCodes';
 import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping, useBatchSaveMappings } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatterns } from '@/hooks/useMappingPatterns';
+import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping } from '@/hooks/useCategoryMappings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,6 +103,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const saveMapping = useSaveMapping();
   const deleteMapping = useDeleteMapping();
   const batchSaveMappings = useBatchSaveMappings();
+  
+  // Category labor mappings (priority over system mappings)
+  const { data: categoryMappings = [] } = useCategoryMappings(projectId);
   
   // Learning system hooks
   const { data: mappingPatterns = [] } = useMappingPatterns();
@@ -525,6 +529,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
+    let categoryAssignments = 0;
+    let systemAssignments = 0;
     const systemItemCounts: Record<string, number> = {};
 
     const updatedData = data.map(item => {
@@ -532,20 +538,36 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const systemMapping = mappings[systemKey];
       const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
       
-      // Priority: Item type mapping > System mapping > Existing code
+      // Priority: Category Mapping > System Mapping > Item Type Mapping
+      // Category mapping returns null if set to __SYSTEM__ (defer to system)
       let costHead: string | undefined;
       let changed = false;
+      let assignmentSource: 'category' | 'system' | 'itemType' | null = null;
       
-      if (itemTypeMapping?.laborCode && !item.costCode) {
-        costHead = itemTypeMapping.laborCode;
+      // 1. Check category mapping first (highest priority)
+      const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+      if (categoryLaborCode && !item.costCode) {
+        costHead = categoryLaborCode;
         changed = true;
-      } else if (systemMapping?.laborCode && !item.costCode) {
+        assignmentSource = 'category';
+      }
+      // 2. Fall back to system mapping (if no category mapping or category defers to system)
+      else if (systemMapping?.laborCode && !item.costCode) {
         costHead = systemMapping.laborCode;
         changed = true;
+        assignmentSource = 'system';
+      }
+      // 3. Fall back to item type mapping
+      else if (itemTypeMapping?.laborCode && !item.costCode) {
+        costHead = itemTypeMapping.laborCode;
+        changed = true;
+        assignmentSource = 'itemType';
       }
       
       if (changed && costHead) {
         itemsAffected++;
+        if (assignmentSource === 'category') categoryAssignments++;
+        if (assignmentSource === 'system') systemAssignments++;
         systemItemCounts[systemKey] = (systemItemCounts[systemKey] || 0) + 1;
         const fullCode = buildFullLaborCode(costHead, item.floor || '');
         return { ...item, costCode: fullCode };
@@ -579,16 +601,22 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
     onDataUpdate(updatedData);
     
+    const categoryMappingCount = categoryMappings.filter(m => !isUsingSystemMapping(m.labor_code)).length;
     const itemTypeMappingCount = Object.values(itemTypeMappings).reduce(
       (acc, systemItemTypes) => acc + Object.keys(systemItemTypes).length, 
       0
     );
     
+    // Build description parts
+    const descParts: string[] = [];
+    if (categoryAssignments > 0) descParts.push(`${categoryAssignments} by category`);
+    if (systemAssignments > 0) descParts.push(`${systemAssignments} by system`);
+    
     toast({
       title: "Mappings Applied Successfully",
-      description: `Applied ${Object.keys(mappings).length} system mappings${itemTypeMappingCount > 0 ? ` and ${itemTypeMappingCount} item type overrides` : ''} to ${itemsAffected} items`,
+      description: `Applied to ${itemsAffected} items${descParts.length > 0 ? ` (${descParts.join(', ')})` : ''}`,
     });
-  }, [data, mappings, itemTypeMappings, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
+  }, [data, mappings, itemTypeMappings, categoryMappings, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
 
   const applySystemMapping = useCallback((system: string) => {
     const systemKey = normalizeSystemKey(system);
@@ -598,16 +626,18 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     let itemsAffected = 0;
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
+      if (item.costCode) return item; // Skip if already has code
       
-      let changed = false;
+      // Check if category has a specific mapping (not deferred to system)
+      const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
       
-      if (systemMapping.laborCode && !item.costCode) {
-        changed = true;
-      }
+      // Use category mapping if it exists and is NOT deferred to system
+      // Otherwise use the system mapping
+      const costHead = categoryLaborCode || systemMapping.laborCode;
       
-      if (changed) {
+      if (costHead) {
         itemsAffected++;
-        const fullCode = buildFullLaborCode(systemMapping.laborCode!, item.floor || '');
+        const fullCode = buildFullLaborCode(costHead, item.floor || '');
         return { ...item, costCode: fullCode };
       }
       return item;
@@ -646,7 +676,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
-  }, [data, mappings, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
+  }, [data, mappings, categoryMappings, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
   // Handler to accept a suggestion from the filter cards
   const handleAcceptSuggestion = useCallback((system: string, laborCode: string) => {
