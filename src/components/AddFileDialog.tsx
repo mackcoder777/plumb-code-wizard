@@ -152,7 +152,7 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
         materialDollars: findCol('material dollar'),
         // CRITICAL: Field Hours (Column AA) - Total hours for line item
         // Must check MULTIPLE variations of the header name
-        fieldHours: findCol('field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
+        fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
         // Unit Hours (Column U) - Per-item hours - EXACT match only
         unitHours: findCol('=hours'),
         laborDollars: findCol('labor dollar'),

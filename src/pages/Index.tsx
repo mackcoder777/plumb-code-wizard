@@ -826,7 +826,7 @@ const EnhancedCostCodeManager = () => {
                   multiplier: findCol('=multiplier'),
                   materialDollars: findCol('material dollar'),
                   weight: findCol('=weight'),
-                  fieldHours: findCol('=field hours', 'field hour'),
+                  fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours'),
                   unitHours: findCol('=hours'),
                   laborDollars: findCol('labor dollar'),
                 };

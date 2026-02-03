@@ -146,8 +146,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       materialDollars: findCol('material dollar'),
       weight: findCol('=weight'),
       // CRITICAL: Field Hours (Column AA) - Total hours for line item
-      // Try multiple variations - "Field Hours", "Total Hours", "Labor Hours", etc.
-      fieldHours: findCol('field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
+      // Try multiple variations - "Field Hours", "Total Hours", "Labor Hours", "Hours w/Factor", etc.
+      fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
       // Unit Hours (Column U) - Per-item hours (backup only) - must be EXACT "hours"
       unitHours: findCol('=hours'),
       laborDollars: findCol('labor dollar'),
