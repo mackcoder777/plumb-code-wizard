@@ -2268,6 +2268,7 @@ const EnhancedCostCodeManager = () => {
                   setActiveTab('estimates');
                 }}
                 projectId={currentProject?.id}
+                floorSectionMappings={dbFloorMappings}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
