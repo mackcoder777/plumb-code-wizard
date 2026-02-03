@@ -387,6 +387,42 @@ export type Database = {
           },
         ]
       }
+      material_mapping_patterns: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          item_type_pattern: string
+          last_used_at: string
+          material_code: string
+          material_spec_pattern: string
+          usage_count: number
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_type_pattern: string
+          last_used_at?: string
+          material_code: string
+          material_spec_pattern: string
+          usage_count?: number
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_type_pattern?: string
+          last_used_at?: string
+          material_code?: string
+          material_spec_pattern?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       system_mappings: {
         Row: {
           applied_at: string | null
