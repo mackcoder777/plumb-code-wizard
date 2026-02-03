@@ -73,6 +73,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'assigned' | 'unassigned' | 'needs-attention' | 'dismissed' | 'zero-value'>('all');
   const [systemFilter, setSystemFilter] = useState<string>('all');
+  const [itemTypeFilter, setItemTypeFilter] = useState<string>('all');
   const [openCodePicker, setOpenCodePicker] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -88,6 +89,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (item.system) systems.add(item.system);
     });
     return Array.from(systems).sort();
+  }, [data]);
+
+  // Get unique item types from data
+  const uniqueItemTypes = useMemo(() => {
+    const types = new Set<string>();
+    data.forEach(item => {
+      if (item.itemType) types.add(item.itemType);
+    });
+    return Array.from(types).sort();
   }, [data]);
 
   const { data: dbMaterialCodes = [] } = useMaterialCodes();
@@ -383,9 +393,17 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       return group;
     }).filter((group): group is MaterialGroup => {
       if (!group) return false;
-      if (searchTerm && !group.materialSpec.toLowerCase().includes(searchTerm.toLowerCase())) {
-        return false;
+      
+      // Enhanced search: match Material Spec OR Item Type names
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const specMatches = group.materialSpec.toLowerCase().includes(searchLower);
+        const typeMatches = group.subGroups.some(sg => 
+          sg.itemType.toLowerCase().includes(searchLower)
+        );
+        if (!specMatches && !typeMatches) return false;
       }
+      
       if (filterStatus === 'assigned' && group.assignmentStatus !== 'complete') return false;
       if (filterStatus === 'unassigned' && group.assignmentStatus !== 'none') return false;
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
@@ -426,8 +444,25 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         ...group,
         subGroups: filteredSubGroups
       };
-    });
-  }, [groups, searchTerm, filterStatus, systemFilter]);
+    }).map(group => {
+      // Apply Item Type filter if active
+      if (itemTypeFilter === 'all') return group;
+      
+      const filteredSubGroups = group.subGroups.filter(sg => sg.itemType === itemTypeFilter);
+      if (filteredSubGroups.length === 0) return null;
+      
+      // Recalculate group stats
+      const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
+      const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
+      
+      return {
+        ...group,
+        subGroups: filteredSubGroups,
+        itemCount: filteredItemCount,
+        totalMaterial: filteredTotalMaterial
+      };
+    }).filter((group): group is MaterialGroup => group !== null);
+  }, [groups, searchTerm, filterStatus, systemFilter, itemTypeFilter]);
 
   // Groups needing attention (exclude $0 value and dismissed items)
   const groupsNeedingAttention = useMemo(() => {
@@ -753,17 +788,27 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     setSelectedItems(new Set());
   }, [selectedItems, data, onDataUpdate, projectId, batchUpdateMaterialCodes]);
 
-  // Select all visible groups
+  // Select all visible groups AND their items
   const selectAllVisible = () => {
-    const newSelected = new Set<string>();
+    const newGroups = new Set<string>();
+    const newItems = new Set<string>();
+    
     filteredGroups.forEach(group => {
-      newSelected.add(group.materialSpec);
+      newGroups.add(group.materialSpec);
       group.subGroups.forEach(sg => {
-        newSelected.add(`${group.materialSpec}|${sg.itemType}`);
+        newGroups.add(`${group.materialSpec}|${sg.itemType}`);
+        sg.items.forEach(item => newItems.add(String(item.id)));
       });
     });
-    setSelectedGroups(newSelected);
+    
+    setSelectedGroups(newGroups);
+    setSelectedItems(newItems);
   };
+  
+  // Get count of visible subgroups for the button label
+  const visibleSubGroupCount = useMemo(() => {
+    return filteredGroups.reduce((sum, g) => sum + g.subGroups.length, 0);
+  }, [filteredGroups]);
 
   // Render parent status badge with detailed assignment tracking
   const renderParentStatusBadge = (group: MaterialGroup) => {
@@ -997,7 +1042,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search material specs..."
+                  placeholder="Search specs or item types..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="pl-9"
@@ -1022,8 +1067,8 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4 text-muted-foreground" />
                 <Select value={systemFilter} onValueChange={setSystemFilter}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Filter by System" />
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="All Systems" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Systems</SelectItem>
@@ -1033,11 +1078,25 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                <Select value={itemTypeFilter} onValueChange={setItemTypeFilter}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="All Item Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Item Types</SelectItem>
+                    {uniqueItemTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={selectAllVisible}>
-                Select All
+                Select All Visible ({visibleSubGroupCount})
               </Button>
               {expandedSpecs.size > 0 && (
                 <Button variant="ghost" size="sm" onClick={collapseAll}>
