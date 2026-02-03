@@ -495,7 +495,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Parse existing code to extract the cost head (last part)
       // Format: "SECTION ACTIVITY COSTHEAD" or just "COSTHEAD"
       const parts = item.costCode.trim().split(/\s+/);
-      const costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
+      let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
+      
+      // Check if category has a specific mapping that should override the costHead
+      const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+      if (categoryLaborCode) {
+        costHead = categoryLaborCode;
+      }
       
       // Get new section from floor mapping
       const floor = item.floor || '';
@@ -525,7 +531,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }
     
     return itemsUpdated;
-  }, [data, onDataUpdate]);
+  }, [data, categoryMappings, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
