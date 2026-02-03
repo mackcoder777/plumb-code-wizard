@@ -1537,10 +1537,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                     ) : (
                                       paginatedItems.map(item => {
                                         const isSelected = selectedItems.has(String(item.id));
+                                        const isAssigned = !!item.materialCostCode;
                                         return (
                                           <tr 
                                             key={item.id} 
-                                            className={`hover:bg-muted/30 cursor-pointer ${isSelected ? 'bg-primary/10' : ''}`}
+                                            className={`hover:bg-muted/30 cursor-pointer ${
+                                              isSelected ? 'bg-primary/10' : isAssigned ? 'bg-green-50 dark:bg-green-950/20' : ''
+                                            }`}
                                             onClick={() => toggleItemSelection(String(item.id))}
                                           >
                                             <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
@@ -1549,14 +1552,17 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                                 onCheckedChange={() => toggleItemSelection(String(item.id))}
                                               />
                                             </td>
-                                            <td className="px-3 py-2 text-foreground font-medium">{item.system || '—'}</td>
-                                            <td className="px-3 py-2 text-foreground">{item.itemName || item.materialDesc}</td>
+                                            <td className={`px-3 py-2 font-medium ${isAssigned ? 'text-foreground' : 'text-muted-foreground'}`}>{item.system || '—'}</td>
+                                            <td className={`px-3 py-2 ${isAssigned ? 'text-foreground' : 'text-muted-foreground'}`}>{item.itemName || item.materialDesc}</td>
                                             <td className="px-3 py-2 text-muted-foreground">{item.size}</td>
                                             <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
                                             <td className="px-3 py-2 text-right font-mono text-muted-foreground">${(item.materialDollars || 0).toLocaleString()}</td>
                                             <td className="px-3 py-2">
                                               {item.materialCostCode ? (
-                                                <span className="font-mono text-green-600">{item.materialCostCode}</span>
+                                                <span className="inline-flex items-center gap-1 font-mono text-green-600 font-semibold">
+                                                  <Check className="h-3.5 w-3.5" />
+                                                  {item.materialCostCode}
+                                                </span>
                                               ) : (
                                                 <span className="text-muted-foreground">—</span>
                                               )}
