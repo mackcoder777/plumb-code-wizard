@@ -964,28 +964,65 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     );
   };
 
-  // Code picker component
-  const CodePicker = ({ groupKey, onSelect }: { groupKey: string; onSelect: (code: string) => void }) => (
-    <Command className="rounded-lg border shadow-md">
-      <CommandInput placeholder="Search material codes..." />
-      <CommandList>
-        <CommandEmpty>No codes found.</CommandEmpty>
-        <CommandGroup>
-          {allMaterialCodes.map(code => (
-            <CommandItem
-              key={code.code}
-              value={`${code.code} ${code.description}`}
-              onSelect={() => onSelect(code.code)}
-              className="cursor-pointer"
+  // Code picker component with manual entry support
+  const CodePicker = ({ groupKey, onSelect }: { groupKey: string; onSelect: (code: string) => void }) => {
+    const [manualCode, setManualCode] = useState('');
+    
+    const handleManualApply = () => {
+      if (manualCode.trim()) {
+        onSelect(manualCode.trim());
+        setManualCode('');
+      }
+    };
+    
+    return (
+      <Command className="rounded-lg border shadow-md">
+        <CommandInput placeholder="Search material codes..." />
+        <CommandList>
+          <CommandEmpty>No codes found.</CommandEmpty>
+          <CommandGroup>
+            {allMaterialCodes.map(code => (
+              <CommandItem
+                key={code.code}
+                value={`${code.code} ${code.description}`}
+                onSelect={() => onSelect(code.code)}
+                className="cursor-pointer"
+              >
+                <span className="font-mono font-semibold">{code.code}</span>
+                <span className="ml-2 opacity-70 truncate">{code.description}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+        <div className="border-t p-3">
+          <div className="text-xs text-muted-foreground mb-2 text-center">
+            Or enter code manually
+          </div>
+          <div className="flex gap-2">
+            <Input 
+              placeholder="Enter code..."
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+              className="h-8 text-sm font-mono"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleManualApply();
+                }
+              }}
+            />
+            <Button 
+              size="sm"
+              disabled={!manualCode.trim()}
+              onClick={handleManualApply}
             >
-              <span className="font-mono font-semibold">{code.code}</span>
-              <span className="ml-2 opacity-70 truncate">{code.description}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      </CommandList>
-    </Command>
-  );
+              Apply
+            </Button>
+          </div>
+        </div>
+      </Command>
+    );
+  };
 
   return (
     <div className="space-y-6">
