@@ -24,6 +24,7 @@ import {
   EstimateProject
 } from '@/hooks/useEstimateProjects';
 import { useFloorSectionMappings, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
+import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useAuth } from '@/hooks/useAuth';
 import { Auth } from '@/components/Auth';
 import { useCostCodes } from '@/hooks/useCostCodes';
@@ -454,6 +455,9 @@ const EnhancedCostCodeManager = () => {
   // Fetch floor-to-section mappings for labor code section derivation
   const { data: dbFloorMappings = [] } = useFloorSectionMappings(currentProject?.id || null);
   
+  // Fetch category labor mappings for priority-based code assignment
+  const { data: dbCategoryMappings = [] } = useCategoryMappings(currentProject?.id || null);
+  
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
     const map: FloorSectionMap = {};
@@ -683,6 +687,50 @@ const EnhancedCostCodeManager = () => {
       setFileName(currentProject.file_name || '');
     }
   }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode]);
+
+  // Apply category labor mappings to estimate items when mappings are loaded
+  // This ensures previously saved category mappings are reflected in the UI
+  useEffect(() => {
+    if (dbCategoryMappings.length > 0 && estimateData.length > 0 && currentProject?.id) {
+      let hasChanges = false;
+      
+      const updatedItems = estimateData.map((item) => {
+        // Check if this item's category has a mapping
+        const categoryCode = getLaborCodeFromCategory(item.reportCat, dbCategoryMappings);
+        
+        if (categoryCode && categoryCode !== item.costCode) {
+          // Category mapping should override the current code
+          // Build the full cost code with section
+          const floorText = (item.floor || '').toLowerCase().trim();
+          let section = '01';
+          for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
+            if (patterns.some(pattern => pattern.test(floorText))) {
+              section = code;
+              break;
+            }
+          }
+          
+          const newCostCode = `${section} 0000 ${categoryCode}`;
+          
+          if (newCostCode !== item.costCode) {
+            hasChanges = true;
+            return { ...item, costCode: newCostCode };
+          }
+        }
+        return item;
+      });
+      
+      if (hasChanges) {
+        console.log('[Category Mapping] Applied category labor mappings to estimate items');
+        setEstimateData(updatedItems);
+        setFilteredData(prev => {
+          // Re-apply any filters to the updated data
+          const itemIds = new Set(prev.map(i => i.id));
+          return updatedItems.filter(i => itemIds.has(i.id));
+        });
+      }
+    }
+  }, [dbCategoryMappings, currentProject?.id]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
