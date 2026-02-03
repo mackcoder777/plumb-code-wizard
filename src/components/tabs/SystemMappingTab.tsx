@@ -545,19 +545,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let assignmentSource: 'category' | 'system' | 'itemType' | null = null;
       
       // 1. Check category mapping first (highest priority)
+      // Category mappings ALWAYS override existing codes (they take precedence)
       const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-      if (categoryLaborCode && !item.costCode) {
-        costHead = categoryLaborCode;
-        changed = true;
-        assignmentSource = 'category';
+      if (categoryLaborCode) {
+        // Extract current costHead from existing code if any
+        const existingParts = item.costCode?.trim().split(/\s+/) || [];
+        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+        
+        // Only change if different from existing
+        if (existingCostHead !== categoryLaborCode) {
+          costHead = categoryLaborCode;
+          changed = true;
+          assignmentSource = 'category';
+        }
       }
-      // 2. Fall back to system mapping (if no category mapping or category defers to system)
+      // 2. Fall back to system mapping (only for items without codes)
       else if (systemMapping?.laborCode && !item.costCode) {
         costHead = systemMapping.laborCode;
         changed = true;
         assignmentSource = 'system';
       }
-      // 3. Fall back to item type mapping
+      // 3. Fall back to item type mapping (only for items without codes)
       else if (itemTypeMapping?.laborCode && !item.costCode) {
         costHead = itemTypeMapping.laborCode;
         changed = true;
@@ -626,14 +634,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     let itemsAffected = 0;
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
-      if (item.costCode) return item; // Skip if already has code
       
       // Check if category has a specific mapping (not deferred to system)
       const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
       
-      // Use category mapping if it exists and is NOT deferred to system
-      // Otherwise use the system mapping
-      const costHead = categoryLaborCode || systemMapping.laborCode;
+      // Determine the cost head to use
+      let costHead: string | undefined;
+      
+      if (categoryLaborCode) {
+        // Category mapping takes priority and can OVERRIDE existing codes
+        const existingParts = item.costCode?.trim().split(/\s+/) || [];
+        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+        
+        // Only update if different
+        if (existingCostHead !== categoryLaborCode) {
+          costHead = categoryLaborCode;
+        }
+      } else if (!item.costCode && systemMapping.laborCode) {
+        // System mapping only applies to items without codes
+        costHead = systemMapping.laborCode;
+      }
       
       if (costHead) {
         itemsAffected++;
