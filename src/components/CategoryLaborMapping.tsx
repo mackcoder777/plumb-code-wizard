@@ -171,7 +171,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                 {stats.mapped} mapped
               </Badge>
               {stats.useSystem > 0 && (
-                <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
+                <Badge variant="outline" className="text-muted-foreground">
                   {stats.useSystem} use system
                 </Badge>
               )}
@@ -211,9 +211,9 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                         key={cat.category}
                         className={cn(
                           "rounded-lg border transition-colors",
-                          isMapped ? "bg-accent/50 border-primary/30" : 
-                          usesSystem ? "bg-secondary/50 border-secondary" : 
-                          "bg-muted/30"
+                          isMapped ? "bg-primary/10 border-primary/30" : 
+                          usesSystem ? "bg-muted/50 border-muted-foreground/30" : 
+                          "bg-background border-border"
                         )}
                       >
                         {/* Category Header Row */}
@@ -232,7 +232,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                             {isMapped ? (
                               <Check className="h-4 w-4 text-primary flex-shrink-0" />
                             ) : usesSystem ? (
-                              <Link2 className="h-4 w-4 text-secondary-foreground flex-shrink-0" />
+                              <Link2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                             ) : (
                               <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                             )}
@@ -252,7 +252,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               <SelectTrigger className={cn(
                                 "h-9",
                                 isMapped && "border-primary/50",
-                                usesSystem && "border-secondary"
+                                usesSystem && "border-muted-foreground/50"
                               )}>
                                 <SelectValue placeholder="Select labor code..." />
                               </SelectTrigger>
@@ -262,8 +262,8 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 </SelectItem>
                                 <SelectItem value={SYSTEM_MAPPING_VALUE}>
                                   <span className="flex items-center gap-2">
-                                    <Link2 className="h-3 w-3 text-secondary-foreground" />
-                                    <span className="text-secondary-foreground font-medium">Use System Mapping</span>
+                                    <Link2 className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-muted-foreground font-medium">Use System Mapping</span>
                                   </span>
                                 </SelectItem>
                                 <SelectSeparator />
