@@ -9,9 +9,11 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { Auth } from "./components/Auth";
 import { AdminCostCodeUpload } from "./components/AdminCostCodeUpload";
+import { AdminCostCodeManager } from "./components/AdminCostCodeManager";
 import { useAuth } from "./hooks/useAuth";
-import { Loader2, LogOut, Shield } from "lucide-react";
+import { Loader2, LogOut, Shield, Home } from "lucide-react";
 import { Button } from "./components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +68,43 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+const AdminPage: React.FC = () => {
+  return (
+    <div className="container mx-auto p-6 max-w-6xl">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Shield className="h-8 w-8 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold">Admin Panel</h1>
+            <p className="text-muted-foreground">Manage cost codes and system settings</p>
+          </div>
+        </div>
+        <Link to="/">
+          <Button variant="outline">
+            <Home className="h-4 w-4 mr-2" />
+            Back to App
+          </Button>
+        </Link>
+      </div>
+      
+      <Tabs defaultValue="library" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="library">Cost Code Library</TabsTrigger>
+          <TabsTrigger value="import">Import Codes</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="library">
+          <AdminCostCodeManager />
+        </TabsContent>
+        
+        <TabsContent value="import">
+          <AdminCostCodeUpload />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
 const AppContent: React.FC = () => {
   const { user, signOut, isAdmin } = useAuth();
 
@@ -115,9 +154,7 @@ const AppContent: React.FC = () => {
           path="/admin"
           element={
             <AdminRoute>
-              <div className="container mx-auto p-6 max-w-5xl">
-                <AdminCostCodeUpload />
-              </div>
+              <AdminPage />
             </AdminRoute>
           }
         />
