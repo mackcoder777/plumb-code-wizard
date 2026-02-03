@@ -111,38 +111,81 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
       }
 
       const headers = rawData[headerRow]?.map((h: any) => 
-        String(h || '').toLowerCase()
+        String(h || '').toLowerCase().trim()
       ) || [];
 
-      // Map columns
-      const colMap = {
-        drawing: headers.findIndex(h => h.includes('drawing')),
-        system: headers.findIndex(h => h === 'system'),
-        floor: headers.findIndex(h => h.includes('floor')),
-        zone: headers.findIndex(h => h.includes('zone')),
-        materialSpec: headers.findIndex(h => h.includes('material spec')),
-        itemType: headers.findIndex(h => h.includes('item type')),
-        trade: headers.findIndex(h => h.includes('trade')),
-        materialDesc: headers.findIndex(h => h.includes('material desc')),
-        itemName: headers.findIndex(h => h.includes('item name')),
-        size: headers.findIndex(h => h === 'size'),
-        quantity: headers.findIndex(h => h.includes('quantity')),
-        listPrice: headers.findIndex(h => h.includes('list price')),
-        materialDollars: headers.findIndex(h => h.includes('material dollar')),
-        // CRITICAL: Use "Field Hours" (Column AA - Total Hours) NOT "Hours" (Column U - Unit Hours)
-        fieldHours: headers.findIndex(h => h.includes('field hour') || h === 'field hours'),
-        unitHours: headers.findIndex(h => h === 'hours'),
-        laborDollars: headers.findIndex(h => h.includes('labor dollar')),
-        symbol: headers.findIndex(h => h.includes('symbol')),
-        estimator: headers.findIndex(h => h.includes('estimator')),
-        reportCat: headers.findIndex(h => h.includes('report') || h.includes('cat')),
-        weight: headers.findIndex(h => h.includes('weight')),
+      // DEBUG: Log all headers to help identify correct columns
+      console.log('=== AddFileDialog Parsing Debug ===');
+      console.log('Sheet name:', sheetName);
+      console.log('Header row index:', headerRow);
+      console.log('All headers:', headers);
+      console.log('Headers with indices:', headers.map((h, i) => `${i}: "${h}"`).join(', '));
+
+      // Helper function to find column by multiple search terms
+      const findCol = (...searchTerms: string[]): number => {
+        for (const term of searchTerms) {
+          const idx = headers.findIndex(h => {
+            if (term.startsWith('=')) {
+              return h === term.slice(1); // Exact match
+            }
+            return h.includes(term);
+          });
+          if (idx !== -1) return idx;
+        }
+        return -1;
       };
+
+      // Map columns - Use findCol for flexibility
+      const colMap = {
+        drawing: findCol('drawing'),
+        system: findCol('=system'),
+        floor: findCol('floor', 'flr'),
+        zone: findCol('zone'),
+        materialSpec: findCol('material spec', 'mat spec'),
+        itemType: findCol('item type', 'item ty'),
+        trade: findCol('trade'),
+        materialDesc: findCol('material desc'),
+        itemName: findCol('item name'),
+        size: findCol('=size'),
+        quantity: findCol('quantity', 'qty'),
+        listPrice: findCol('list price'),
+        materialDollars: findCol('material dollar'),
+        // CRITICAL: Field Hours (Column AA) - Total hours for line item
+        // Must check MULTIPLE variations of the header name
+        fieldHours: findCol('field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
+        // Unit Hours (Column U) - Per-item hours - EXACT match only
+        unitHours: findCol('=hours'),
+        laborDollars: findCol('labor dollar'),
+        symbol: findCol('symbol'),
+        estimator: findCol('estimator'),
+        reportCat: findCol('report cat', 'report'),
+        weight: findCol('=weight'),
+      };
+
+      console.log('Column Map:', colMap);
+      console.log('Field Hours column index:', colMap.fieldHours, '-> Header:', headers[colMap.fieldHours]);
+      console.log('Unit Hours column index:', colMap.unitHours, '-> Header:', headers[colMap.unitHours]);
 
       setProcessingProgress(80);
 
       // Parse items
       const items: EstimateItem[] = [];
+      let totalHours = 0;
+      let totalMaterial = 0;
+      
+      // Log first few data rows for debugging
+      console.log('Sample data rows (first 3 after header):');
+      for (let i = headerRow + 1; i < Math.min(headerRow + 4, rawData.length); i++) {
+        const row = rawData[i];
+        console.log(`Row ${i}:`, {
+          system: row?.[colMap.system],
+          itemName: row?.[colMap.itemName],
+          quantity: row?.[colMap.quantity],
+          fieldHours: row?.[colMap.fieldHours],
+          unitHours: row?.[colMap.unitHours],
+        });
+      }
+      
       for (let i = headerRow + 1; i < rawData.length; i++) {
         const row = rawData[i];
         if (!row || row.length < 5) continue;
@@ -154,6 +197,24 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
 
         // Skip summary rows (rows with no key identifiers)
         if (!system && !drawing && !materialDesc && !itemName) continue;
+
+        // CRITICAL: Extract hours correctly
+        let hours = 0;
+        
+        // Priority 1: Use Field Hours (total hours for the line)
+        if (colMap.fieldHours !== -1 && row[colMap.fieldHours] != null) {
+          hours = parseFloat(row[colMap.fieldHours]) || 0;
+        }
+        // Priority 2: Calculate from Unit Hours × Quantity (fallback only)
+        else if (colMap.unitHours !== -1 && row[colMap.unitHours] != null) {
+          const unitHours = parseFloat(row[colMap.unitHours]) || 0;
+          const qty = parseFloat(row[colMap.quantity]) || 1;
+          hours = unitHours * qty;
+        }
+
+        const materialDollars = parseFloat(row[colMap.materialDollars]) || 0;
+        totalHours += hours;
+        totalMaterial += materialDollars;
 
         items.push({
           id: `new-${items.length}`,
@@ -169,12 +230,8 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
           size: String(row[colMap.size] || ''),
           quantity: parseFloat(row[colMap.quantity]) || 0,
           listPrice: parseFloat(row[colMap.listPrice]) || 0,
-          materialDollars: parseFloat(row[colMap.materialDollars]) || 0,
-          hours: colMap.fieldHours !== -1 
-            ? (parseFloat(row[colMap.fieldHours]) || 0)
-            : (colMap.unitHours !== -1 
-                ? (parseFloat(row[colMap.unitHours]) || 0) * (parseFloat(row[colMap.quantity]) || 1)
-                : 0),
+          materialDollars: materialDollars,
+          hours: hours,
           laborDollars: parseFloat(row[colMap.laborDollars]) || 0,
           symbol: row[colMap.symbol] || '',
           estimator: row[colMap.estimator] || '',
@@ -186,6 +243,11 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
           sourceFile: file.name
         });
       }
+      
+      console.log('=== AddFileDialog Parsing Complete ===');
+      console.log('Items parsed:', items.length);
+      console.log('Total Field Hours:', totalHours.toFixed(3));
+      console.log('Total Material $:', totalMaterial.toFixed(2));
 
       setParsedItems(items);
       setProcessingProgress(100);
