@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input';
 import AddFileDialog from '@/components/AddFileDialog';
 import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
 import { useQueryClient } from '@tanstack/react-query';
+import { PatternManagement } from '@/components/PatternManagement';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -2521,63 +2522,8 @@ const EnhancedCostCodeManager = () => {
                 </div>
               </div>
 
-              {/* Pattern Rules Management */}
-              <div className="bg-white rounded-lg border shadow-sm">
-                <div className="px-6 py-4 border-b">
-                  <h3 className="text-lg font-semibold text-gray-900">Auto-Detection Pattern Rules</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Manage how systems are automatically mapped to cost codes
-                  </p>
-                </div>
-                <div className="p-6">
-                  <div className="space-y-4">
-                    {/* Current Pattern Rules */}
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-3">Current Pattern Rules</h4>
-                      <div className="space-y-2">
-                        {Object.entries(DEFAULT_COST_HEAD_MAPPING).map(([code, config]) => (
-                          <div key={code} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
-                            <div>
-                              <div className="text-sm font-medium">
-                                Patterns: <code className="bg-white px-2 py-1 rounded text-xs">{config.patterns.map(p => p.source).join(', ')}</code>
-                                → Maps to: <span className="font-mono text-blue-600">{code}</span>
-                              </div>
-                              <div className="text-xs text-gray-600 mt-1">{config.description}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Pattern Testing */}
-                    <div className="border-t pt-4">
-                      <h4 className="font-medium text-gray-900 mb-3">Test Pattern Matching</h4>
-                      <div className="flex space-x-4">
-                        <input
-                          type="text"
-                          placeholder="Enter system description to test (e.g., 'storm drain', 'seismic brace')..."
-                          className="flex-1 px-3 py-2 border rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                        <button className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-                          Test Match
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Usage Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-blue-600">{stats.totalCodes}</div>
-                  <div className="text-sm text-gray-600">Total Cost Codes</div>
-                </div>
-                <div className="bg-white rounded-lg border p-4">
-                  <div className="text-2xl font-bold text-green-600">{Object.keys(DEFAULT_COST_HEAD_MAPPING).length}</div>
-                  <div className="text-sm text-gray-600">Pattern Rules</div>
-                </div>
-              </div>
+              {/* Learned Pattern Management */}
+              <PatternManagement />
             </div>
           )}
 
