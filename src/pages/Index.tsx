@@ -807,6 +807,7 @@ const EnhancedCostCodeManager = () => {
                   return -1;
                 };
                 
+                // FIXED COLUMN POSITIONS: Z=25 (Material w/Factor), AA=26 (Hours w/Factor)
                 const colMap = {
                   drawing: findCol('=drawing'),
                   system: findCol('=system'),
@@ -824,9 +825,15 @@ const EnhancedCostCodeManager = () => {
                   quantity: findCol('=quantity'),
                   listPrice: findCol('list price'),
                   multiplier: findCol('=multiplier'),
-                  materialDollars: findCol('material dollar'),
+                  // Material Dollars: Try header detection first, fallback to Column Z (index 25)
+                  materialDollars: findCol('material w/factor', 'material dollar') !== -1 
+                    ? findCol('material w/factor', 'material dollar') 
+                    : 25,
                   weight: findCol('=weight'),
-                  fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours'),
+                  // CRITICAL: Total Hours - Try header detection first, fallback to Column AA (index 26)
+                  fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours') !== -1
+                    ? findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours')
+                    : 26,
                   unitHours: findCol('=hours'),
                   laborDollars: findCol('labor dollar'),
                 };

@@ -136,6 +136,7 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
       };
 
       // Map columns - Use findCol for flexibility
+      // FIXED COLUMN POSITIONS: Z=25 (Material w/Factor), AA=26 (Hours w/Factor)
       const colMap = {
         drawing: findCol('drawing'),
         system: findCol('=system'),
@@ -149,10 +150,14 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
         size: findCol('=size'),
         quantity: findCol('quantity', 'qty'),
         listPrice: findCol('list price'),
-        materialDollars: findCol('material dollar'),
-        // CRITICAL: Field Hours (Column AA) - Total hours for line item
-        // Must check MULTIPLE variations of the header name
-        fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours', 'labor hour', 'labor hours'),
+        // Material Dollars: Try header detection first, fallback to Column Z (index 25)
+        materialDollars: findCol('material w/factor', 'material dollar') !== -1 
+          ? findCol('material w/factor', 'material dollar') 
+          : 25,
+        // CRITICAL: Total Hours - Try header detection first, fallback to Column AA (index 26)
+        fieldHours: findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours') !== -1
+          ? findCol('hours w/factor', 'field hour', 'field hours', 'total hour', 'total hours')
+          : 26,
         // Unit Hours (Column U) - Per-item hours - EXACT match only
         unitHours: findCol('=hours'),
         laborDollars: findCol('labor dollar'),
