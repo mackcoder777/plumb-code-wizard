@@ -2401,12 +2401,27 @@ const EnhancedCostCodeManager = () => {
                   laborSummary={(() => {
                     const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
                     estimateData.forEach((item: any) => {
-                      const costHead = item.costCode || item.laborCostCode;
-                      if (!costHead) return;
+                      const rawCostHead = item.costCode || item.laborCostCode;
+                      if (!rawCostHead) return;
                       
-                      // Derive section from floor using floor mappings
-                      const section = getSectionFromFloor(item.floor, dbFloorMappings);
-                      const activity = getActivityFromSystem(item.system, dbActivityMappings);
+                      // Check if costHead already contains section/activity format (e.g., "BG 0000 BGGW")
+                      const parts = rawCostHead.trim().split(/\s+/);
+                      let costHead: string;
+                      let existingSection: string | null = null;
+                      let existingActivity: string | null = null;
+                      
+                      if (parts.length >= 3) {
+                        // Already has section and activity, extract just the cost head
+                        existingSection = parts[0];
+                        existingActivity = parts[1];
+                        costHead = parts.slice(2).join(' ');
+                      } else {
+                        costHead = rawCostHead;
+                      }
+                      
+                      // Use existing section/activity if present, otherwise derive from floor/system
+                      const section = existingSection || getSectionFromFloor(item.floor, dbFloorMappings);
+                      const activity = existingActivity || getActivityFromSystem(item.system, dbActivityMappings);
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
                       if (!summary[fullCode]) {
