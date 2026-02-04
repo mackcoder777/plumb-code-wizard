@@ -1052,8 +1052,38 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     const suggestion = getMaterialSuggestion(materialSpec, itemType);
     
     if (!assignedCode && !hasSomeAssigned) {
-      // Show suggestion if available - clicking applies it directly
+      // Show suggestion if available
       if (suggestion) {
+        // Mixed suggestions - show multiple codes, don't auto-apply
+        if (suggestion.matchType === 'mixed' && suggestion.additionalCodes) {
+          const allCodes = [suggestion.code, ...suggestion.additionalCodes];
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="outline" 
+                    className="bg-purple-500/10 text-purple-600 border-purple-500/30 font-mono cursor-help"
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    {allCodes.join(', ')}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    <strong>Mixed category</strong> - Items need different codes
+                    <br />
+                    Expand to assign at item level
+                    <br />
+                    Based on {suggestion.usageCount} previous assignments
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        }
+        
+        // Single suggestion - clicking applies it directly
         const codeInfo = allMaterialCodes.find(c => c.code === suggestion.code);
         return (
           <TooltipProvider>

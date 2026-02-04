@@ -129,10 +129,17 @@ export const useMaterialCodeSuggestion = (materialSpec: string, itemType: string
 };
 
 // Get suggestions for multiple groups at once
+// Returns single suggestion OR multiple suggestions for mixed categories
 export const useGetMaterialSuggestions = () => {
   const { data: patterns } = useMaterialMappingPatterns();
   
-  return (materialSpec: string, itemType: string) => {
+  return (materialSpec: string, itemType: string): {
+    code: string;
+    confidence: number;
+    usageCount: number;
+    matchType: 'exact' | 'partial' | 'mixed';
+    additionalCodes?: string[]; // For mixed categories
+  } | null => {
     if (!patterns || !materialSpec || !itemType) return null;
     
     const normalizedSpec = normalizePattern(materialSpec);
@@ -145,10 +152,17 @@ export const useGetMaterialSuggestions = () => {
     );
     
     // If there are multiple different codes for exact same spec+type, it's a mixed category
-    const exactUniqueCodes = new Set(exactMatches.map(p => p.material_code));
-    if (exactUniqueCodes.size > 1) {
-      // This exact category has been assigned multiple codes - it's mixed
-      return null;
+    const exactUniqueCodes = [...new Set(exactMatches.map(p => p.material_code))];
+    if (exactUniqueCodes.length > 1) {
+      // This exact category has been assigned multiple codes - return as mixed
+      const totalUsage = exactMatches.reduce((sum, p) => sum + p.usage_count, 0);
+      return {
+        code: exactUniqueCodes[0],
+        confidence: 0.7,
+        usageCount: totalUsage,
+        matchType: 'mixed' as const,
+        additionalCodes: exactUniqueCodes.slice(1),
+      };
     }
     
     if (exactMatches.length > 0) {
@@ -169,10 +183,17 @@ export const useGetMaterialSuggestions = () => {
     );
     
     // If multiple different codes are learned for same material type + item type, it's mixed
-    const uniqueCodes = new Set(sameTypeMatches.map(p => p.material_code));
-    if (uniqueCodes.size > 1) {
-      // Mixed category - don't suggest a single code
-      return null;
+    const uniqueCodes = [...new Set(sameTypeMatches.map(p => p.material_code))];
+    if (uniqueCodes.length > 1) {
+      // Mixed category - return all codes
+      const totalUsage = sameTypeMatches.reduce((sum, p) => sum + p.usage_count, 0);
+      return {
+        code: uniqueCodes[0],
+        confidence: 0.6,
+        usageCount: totalUsage,
+        matchType: 'mixed' as const,
+        additionalCodes: uniqueCodes.slice(1),
+      };
     }
     
     const sameTypeMatch = sameTypeMatches[0];
