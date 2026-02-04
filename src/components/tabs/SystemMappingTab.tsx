@@ -30,6 +30,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
+import { MappingAuditSummary } from '@/components/MappingAuditSummary';
 import { FloorSectionMapping, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 
@@ -757,6 +758,32 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     <div className="space-y-6">
       {/* Progress Header */}
       <SystemMappingHeader stats={stats} totalItems={totalItems} />
+
+      {/* Mapping Audit Summary - Collapsible */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              📊 Mapping Audit Summary
+              <Badge variant="outline" className="ml-2 text-xs">
+                {stats.mapped}/{stats.total} systems | {data.filter(i => i.costCode).length}/{data.length} items coded
+              </Badge>
+            </div>
+            <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-4">
+          <MappingAuditSummary
+            estimateData={data}
+            systemMappings={Object.fromEntries(
+              Object.entries(mappings).map(([k, v]) => [k, v.laborCode || ''])
+            )}
+            categoryMappings={categoryMappings}
+            floorMappings={floorMappings}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Floor to Section Mapping - Collapsible */}
       <Collapsible open={floorSectionOpen} onOpenChange={setFloorSectionOpen}>
