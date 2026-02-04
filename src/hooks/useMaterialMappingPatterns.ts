@@ -33,6 +33,65 @@ const MATERIAL_KEYWORDS = [
   ['polypropylene', 'pp '],
 ];
 
+// Description keywords that indicate specific material codes
+// Maps description keywords to material codes
+const DESCRIPTION_CODE_KEYWORDS: Record<string, string[]> = {
+  '9521': ['hanger', 'clevis', 'support', 'strut', 'unistrut', 'channel', 'trapeze', 'rod', 'threaded rod', 'beam clamp', 'c-clamp'],
+  '9523': ['pipe id', 'pipeid', 'valve tag', 'identification', 'label', 'marker', 'id tag'],
+  '9524': ['valve', 'ball valve', 'gate valve', 'check valve', 'butterfly', 'prv', 'pressure reducing'],
+  '9525': ['fixture', 'lavatory', 'water closet', 'urinal', 'sink', 'faucet'],
+  '9526': ['specialty', 'backflow', 'rpz', 'vacuum breaker', 'air gap', 'trap primer'],
+};
+
+// Get suggested code based on item description
+const getCodeFromDescription = (description: string): string | null => {
+  const normalized = normalizePattern(description);
+  
+  for (const [code, keywords] of Object.entries(DESCRIPTION_CODE_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword)) {
+        return code;
+      }
+    }
+  }
+  
+  return null;
+};
+
+// Analyze items and get description-based suggestions
+export interface ItemSuggestion {
+  code: string;
+  itemCount: number;
+  descriptions: string[];
+}
+
+export const analyzeItemsForSuggestions = (
+  items: Array<{ materialDesc?: string; itemName?: string; id: string | number }>
+): ItemSuggestion[] => {
+  const codeToItems: Record<string, { count: number; descriptions: Set<string> }> = {};
+  
+  items.forEach(item => {
+    const desc = item.materialDesc || item.itemName || '';
+    const suggestedCode = getCodeFromDescription(desc);
+    
+    if (suggestedCode) {
+      if (!codeToItems[suggestedCode]) {
+        codeToItems[suggestedCode] = { count: 0, descriptions: new Set() };
+      }
+      codeToItems[suggestedCode].count++;
+      codeToItems[suggestedCode].descriptions.add(desc.slice(0, 30)); // Truncate for display
+    }
+  });
+  
+  return Object.entries(codeToItems)
+    .map(([code, data]) => ({
+      code,
+      itemCount: data.count,
+      descriptions: [...data.descriptions].slice(0, 3), // Show up to 3 unique descriptions
+    }))
+    .sort((a, b) => b.itemCount - a.itemCount);
+};
+
 // Extract material type from a material spec string
 const extractMaterialType = (materialSpec: string): string | null => {
   const normalized = normalizePattern(materialSpec);
@@ -130,20 +189,55 @@ export const useMaterialCodeSuggestion = (materialSpec: string, itemType: string
 
 // Get suggestions for multiple groups at once
 // Returns single suggestion OR multiple suggestions for mixed categories
+// Now accepts actual items to analyze their descriptions for smarter suggestions
 export const useGetMaterialSuggestions = () => {
   const { data: patterns } = useMaterialMappingPatterns();
   
-  return (materialSpec: string, itemType: string): {
+  return (
+    materialSpec: string, 
+    itemType: string,
+    items?: Array<{ materialDesc?: string; itemName?: string; id: string | number }>
+  ): {
     code: string;
     confidence: number;
     usageCount: number;
-    matchType: 'exact' | 'partial' | 'mixed';
+    matchType: 'exact' | 'partial' | 'mixed' | 'description';
     additionalCodes?: string[]; // For mixed categories
+    itemBreakdown?: ItemSuggestion[]; // Shows which items get which code
   } | null => {
     if (!patterns || !materialSpec || !itemType) return null;
     
     const normalizedSpec = normalizePattern(materialSpec);
     const normalizedType = normalizePattern(itemType);
+    
+    // First, if we have items, analyze their descriptions
+    // This takes priority over historical patterns for determining the actual suggestion
+    if (items && items.length > 0) {
+      const descriptionSuggestions = analyzeItemsForSuggestions(items);
+      
+      if (descriptionSuggestions.length === 1) {
+        // All items match a single code - suggest just that one
+        const suggestion = descriptionSuggestions[0];
+        return {
+          code: suggestion.code,
+          confidence: 0.85,
+          usageCount: suggestion.itemCount,
+          matchType: 'description' as const,
+          itemBreakdown: descriptionSuggestions,
+        };
+      } else if (descriptionSuggestions.length > 1) {
+        // Items match multiple codes - show breakdown
+        return {
+          code: descriptionSuggestions[0].code,
+          confidence: 0.7,
+          usageCount: descriptionSuggestions.reduce((sum, s) => sum + s.itemCount, 0),
+          matchType: 'mixed' as const,
+          additionalCodes: descriptionSuggestions.slice(1).map(s => s.code),
+          itemBreakdown: descriptionSuggestions,
+        };
+      }
+      // If no description matches, fall through to pattern-based matching
+    }
     
     // Check for exact matches with THIS specific material spec + item type
     const exactMatches = patterns.filter(
