@@ -9,7 +9,7 @@ interface CostCodeImportProps {
   onImport: (codes: Array<{
     code: string;
     description: string;
-    category: 'L' | 'M';
+    category: 'L' | 'M' | 'O';
     subcategory?: string;
     units?: string;
   }>) => void;
@@ -32,7 +32,7 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
       const allCodes: Array<{
         code: string;
         description: string;
-        category: 'L' | 'M';
+        category: 'L' | 'M' | 'O';
         subcategory?: string;
         units?: string;
       }> = [];
@@ -54,9 +54,11 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
 
         // Determine category from sheet name ONLY - ignore any category column
         const sheetNameLower = sheetName.toLowerCase();
-        let sheetCategory: 'L' | 'M' = 'L';
+        let sheetCategory: 'L' | 'M' | 'O' = 'L';
         if (sheetNameLower.includes('material')) {
           sheetCategory = 'M';
+        } else if (sheetNameLower.includes('other') || sheetNameLower.includes('consumable') || sheetNameLower.includes('field supply')) {
+          sheetCategory = 'O';
         }
         
         console.log(`Processing sheet: "${sheetName}" as ${sheetCategory === 'M' ? 'Material' : 'Labor'}`);
