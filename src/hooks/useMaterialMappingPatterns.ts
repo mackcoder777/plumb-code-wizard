@@ -14,6 +14,51 @@ interface MaterialMappingPattern {
 // Normalize pattern for consistent matching
 const normalizePattern = (str: string) => (str || '').toLowerCase().trim();
 
+// Material type keywords for distinguishing different materials
+// Each group represents equivalent terms that mean the same material type
+const MATERIAL_KEYWORDS = [
+  ['cast iron', 'ci ', 'ci-', 'c.i.', 'no-hub', 'hub', 'hubless'],
+  ['copper', 'cu ', 'cu-', 'type l', 'type m', 'type k'],
+  ['stainless', 'ss ', 'ss-', '304', '316'],
+  ['pvc', 'sch 40', 'sch40', 'schedule 40'],
+  ['cpvc', 'chlorinated'],
+  ['abs'],
+  ['galvanized', 'galv', 'gi '],
+  ['carbon steel', 'cs ', 'cs-', 'black steel', 'black pipe'],
+  ['brass'],
+  ['bronze'],
+  ['ductile', 'di '],
+  ['hdpe', 'high density'],
+  ['pex'],
+  ['polypropylene', 'pp '],
+];
+
+// Extract material type from a material spec string
+const extractMaterialType = (materialSpec: string): string | null => {
+  const normalized = normalizePattern(materialSpec);
+  
+  for (const keywords of MATERIAL_KEYWORDS) {
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword)) {
+        return keywords[0]; // Return the primary keyword for this material type
+      }
+    }
+  }
+  
+  return null;
+};
+
+// Check if two material specs are of the same material type
+const areSameMaterialType = (spec1: string, spec2: string): boolean => {
+  const type1 = extractMaterialType(spec1);
+  const type2 = extractMaterialType(spec2);
+  
+  // If we can't identify either material type, don't assume they match
+  if (!type1 || !type2) return false;
+  
+  return type1 === type2;
+};
+
 // Fetch all material mapping patterns
 export const useMaterialMappingPatterns = () => {
   return useQuery({
@@ -39,7 +84,7 @@ export const useMaterialCodeSuggestion = (materialSpec: string, itemType: string
   const normalizedSpec = normalizePattern(materialSpec);
   const normalizedType = normalizePattern(itemType);
   
-  // Find exact match first
+  // Find exact match first (material spec + item type)
   const exactMatch = patterns.find(
     p => normalizePattern(p.material_spec_pattern) === normalizedSpec &&
          normalizePattern(p.item_type_pattern) === normalizedType
@@ -54,20 +99,23 @@ export const useMaterialCodeSuggestion = (materialSpec: string, itemType: string
     };
   }
   
-  // Try partial match on item type alone (less specific but still useful)
-  const itemTypeMatch = patterns.find(
-    p => normalizePattern(p.item_type_pattern) === normalizedType
+  // Try partial match: same material TYPE + same item type
+  // This requires the material spec to be of the same material family (e.g., both copper)
+  const sameTypeMatch = patterns.find(
+    p => normalizePattern(p.item_type_pattern) === normalizedType &&
+         areSameMaterialType(p.material_spec_pattern, materialSpec)
   );
   
-  if (itemTypeMatch && itemTypeMatch.usage_count >= 3) {
+  if (sameTypeMatch && sameTypeMatch.usage_count >= 2) {
     return {
-      code: itemTypeMatch.material_code,
-      confidence: Math.min(itemTypeMatch.confidence_score * 0.7, 0.7),
-      usageCount: itemTypeMatch.usage_count,
+      code: sameTypeMatch.material_code,
+      confidence: Math.min(sameTypeMatch.confidence_score * 0.8, 0.8),
+      usageCount: sameTypeMatch.usage_count,
       matchType: 'partial' as const,
     };
   }
   
+  // Do NOT fall back to item-type-only matching - this causes cross-material confusion
   return null;
 };
 
@@ -81,7 +129,7 @@ export const useGetMaterialSuggestions = () => {
     const normalizedSpec = normalizePattern(materialSpec);
     const normalizedType = normalizePattern(itemType);
     
-    // Find exact match first
+    // Find exact match first (material spec + item type)
     const exactMatch = patterns.find(
       p => normalizePattern(p.material_spec_pattern) === normalizedSpec &&
            normalizePattern(p.item_type_pattern) === normalizedType
@@ -96,20 +144,23 @@ export const useGetMaterialSuggestions = () => {
       };
     }
     
-    // Try partial match on item type alone
-    const itemTypeMatch = patterns.find(
-      p => normalizePattern(p.item_type_pattern) === normalizedType
+    // Try partial match: same material TYPE + same item type
+    // This requires the material spec to be of the same material family
+    const sameTypeMatch = patterns.find(
+      p => normalizePattern(p.item_type_pattern) === normalizedType &&
+           areSameMaterialType(p.material_spec_pattern, materialSpec)
     );
     
-    if (itemTypeMatch && itemTypeMatch.usage_count >= 2) {
+    if (sameTypeMatch && sameTypeMatch.usage_count >= 2) {
       return {
-        code: itemTypeMatch.material_code,
-        confidence: Math.min(itemTypeMatch.confidence_score * 0.6, 0.6),
-        usageCount: itemTypeMatch.usage_count,
+        code: sameTypeMatch.material_code,
+        confidence: Math.min(sameTypeMatch.confidence_score * 0.8, 0.8),
+        usageCount: sameTypeMatch.usage_count,
         matchType: 'partial' as const,
       };
     }
     
+    // Do NOT suggest based on item type alone - prevents Cast Iron getting Copper codes
     return null;
   };
 };
