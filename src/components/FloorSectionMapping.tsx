@@ -329,9 +329,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     }
   }, [projectId, localMappings, batchSave]);
 
-  // Count items that have labor codes and would be affected by section updates
-  const itemsWithCodes = useMemo(() => {
-    return estimateData.filter(item => item.costCode && item.costCode.trim()).length;
+  // Count all items and items that have labor codes
+  const itemCounts = useMemo(() => {
+    const withCodes = estimateData.filter(item => item.costCode && item.costCode.trim()).length;
+    const totalWithFloor = estimateData.filter(item => item.floor && item.floor.trim()).length;
+    return { withCodes, totalWithFloor, total: estimateData.length };
   }, [estimateData]);
 
   // Apply section codes to all items with labor codes
@@ -340,10 +342,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       onApplySectionCodes(localMappings);
       toast({
         title: "Section Codes Applied",
-        description: `Updated section codes on ${itemsWithCodes} items based on floor mappings.`,
+        description: `Updated section codes on ${itemCounts.withCodes} items with labor codes (${itemCounts.totalWithFloor} total items have floor values).`,
       });
     }
-  }, [localMappings, onApplySectionCodes, itemsWithCodes]);
+  }, [localMappings, onApplySectionCodes, itemCounts]);
 
   const handleReset = useCallback(() => {
     const mappingsFromDb: Record<string, string> = {};
@@ -439,14 +441,15 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             >
               Auto-Suggest
             </Button>
-            {itemsWithCodes > 0 && onApplySectionCodes && !hasChanges && (
+            {itemCounts.withCodes > 0 && onApplySectionCodes && !hasChanges && (
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={handleApplySectionCodes}
+                title={`${itemCounts.withCodes} items have labor codes. ${itemCounts.totalWithFloor} total items have floor values.`}
               >
                 <RefreshCw className="h-4 w-4 mr-1" />
-                Apply to {itemsWithCodes} Items
+                Apply to {itemCounts.withCodes} Coded Items
               </Button>
             )}
             {hasChanges && (
@@ -482,34 +485,64 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40%]">Floor Value</TableHead>
-                <TableHead className="w-[30%]">Section Code</TableHead>
-                <TableHead className="w-[30%] text-right">Item Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {floorData.map(({ floor, itemCount }) => (
-                <TableRow key={floor}>
-                  <TableCell className="font-medium">{floor}</TableCell>
-                  <TableCell>
-                    <SectionCodeInput
-                      value={localMappings[floor] || ''}
-                      onChange={(value) => handleSectionChange(floor, value)}
-                      customCodes={customCodes}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="secondary">
-                      {itemCount.toLocaleString()} items
-                    </Badge>
-                  </TableCell>
+          <>
+            {/* Audit Summary */}
+            <div className="mb-4 p-4 bg-muted/50 rounded-lg border">
+              <div className="text-sm font-medium mb-2">Item Summary</div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Total Items:</span>
+                  <span className="ml-2 font-semibold">{itemCounts.total}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">With Floor Value:</span>
+                  <span className="ml-2 font-semibold">{itemCounts.totalWithFloor}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">With Labor Code:</span>
+                  <span className="ml-2 font-semibold text-green-600">{itemCounts.withCodes}</span>
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ({itemCounts.total - itemCounts.withCodes} uncoded)
+                  </span>
+                </div>
+              </div>
+              {itemCounts.withCodes < itemCounts.totalWithFloor && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ {itemCounts.totalWithFloor - itemCounts.withCodes} items have floor values but no labor code yet. 
+                  Apply system mappings first to assign labor codes, then floor mappings will update their section prefix.
+                </p>
+              )}
+            </div>
+            
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40%]">Floor Value</TableHead>
+                  <TableHead className="w-[30%]">Section Code</TableHead>
+                  <TableHead className="w-[30%] text-right">Item Count</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {floorData.map(({ floor, itemCount }) => (
+                  <TableRow key={floor}>
+                    <TableCell className="font-medium">{floor}</TableCell>
+                    <TableCell>
+                      <SectionCodeInput
+                        value={localMappings[floor] || ''}
+                        onChange={(value) => handleSectionChange(floor, value)}
+                        customCodes={customCodes}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="secondary">
+                        {itemCount.toLocaleString()} items
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </>
         )}
         
         {hasChanges && (
