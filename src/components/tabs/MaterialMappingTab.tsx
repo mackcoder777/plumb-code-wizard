@@ -286,24 +286,38 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     });
 
     // Calculate assignment status for each group
+    // $0 value items are automatically considered "complete" - they don't need codes
     specMap.forEach(specGroup => {
-      specGroup.totalChildCount = specGroup.subGroups.length;
+      // Count only sub-groups that actually need assignment (have material value > $0)
+      const subGroupsNeedingAssignment = specGroup.subGroups.filter(sg => sg.totalMaterial > 0);
+      specGroup.totalChildCount = subGroupsNeedingAssignment.length;
       
       specGroup.subGroups.forEach(typeGroup => {
         const codes = new Set(typeGroup.items.map(i => i.materialCostCode).filter(Boolean));
-        const hasUnassignedItems = typeGroup.items.some(i => !i.materialCostCode);
         
-        typeGroup.assignedCode = codes.size === 1 && !hasUnassignedItems 
-          ? [...codes][0]! 
-          : codes.size > 0 && hasUnassignedItems 
-            ? 'MIXED' 
-            : codes.size > 1 
+        // $0 value groups are automatically considered fully assigned (no code needed)
+        const isZeroValue = typeGroup.totalMaterial <= 0;
+        
+        // Only items with material value need assignment
+        const itemsNeedingAssignment = typeGroup.items.filter(i => (i.materialDollars || 0) > 0);
+        const hasUnassignedItems = itemsNeedingAssignment.some(i => !i.materialCostCode);
+        
+        typeGroup.assignedCode = isZeroValue 
+          ? null // $0 groups don't need a code
+          : codes.size === 1 && !hasUnassignedItems 
+            ? [...codes][0]! 
+            : codes.size > 0 && hasUnassignedItems 
               ? 'MIXED' 
-              : null;
+              : codes.size > 1 
+                ? 'MIXED' 
+                : null;
         
-        typeGroup.isFullyAssigned = !hasUnassignedItems && codes.size > 0;
+        // $0 groups are always "fully assigned" (nothing to assign)
+        // Groups with value are fully assigned when all value items have codes
+        typeGroup.isFullyAssigned = isZeroValue || (!hasUnassignedItems && itemsNeedingAssignment.length > 0);
         
-        if (typeGroup.isFullyAssigned) {
+        // Only count non-$0 groups toward parent completion
+        if (typeGroup.isFullyAssigned && typeGroup.totalMaterial > 0) {
           specGroup.assignedChildCount++;
         }
       });
@@ -311,12 +325,16 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       specGroup.unassignedChildCount = specGroup.totalChildCount - specGroup.assignedChildCount;
       specGroup.hasUnassignedChildren = specGroup.unassignedChildCount > 0;
       
-      if (specGroup.assignedChildCount === 0) {
+      // If no groups need assignment (all $0), mark as complete
+      if (specGroup.totalChildCount === 0) {
+        specGroup.assignmentStatus = 'complete';
+        specGroup.assignedCode = null;
+      } else if (specGroup.assignedChildCount === 0) {
         specGroup.assignmentStatus = 'none';
         specGroup.assignedCode = null;
       } else if (specGroup.assignedChildCount === specGroup.totalChildCount) {
         specGroup.assignmentStatus = 'complete';
-        const allCodes = new Set(specGroup.subGroups.map(g => g.assignedCode).filter(c => c && c !== 'MIXED'));
+        const allCodes = new Set(specGroup.subGroups.filter(g => g.totalMaterial > 0).map(g => g.assignedCode).filter(c => c && c !== 'MIXED'));
         specGroup.assignedCode = allCodes.size === 1 ? [...allCodes][0]! : 'MIXED';
       } else {
         specGroup.assignmentStatus = 'partial';
@@ -1012,11 +1030,22 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   // Render child status badge with suggestions
   const renderChildStatusBadge = (typeGroup: ItemTypeGroup, materialSpec: string) => {
-    const { assignedCode, items, itemType } = typeGroup;
+    const { assignedCode, items, itemType, totalMaterial } = typeGroup;
     
-    // Calculate isFullyAssigned directly from current items
-    const hasUnassignedItems = items.some(i => !i.materialCostCode);
-    const hasSomeAssigned = items.some(i => i.materialCostCode);
+    // $0 value groups - show as N/A (no code required)
+    const isZeroValue = totalMaterial <= 0;
+    if (isZeroValue) {
+      return (
+        <Badge variant="outline" className="bg-muted text-muted-foreground border-muted-foreground/30">
+          $0 - N/A
+        </Badge>
+      );
+    }
+    
+    // Only consider items with material value for assignment status
+    const itemsNeedingAssignment = items.filter(i => (i.materialDollars || 0) > 0);
+    const hasUnassignedItems = itemsNeedingAssignment.some(i => !i.materialCostCode);
+    const hasSomeAssigned = itemsNeedingAssignment.some(i => i.materialCostCode);
     const isFullyAssigned = !hasUnassignedItems && hasSomeAssigned;
     
     // Get suggestion for unassigned groups
