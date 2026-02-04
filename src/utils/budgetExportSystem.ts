@@ -446,6 +446,17 @@ export function exportBudgetPacket(
 
   // Note: Sales tax is now included directly in each material code's amount (not a separate line)
 
+  // Add Foreman Bonus Contingency (FCNT) to material section if enabled
+  if (budgetAdjustments && budgetAdjustments.foremanBonusEnabled && budgetAdjustments.foremanBonusDollars > 0) {
+    const fcntRow = MATERIAL_START_ROW + materialRowIndex;
+    ws[`B${fcntRow}`] = { t: 's', v: 'GC 0000 FCNT' };
+    ws[`D${fcntRow}`] = { t: 's', v: `FIELD BONUS CONTINGENCY ${budgetAdjustments.foremanBonusPercent}% - STRIP OF FIELD LABOR` };
+    ws[`H${fcntRow}`] = { t: 'n', v: Math.round(budgetAdjustments.foremanBonusDollars * 100) / 100, z: '#,##0.00' };
+    // Update totalMaterialDollars to include FCNT
+    totalMaterialDollars += budgetAdjustments.foremanBonusDollars;
+    materialRowIndex++;
+  }
+
   // Add LRCN (Labor Rate Contingency) line if enabled and has positive amount
   if (budgetAdjustments && budgetAdjustments.laborRateContingencyEnabled && budgetAdjustments.lrcnAmount > 0) {
     const lrcnRow = MATERIAL_START_ROW + materialRowIndex;
