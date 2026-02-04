@@ -1,81 +1,73 @@
 
-# System-to-Activity Code Mapping Feature ✅ IMPLEMENTED
+# Plan: Allow 'O' (Other) Category Codes in Material Mapping
 
-## Overview
-Add a new mapping layer that dynamically assigns the Activity segment (middle part of the labor code format `SECT-ACT-COSTHEAD`) based on the System name. Previously hardcoded as `0000`, this is now customizable per system.
-
-### Example
-- Before: `01 0000 VALV` (Cold Water valves)
-- After: `01 00CW VALV` (where CW = Cold Water activity code)
-- Flexible: Users can map both Cold Water AND Hot Water → `WATR`
+## Summary
+Update the material code filtering to include both 'M' (Material) and 'O' (Other) categories. This will allow codes like **9730 CONSUMABLES**, **9740 SMALL TOOLS**, and other field supply codes to appear in the Material Mapping dropdown.
 
 ---
 
-## Implementation Status: ✅ COMPLETE
+## Changes Required
 
-### 1. Database Table ✅
-Created `system_activity_mappings` table with:
-- `id` (uuid) - Primary key
-- `project_id` (uuid) - FK to estimate_projects
-- `system_pattern` (text) - System name to match
-- `activity_code` (text) - 2-4 char code (e.g., CW)
-- `description` (text) - Optional label
-- `created_at` / `updated_at` - Timestamps
-- Full RLS policies for user access
+### 1. Update `useMaterialCodes` Hook
+**File:** `src/hooks/useCostCodes.ts`
 
-### 2. New Hook ✅
-`src/hooks/useSystemActivityMappings.ts`:
-- `useSystemActivityMappings(projectId)` - Fetch all mappings
-- `useSaveSystemActivityMapping()` - Upsert single mapping
-- `useBatchSaveSystemActivityMappings()` - Bulk save
-- `useDeleteSystemActivityMapping()` - Remove mapping
-- `getActivityFromSystem(system, mappings)` - Helper function
-- `suggestActivityCode(systemName)` - Auto-suggest based on keywords
-- `ACTIVITY_CODE_SUGGESTIONS` - Pre-populated options
+Change the database query from filtering only 'M' category to include both 'M' and 'O':
 
-### 3. New Component ✅
-`src/components/SystemActivityMapping.tsx`:
-- Panel showing unique systems with item counts
-- Activity code selector with common suggestions
-- Custom code entry (1-4 characters)
-- Auto-suggest based on system name keywords
-- Save/Reset buttons
-- Located in Labor Mapping tab as collapsible section
+```typescript
+// Before
+.eq('category', 'M')
 
-### 4. Code Assembly Logic Updated ✅
-Modified in:
-- `src/components/tabs/SystemMappingTab.tsx` - `buildFullLaborCode()` now accepts system parameter
-- `src/pages/Index.tsx` - `generateCostCode()` uses activity mappings
-- Applied to `applyMappings()`, `applySystemMapping()`, `handleApplySectionCodes()`
+// After  
+.in('category', ['M', 'O'])
+```
 
-### 5. Integration Points ✅
-- Activity mappings passed from Index.tsx to SystemMappingTab
-- Included in all code assembly flows
-- Works alongside floor-section and category mappings
+### 2. Update TypeScript Type Definition
+**File:** `src/hooks/useCostCodes.ts`
 
----
+Expand the `CostCode` interface to accept 'O' as a valid category:
 
-## Common Activity Code Suggestions
-Pre-populated options for quick selection:
-- `0000` - Default/General
-- `00CW` - Cold Water
-- `00HW` - Hot Water
-- `WATR` - Combined Water Systems
-- `00SD` - Storm Drain
-- `00SN` - Sanitary
-- `00GS` - Gas
-- `00FX` - Fixtures
-- `00VT` - Vent
-- `00RF` - Roof Drain
+```typescript
+// Before
+category: 'L' | 'M';
 
-Users can add custom codes up to 4 characters.
+// After
+category: 'L' | 'M' | 'O';
+```
+
+### 3. Update CostCodeImport for 'O' Category Detection
+**File:** `src/components/CostCodeImport.tsx`
+
+Add logic to detect 'O' (Other) category from Excel sheets named "other" or similar:
+
+```typescript
+if (sheetNameLower.includes('other') || sheetNameLower.includes('consumable')) {
+  sheetCategory = 'O';
+}
+```
+
+### 4. Update AdminCostCodeManager Filter
+**File:** `src/components/AdminCostCodeManager.tsx`
+
+Add 'O' as a filter option so admins can view/manage Other category codes:
+- Update category filter type to include 'O'
+- Add "Other" option to the category dropdown
+- Update stats to show Other category count
 
 ---
 
-## Files Created
-- `src/hooks/useSystemActivityMappings.ts`
-- `src/components/SystemActivityMapping.tsx`
+## Technical Details
 
-## Files Modified
-- `src/pages/Index.tsx` - Import hook, pass to components, update code assembly
-- `src/components/tabs/SystemMappingTab.tsx` - Import components, update buildFullLaborCode
+| Component | Change |
+|-----------|--------|
+| `useCostCodes.ts` | Query includes 'M' and 'O' categories |
+| `CostCode` type | Add 'O' to category union type |
+| `CostCodeImport.tsx` | Detect 'O' category from "other" sheet names |
+| `AdminCostCodeManager.tsx` | Add 'O' filter option and stats |
+
+---
+
+## Result
+After this change:
+- **Material Mapping** will show codes like 9730 CONSUMABLES, 9740 SMALL TOOLS
+- **Cost Code Import** will correctly categorize "Other" sheet codes as 'O'
+- **Admin panel** will allow filtering and managing 'O' category codes
