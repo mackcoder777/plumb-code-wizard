@@ -694,8 +694,9 @@ const EnhancedCostCodeManager = () => {
           })
         };
         
-        // Apply category labor mapping if available (highest priority)
-        if (dbCategoryMappings.length > 0 && item.report_cat) {
+        // Apply category labor mapping ONLY if item doesn't already have a saved cost_code
+        // This preserves system mappings that were already applied and saved to the database
+        if (!item.cost_code && dbCategoryMappings.length > 0 && item.report_cat) {
           const categoryCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
           if (categoryCode) {
             // Build the full cost code with section and activity
@@ -716,7 +717,8 @@ const EnhancedCostCodeManager = () => {
       });
       
       const appliedCount = transformedItems.filter(i => i.costCode).length;
-      console.log(`[Load] Loaded ${transformedItems.length} items, ${appliedCount} have labor codes from category mappings`);
+      const preservedCount = savedItems.filter(i => i.cost_code).length;
+      console.log(`[Load] Loaded ${transformedItems.length} items, ${preservedCount} had saved labor codes (preserved), ${appliedCount - preservedCount} got category mappings applied`);
       
       setEstimateData(transformedItems);
       setFilteredData(transformedItems);
