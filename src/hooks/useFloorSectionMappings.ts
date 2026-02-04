@@ -126,7 +126,8 @@ export function useDeleteFloorSectionMapping() {
 
 /**
  * Utility function to get section code from floor value using mappings
- * Supports exact match, partial match, and keyword-based matching
+ * Matches against the Floor column values (e.g., "Club Level", "UG"), NOT drawing names
+ * Priority: exact match > case-insensitive match > contains match
  */
 export function getSectionFromFloor(
   floor: string,
@@ -136,42 +137,29 @@ export function getSectionFromFloor(
   
   const normalizedFloor = floor.toLowerCase().trim();
   
-  // Try exact match first
+  // 1. Try exact match first (case-insensitive)
   const exactMatch = mappings.find(
     m => m.floor_pattern.toLowerCase().trim() === normalizedFloor
   );
   if (exactMatch) return exactMatch.section_code;
   
-  // Try partial match (floor contains pattern or pattern contains floor)
-  const partialMatch = mappings.find(m => {
+  // 2. Try partial match where pattern is contained in floor value
+  // e.g., pattern "Club" matches floor "Club Level"
+  const containsMatch = mappings.find(m => {
     const pattern = m.floor_pattern.toLowerCase().trim();
-    return normalizedFloor.includes(pattern) || pattern.includes(normalizedFloor);
+    // Pattern must be at least 2 chars to avoid false positives
+    return pattern.length >= 2 && normalizedFloor.includes(pattern);
   });
-  if (partialMatch) return partialMatch.section_code;
+  if (containsMatch) return containsMatch.section_code;
   
-  // Try keyword-based matching for compound floor values like "P2.101 - CLUB LEVEL"
-  // Extract the descriptive part after common separators
-  const floorKeywords = normalizedFloor
-    .split(/[-–—_\/\\|,]/)
-    .map(s => s.trim())
-    .filter(s => s.length > 1);
-  
-  for (const mapping of mappings) {
-    const patternNorm = mapping.floor_pattern.toLowerCase().trim();
-    const patternKeywords = patternNorm
-      .split(/[-–—_\/\\|,]/)
-      .map(s => s.trim())
-      .filter(s => s.length > 1);
-    
-    // Check if any keyword matches
-    for (const floorKw of floorKeywords) {
-      for (const patternKw of patternKeywords) {
-        if (floorKw.includes(patternKw) || patternKw.includes(floorKw)) {
-          return mapping.section_code;
-        }
-      }
-    }
-  }
+  // 3. Try reverse partial match where floor is contained in pattern
+  // e.g., floor "UG" matches pattern "Underground/UG"
+  const reverseMatch = mappings.find(m => {
+    const pattern = m.floor_pattern.toLowerCase().trim();
+    // Floor must be at least 2 chars to avoid false positives
+    return normalizedFloor.length >= 2 && pattern.includes(normalizedFloor);
+  });
+  if (reverseMatch) return reverseMatch.section_code;
   
   return '01'; // Default section
 }
