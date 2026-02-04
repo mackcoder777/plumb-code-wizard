@@ -5,9 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
-import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink, Clock, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, X, Sparkles, ChevronDown, ChevronUp, Check, Eye, ExternalLink, Clock, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EstimateItem } from '@/types/estimate';
 
@@ -24,7 +26,7 @@ interface SystemCardProps {
   onViewAllItems?: (system: string) => void;
   // Legacy prop - kept for compatibility but not used
   items?: EstimateItem[];
-  // New lazy-loading function
+  // New lazy-loading function - limit=0 means all items
   getPreviewItems?: (system: string, limit?: number) => EstimateItem[];
   importedCostCodes?: Array<{
     code: string;
@@ -54,6 +56,14 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItems, setPreviewItems] = useState<EstimateItem[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  
+  // View All Dialog state
+  const [viewAllOpen, setViewAllOpen] = useState(false);
+  const [allItems, setAllItems] = useState<EstimateItem[]>([]);
+  const [isLoadingAll, setIsLoadingAll] = useState(false);
+  const [viewAllPage, setViewAllPage] = useState(1);
+  const [viewAllSearch, setViewAllSearch] = useState('');
+  const ITEMS_PER_PAGE = 25;
   
   const isMapped = !!laborCode;
   const hasSuggestions = !!suggestedLaborCode;
@@ -109,6 +119,44 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
       }
     }
   }, [system, previewItems.length, getPreviewItems, legacyItems]);
+
+  // Open View All dialog and load all items
+  const handleViewAllOpen = useCallback(() => {
+    setViewAllOpen(true);
+    setViewAllPage(1);
+    setViewAllSearch('');
+    if (allItems.length === 0) {
+      setIsLoadingAll(true);
+      if (getPreviewItems) {
+        setTimeout(() => {
+          const items = getPreviewItems(system, 0); // 0 = all items
+          setAllItems(items);
+          setIsLoadingAll(false);
+        }, 0);
+      } else {
+        setAllItems(legacyItems);
+        setIsLoadingAll(false);
+      }
+    }
+  }, [system, allItems.length, getPreviewItems, legacyItems]);
+
+  // Filter and paginate items for View All dialog
+  const filteredAllItems = useMemo(() => {
+    if (!viewAllSearch.trim()) return allItems;
+    const search = viewAllSearch.toLowerCase();
+    return allItems.filter(item => 
+      item.drawing?.toLowerCase().includes(search) ||
+      item.materialDesc?.toLowerCase().includes(search) ||
+      item.itemName?.toLowerCase().includes(search) ||
+      item.system?.toLowerCase().includes(search)
+    );
+  }, [allItems, viewAllSearch]);
+
+  const totalPages = Math.ceil(filteredAllItems.length / ITEMS_PER_PAGE);
+  const paginatedItems = filteredAllItems.slice(
+    (viewAllPage - 1) * ITEMS_PER_PAGE,
+    viewAllPage * ITEMS_PER_PAGE
+  );
 
   const getStatusIcon = () => {
     if (isMapped) return <CheckCircle className="w-5 h-5 text-success" />;
@@ -372,10 +420,18 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
                   </tbody>
                 </table>
                 {itemCount > 5 && (
-                  <div className="p-2 border-t bg-muted/30 text-center">
+                  <div className="p-2 border-t bg-muted/30 flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">
                       Showing 5 of {itemCount.toLocaleString()} items
                     </span>
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="text-xs h-auto p-0"
+                      onClick={handleViewAllOpen}
+                    >
+                      View More →
+                    </Button>
                   </div>
                 )}
               </div>
@@ -388,11 +444,107 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
                 onClick={() => onViewAllItems(system)}
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
-                View All {itemCount.toLocaleString()} Items in Estimates
+                View All in Estimates Tab
               </Button>
             )}
           </CollapsibleContent>
         </Collapsible>
+
+        {/* View All Items Dialog */}
+        <Dialog open={viewAllOpen} onOpenChange={setViewAllOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>All Items - {system}</DialogTitle>
+              <DialogDescription>
+                {filteredAllItems.length.toLocaleString()} of {allItems.length.toLocaleString()} items
+                {viewAllSearch && ` matching "${viewAllSearch}"`}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by drawing, description, or item name..."
+                value={viewAllSearch}
+                onChange={(e) => {
+                  setViewAllSearch(e.target.value);
+                  setViewAllPage(1);
+                }}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto border rounded-lg">
+              {isLoadingAll ? (
+                <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Loading items...</span>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left p-3 font-medium">Drawing</th>
+                      <th className="text-left p-3 font-medium">System</th>
+                      <th className="text-left p-3 font-medium">Material Desc</th>
+                      <th className="text-right p-3 font-medium">Qty</th>
+                      <th className="text-right p-3 font-medium">Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {paginatedItems.map((item, idx) => (
+                      <tr key={item.id || idx} className="hover:bg-muted/30">
+                        <td className="p-3 truncate max-w-[150px]" title={item.drawing}>{item.drawing || '-'}</td>
+                        <td className="p-3 truncate max-w-[100px]" title={item.system}>{item.system || '-'}</td>
+                        <td className="p-3 truncate max-w-[200px]" title={item.materialDesc}>{item.materialDesc || '-'}</td>
+                        <td className="p-3 text-right tabular-nums">{item.quantity}</td>
+                        <td className="p-3 text-right tabular-nums">{item.hours?.toFixed(1) || 0}</td>
+                      </tr>
+                    ))}
+                    {paginatedItems.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                          {viewAllSearch ? 'No items match your search' : 'No items found'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-sm text-muted-foreground">
+                  Page {viewAllPage} of {totalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewAllPage(p => Math.max(1, p - 1))}
+                    disabled={viewAllPage === 1}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewAllPage(p => Math.min(totalPages, p + 1))}
+                    disabled={viewAllPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

@@ -142,12 +142,13 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
   }, [data]);
 
   // Get preview items for a system - uses the full data array
-  const getPreviewItems = useCallback((system: string): EstimateItem[] => {
+  // limit=0 means return all items for that system
+  const getPreviewItems = useCallback((system: string, limit: number = 5): EstimateItem[] => {
     const items: EstimateItem[] = [];
     for (const item of dataRef.current) {
       if ((item.system || 'Unknown') === system) {
         items.push(item);
-        if (items.length >= 5) break;
+        if (limit > 0 && items.length >= limit) break;
       }
     }
     return items;
