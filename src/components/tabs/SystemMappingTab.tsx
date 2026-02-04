@@ -506,18 +506,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         costHead = categoryLaborCode;
       }
       
-      // Get new section from floor mapping
-      const floor = item.floor || '';
-      const normalizedFloor = floor.toLowerCase().trim();
-      let newSection = '01'; // Default
-      
-      // Check floor mappings
-      for (const [floorPattern, sectionCode] of Object.entries(floorMappingsToApply)) {
-        if (floorPattern.toLowerCase().trim() === normalizedFloor) {
-          newSection = sectionCode;
-          break;
-        }
-      }
+      // Get new section from floor mapping using the consistent helper function
+      // This supports both exact and partial matching (e.g., "Club Level" matches "P2.101 - CLUB LEVEL")
+      const newSection = getSectionFromFloor(item.floor || '', floorSectionMappings);
       
       // Build new full code with activity from system
       const activityCode = getActivityFromSystem(item.system, systemActivityMappings);
@@ -535,7 +526,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     }
     
     return itemsUpdated;
-  }, [data, categoryMappings, onDataUpdate]);
+  }, [data, categoryMappings, floorSectionMappings, systemActivityMappings, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;

@@ -126,6 +126,7 @@ export function useDeleteFloorSectionMapping() {
 
 /**
  * Utility function to get section code from floor value using mappings
+ * Supports exact match, partial match, and keyword-based matching
  */
 export function getSectionFromFloor(
   floor: string,
@@ -147,6 +148,30 @@ export function getSectionFromFloor(
     return normalizedFloor.includes(pattern) || pattern.includes(normalizedFloor);
   });
   if (partialMatch) return partialMatch.section_code;
+  
+  // Try keyword-based matching for compound floor values like "P2.101 - CLUB LEVEL"
+  // Extract the descriptive part after common separators
+  const floorKeywords = normalizedFloor
+    .split(/[-–—_\/\\|,]/)
+    .map(s => s.trim())
+    .filter(s => s.length > 1);
+  
+  for (const mapping of mappings) {
+    const patternNorm = mapping.floor_pattern.toLowerCase().trim();
+    const patternKeywords = patternNorm
+      .split(/[-–—_\/\\|,]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 1);
+    
+    // Check if any keyword matches
+    for (const floorKw of floorKeywords) {
+      for (const patternKw of patternKeywords) {
+        if (floorKw.includes(patternKw) || patternKw.includes(floorKw)) {
+          return mapping.section_code;
+        }
+      }
+    }
+  }
   
   return '01'; // Default section
 }
