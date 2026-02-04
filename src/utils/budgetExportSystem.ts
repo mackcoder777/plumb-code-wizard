@@ -355,29 +355,71 @@ export function exportBudgetPacket(
   ws['I18'] = { t: 's', v: 'RATE' };
   ws['J18'] = { t: 's', v: 'TOTAL COST' };
 
-  // Labor data: Rows 19-54 (35 rows max)
+  // Labor data: Rows 19-54 (35 rows max, but need room for section headers)
   const LABOR_START_ROW = 19;
   const LABOR_END_ROW = 54;
   
-  laborData.forEach((item, index) => {
-    if (index >= 35) return; // Max 35 labor items
+  // Parse and normalize labor codes, group by section
+  const parsedLabor = laborData.map(item => {
+    const parsed = parseLaborCode(item.code);
+    // Use parsed code's description lookup, falling back to item's description
+    const description = getLaborCostHeadDescription(parsed.costHead) || item.description || parsed.costHead;
+    return {
+      ...item,
+      section: parsed.section,
+      activity: parsed.activity,
+      costHead: parsed.costHead,
+      normalizedCode: parsed.fullCode,
+      normalizedDescription: description
+    };
+  });
+  
+  // Group by section
+  const sectionGroups = new Map<string, typeof parsedLabor>();
+  parsedLabor.forEach(item => {
+    const section = item.section;
+    if (!sectionGroups.has(section)) {
+      sectionGroups.set(section, []);
+    }
+    sectionGroups.get(section)!.push(item);
+  });
+  
+  // Sort sections
+  const sortedSections = Array.from(sectionGroups.keys()).sort();
+  
+  let laborRowIndex = 0;
+  sortedSections.forEach(section => {
+    const items = sectionGroups.get(section)!;
     
-    const row = LABOR_START_ROW + index;
-    
-    ws[`B${row}`] = { t: 's', v: item.code };
-    ws[`D${row}`] = { t: 's', v: item.description };
-    ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
-    
-    if (laborRate > 0) {
-      ws[`I${row}`] = { t: 'n', v: laborRate, z: '#,##0.00' };
+    // Add section header if there's room
+    if (laborRowIndex < 34) {
+      const headerRow = LABOR_START_ROW + laborRowIndex;
+      const sectionDesc = getSectionDescription(section);
+      ws[`B${headerRow}`] = { t: 's', v: `SECTION ${section} - ${sectionDesc}` };
+      laborRowIndex++;
     }
     
-    // Use actual dollars from adjusted data, or formula for fallback
-    ws[`J${row}`] = { t: 'n', v: Math.round(item.dollars * 100) / 100, z: '#,##0' };
+    // Add items in this section
+    items.forEach(item => {
+      if (laborRowIndex >= 35) return; // Max rows reached
+      
+      const row = LABOR_START_ROW + laborRowIndex;
+      
+      ws[`B${row}`] = { t: 's', v: item.normalizedCode };
+      ws[`D${row}`] = { t: 's', v: item.normalizedDescription };
+      ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
+      
+      if (laborRate > 0) {
+        ws[`I${row}`] = { t: 'n', v: laborRate, z: '#,##0.00' };
+      }
+      
+      ws[`J${row}`] = { t: 'n', v: Math.round(item.dollars * 100) / 100, z: '#,##0' };
+      laborRowIndex++;
+    });
   });
 
   // Fill remaining labor rows with formula structure
-  for (let row = LABOR_START_ROW + laborData.length; row <= LABOR_END_ROW; row++) {
+  for (let row = LABOR_START_ROW + laborRowIndex; row <= LABOR_END_ROW; row++) {
     ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
   }
 
@@ -568,6 +610,111 @@ function getMaterialCodeDescription(code: string): string {
   };
   // Try exact match first, then try just the numeric part
   return descriptions[code] || descriptions[code.replace(/\D/g, '')] || '';
+}
+
+/**
+ * Helper: Get section description for headers
+ */
+function getSectionDescription(section: string): string {
+  const descriptions: Record<string, string> = {
+    '01': 'GENERAL CONDITIONS',
+    'BG': 'BELOW GRADE',
+    'CL': 'CLUB LEVEL',
+    'CN': 'CONCOURSE',
+    'FL': 'FIELD LEVEL',
+    'GC': 'GENERAL CONDITIONS',
+    'ME': 'MECHANICAL',
+    'PH': 'PENTHOUSE',
+    'RF': 'ROOF',
+    'SU': 'SUITE LEVEL',
+    'TE': 'TERRACE',
+    'UP': 'UPPER LEVEL',
+    'LO': 'LOWER LEVEL',
+    '02': 'SECOND FLOOR',
+    '03': 'THIRD FLOOR',
+    '04': 'FOURTH FLOOR',
+    '05': 'FIFTH FLOOR',
+  };
+  return descriptions[section] || section;
+}
+
+/**
+ * Helper: Get labor cost head description
+ */
+function getLaborCostHeadDescription(costHead: string): string {
+  const descriptions: Record<string, string> = {
+    'FCNT': 'FOREMAN CONTINGENCY',
+    'BGGW': 'BELOW GRADE GREASE WASTE',
+    'BGSD': 'BELOW GRADE STORM DRAIN',
+    'BGTP': 'BELOW GRADE TRAP PRIMERS',
+    'BGWT': 'BELOW GRADE DOMESTIC WATER',
+    'BGWV': 'BELOW GRADE WASTE & VENT',
+    'COND': 'CONDENSATE',
+    'DEMO': 'DEMOLITION',
+    'DRNS': 'DRAINS',
+    'DWTR': 'DOMESTIC WATER',
+    'FNSH': 'FIXTURES',
+    'FUEL': 'FUEL OIL',
+    'GRWV': 'GREASE WASTE AND VENT',
+    'HNGS': 'HANGERS AND SUPPORTS',
+    'IWTR': 'INDUSTRIAL WATER',
+    'NGAS': 'NATURAL GAS',
+    'PIDV': 'PIPE ID AND VALVE TAGS',
+    'RCLM': 'RECLAIMED WATER',
+    'SEQP': 'EQUIPMENT SETTING',
+    'SLVS': 'SLEEVES',
+    'SNWV': 'SANITARY WASTE AND VENT',
+    'SPCL': 'SPECIALTIES',
+    'STRM': 'STORM DRAIN',
+    'SZMC': 'SEISMIC',
+    'TRAP': 'TRAP PRIMERS',
+    'GRAY': 'GRAY WATER',
+  };
+  return descriptions[costHead] || costHead;
+}
+
+/**
+ * Helper: Parse and normalize cost code to remove duplicates
+ * Input like "BG 0000 BG 0000 BGGW" returns { section: "BG", activity: "0000", costHead: "BGGW", fullCode: "BG 0000 BGGW" }
+ */
+function parseLaborCode(code: string): { section: string; activity: string; costHead: string; fullCode: string } {
+  const parts = code.trim().split(/\s+/);
+  
+  // If we have 6 parts like "BG 0000 BG 0000 BGGW", it's doubled
+  // If we have 3 parts like "BG 0000 BGGW", it's normal
+  if (parts.length >= 6) {
+    // Doubled - take first, second, and last part
+    return {
+      section: parts[0],
+      activity: parts[1],
+      costHead: parts[parts.length - 1],
+      fullCode: `${parts[0]} ${parts[1]} ${parts[parts.length - 1]}`
+    };
+  } else if (parts.length >= 3) {
+    // Normal format
+    return {
+      section: parts[0],
+      activity: parts[1],
+      costHead: parts.slice(2).join(' '),
+      fullCode: code.trim()
+    };
+  } else if (parts.length === 2) {
+    // Missing activity
+    return {
+      section: parts[0],
+      activity: '0000',
+      costHead: parts[1],
+      fullCode: `${parts[0]} 0000 ${parts[1]}`
+    };
+  } else {
+    // Just cost head
+    return {
+      section: '01',
+      activity: '0000',
+      costHead: parts[0] || '',
+      fullCode: `01 0000 ${parts[0] || ''}`
+    };
+  }
 }
 
 // ============================================
