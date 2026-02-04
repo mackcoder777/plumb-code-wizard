@@ -451,6 +451,18 @@ export function exportBudgetPacket(
     ws[`B${taxRow}`] = { t: 's', v: '01 0000 TAX' };
     ws[`D${taxRow}`] = { t: 's', v: `SALES TAX (${budgetAdjustments.taxRate}% - ${budgetAdjustments.taxJurisdiction})` };
     ws[`H${taxRow}`] = { t: 'n', v: Math.round(budgetAdjustments.totalMaterialTax * 100) / 100, z: '#,##0.00' };
+    materialRowIndex++;
+  }
+
+  // Add LRCN (Labor Rate Contingency) line if enabled and has positive amount
+  if (budgetAdjustments && budgetAdjustments.laborRateContingencyEnabled && budgetAdjustments.lrcnAmount > 0) {
+    const lrcnRow = MATERIAL_START_ROW + materialRowIndex;
+    ws[`B${lrcnRow}`] = { t: 's', v: '01 0000 LRCN' };
+    ws[`D${lrcnRow}`] = { t: 's', v: 'LABOR RATE CONTINGENCY' };
+    ws[`H${lrcnRow}`] = { t: 'n', v: Math.round(budgetAdjustments.lrcnAmount * 100) / 100, z: '#,##0.00' };
+    // Update totalMaterialDollars to include LRCN
+    totalMaterialDollars += budgetAdjustments.lrcnAmount;
+    materialRowIndex++;
   }
 
   // ===== RIGHT-SIDE SUMMARY BOX (Rows 77-81, Columns J-K) =====
