@@ -41,7 +41,7 @@ import {
 interface CodeFormData {
   code: string;
   description: string;
-  category: 'L' | 'M';
+  category: 'L' | 'M' | 'O';
   subcategory?: string;
   units?: string;
 }
@@ -61,7 +61,7 @@ export const AdminCostCodeManager: React.FC = () => {
   const deleteCostCode = useDeleteCostCode();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'L' | 'M'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'L' | 'M' | 'O'>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCode, setEditingCode] = useState<CostCode | null>(null);
   const [formData, setFormData] = useState<CodeFormData>(INITIAL_FORM);
@@ -70,10 +70,12 @@ export const AdminCostCodeManager: React.FC = () => {
   const stats = useMemo(() => {
     const laborCount = costCodes.filter(c => c.category === 'L').length;
     const materialCount = costCodes.filter(c => c.category === 'M').length;
+    const otherCount = costCodes.filter(c => c.category === 'O').length;
     return {
       total: costCodes.length,
       labor: laborCount,
       material: materialCount,
+      other: otherCount,
     };
   }, [costCodes]);
 
@@ -187,7 +189,8 @@ export const AdminCostCodeManager: React.FC = () => {
   const exportCodes = () => {
     const csv = ['Code,Description,Category,Subcategory,Units'];
     filteredCodes.forEach(code => {
-      csv.push(`"${code.code}","${code.description}","${code.category === 'L' ? 'Labor' : 'Material'}","${code.subcategory || ''}","${code.units || ''}"`);
+      const categoryLabel = code.category === 'L' ? 'Labor' : code.category === 'M' ? 'Material' : 'Other';
+      csv.push(`"${code.code}","${code.description}","${categoryLabel}","${code.subcategory || ''}","${code.units || ''}"`);
     });
 
     const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
@@ -238,7 +241,7 @@ export const AdminCostCodeManager: React.FC = () => {
               <Label htmlFor="category">Category *</Label>
               <Select 
                 value={formData.category} 
-                onValueChange={(value: 'L' | 'M') => setFormData({ ...formData, category: value })}
+                onValueChange={(value: 'L' | 'M' | 'O') => setFormData({ ...formData, category: value })}
               >
                 <SelectTrigger id="category">
                   <SelectValue />
@@ -246,6 +249,7 @@ export const AdminCostCodeManager: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="L">Labor (L)</SelectItem>
                   <SelectItem value="M">Material (M)</SelectItem>
+                  <SelectItem value="O">Other (O)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -339,6 +343,10 @@ export const AdminCostCodeManager: React.FC = () => {
                 <div className="text-2xl font-bold text-green-600">{stats.material}</div>
                 <div className="text-xs text-muted-foreground">Material</div>
               </div>
+              <div className="text-center px-4 border-l">
+                <div className="text-2xl font-bold text-orange-600">{stats.other}</div>
+                <div className="text-xs text-muted-foreground">Other</div>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -358,7 +366,7 @@ export const AdminCostCodeManager: React.FC = () => {
                   className="pl-10"
                 />
               </div>
-              <Select value={categoryFilter} onValueChange={(v: 'all' | 'L' | 'M') => setCategoryFilter(v)}>
+              <Select value={categoryFilter} onValueChange={(v: 'all' | 'L' | 'M' | 'O') => setCategoryFilter(v)}>
                 <SelectTrigger className="w-40">
                   <Filter className="h-4 w-4 mr-2" />
                   <SelectValue placeholder="Category" />
@@ -367,6 +375,7 @@ export const AdminCostCodeManager: React.FC = () => {
                   <SelectItem value="all">All Categories</SelectItem>
                   <SelectItem value="L">Labor Only</SelectItem>
                   <SelectItem value="M">Material Only</SelectItem>
+                  <SelectItem value="O">Other Only</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -418,8 +427,8 @@ export const AdminCostCodeManager: React.FC = () => {
                       <TableCell className="font-mono font-semibold">{code.code}</TableCell>
                       <TableCell>{code.description}</TableCell>
                       <TableCell>
-                        <Badge variant={code.category === 'L' ? 'default' : 'secondary'}>
-                          {code.category === 'L' ? 'Labor' : 'Material'}
+                        <Badge variant={code.category === 'L' ? 'default' : code.category === 'M' ? 'secondary' : 'outline'}>
+                          {code.category === 'L' ? 'Labor' : code.category === 'M' ? 'Material' : 'Other'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{code.subcategory || '-'}</TableCell>

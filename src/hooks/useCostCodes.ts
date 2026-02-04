@@ -5,7 +5,7 @@ export interface CostCode {
   id: string;
   code: string;
   description: string;
-  category: 'L' | 'M';
+  category: 'L' | 'M' | 'O';
   subcategory?: string;
   units?: string;
 }
@@ -56,7 +56,7 @@ export const useMaterialCodes = () => {
       const { data, error } = await supabase
         .from('cost_codes')
         .select('*')
-        .eq('category', 'M')
+        .in('category', ['M', 'O'])
         .order('description', { ascending: true });
 
       if (error) {
