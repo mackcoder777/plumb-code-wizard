@@ -511,16 +511,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       }
     });
 
-    if (foremanBonusEnabled && foremanBonusHours > 0) {
-      adjustedLaborSummary['FCNT'] = {
-        code: '01 0000 FCNT',
-        description: 'FOREMAN CONTINGENCY',
-        hours: foremanBonusHours,
-        rate: bidLaborRate,
-        dollars: foremanBonusDollars,
-        type: 'foreman'
-      };
-    }
+    // Note: FCNT (Foreman Contingency) is now a MATERIAL line item, not labor
+    // It appears in the Material Breakdown section of the export
 
     const totalLaborDollars = Object.values(adjustedLaborSummary)
       .reduce((sum, item) => sum + item.dollars, 0);
