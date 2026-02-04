@@ -266,7 +266,7 @@ export function exportBudgetPacket(
   let totalMaterialDollars = 0;
 
   if (budgetAdjustments && Object.keys(budgetAdjustments.adjustedLaborSummary || {}).length > 0) {
-    // USE BUDGET BUILDER ADJUSTMENTS (includes foreman FCNT, FAB codes)
+    // USE BUDGET BUILDER ADJUSTMENTS (includes FAB codes, strips already applied)
     laborData = Object.values(budgetAdjustments.adjustedLaborSummary)
       .map(item => ({
         code: item.code,
@@ -276,9 +276,9 @@ export function exportBudgetPacket(
       }))
       .sort((a, b) => a.code.localeCompare(b.code));
 
-    totalLaborHours = budgetAdjustments.totalFieldHours + 
-                      budgetAdjustments.totalFabHours + 
-                      (budgetAdjustments.foremanBonusHours || 0);
+    // CORRECT: totalFieldHours + totalFabHours already accounts for all strips
+    // Foreman bonus hours are NOT included in labor - they become FCNT (material contingency)
+    totalLaborHours = budgetAdjustments.totalFieldHours + budgetAdjustments.totalFabHours;
     totalLaborDollars = budgetAdjustments.totalLaborDollars;
 
     // Material: Include tax directly in each code's amount (tax-inclusive amounts)
