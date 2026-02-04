@@ -439,7 +439,10 @@ const EnhancedCostCodeManager = () => {
   
   // Budget adjustments state
   const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
-  const [bidLaborRate, setBidLaborRate] = useState(85); // Default rate
+  const [bidLaborRate, setBidLaborRate] = useState(() => {
+    // Will be updated by useEffect when currentProject loads
+    return 85;
+  });
   const [bidLaborRateInput, setBidLaborRateInput] = useState('85'); // String for input
 
   // Database hooks for persistence
@@ -534,6 +537,26 @@ const EnhancedCostCodeManager = () => {
       });
     }
   }, [savedMappings]);
+
+  // Load bid labor rate from localStorage when project changes
+  useEffect(() => {
+    if (currentProject?.id) {
+      const savedRate = localStorage.getItem(`bid_labor_rate_${currentProject.id}`);
+      if (savedRate) {
+        const rate = parseFloat(savedRate);
+        setBidLaborRate(rate);
+        setBidLaborRateInput(rate.toString());
+        console.log('[Index] Loaded bid labor rate from localStorage:', rate);
+      }
+    }
+  }, [currentProject?.id]);
+
+  // Persist bid labor rate to localStorage when it changes
+  useEffect(() => {
+    if (currentProject?.id && bidLaborRate) {
+      localStorage.setItem(`bid_labor_rate_${currentProject.id}`, bidLaborRate.toString());
+    }
+  }, [bidLaborRate, currentProject?.id]);
 
   // Helper function for auto-detecting cost codes
   const autoDetectCostCode = (description: string): string => {

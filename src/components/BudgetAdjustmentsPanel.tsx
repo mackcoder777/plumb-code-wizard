@@ -360,46 +360,115 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return saved ? parseFloat(saved) : 85;
   });
 
-  // Persist settings to localStorage
+  // Track previous projectId to detect changes
+  const [prevProjectId, setPrevProjectId] = useState(projectId);
+
+  // Re-load all settings when projectId changes (e.g., from 'default' to actual project ID)
   useEffect(() => {
-    localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
+    if (projectId !== prevProjectId && projectId !== 'default') {
+      console.log('[BudgetAdjustments] ProjectId changed from', prevProjectId, 'to', projectId, '- reloading settings');
+      
+      // Reload ZIP code
+      const savedZip = localStorage.getItem(`budget_zip_${projectId}`);
+      if (savedZip) setJobsiteZipCode(savedZip);
+      
+      // Reload custom tax rate
+      const savedTaxRate = localStorage.getItem(`budget_taxrate_${projectId}`);
+      setCustomTaxRate(savedTaxRate ? parseFloat(savedTaxRate) : null);
+      
+      // Reload foreman bonus settings
+      const savedForemanEnabled = localStorage.getItem(`budget_foreman_enabled_${projectId}`);
+      setForemanBonusEnabled(savedForemanEnabled === null ? true : savedForemanEnabled === 'true');
+      
+      const savedForemanPct = localStorage.getItem(`budget_foreman_pct_${projectId}`);
+      setForemanBonusPercent(savedForemanPct ? parseFloat(savedForemanPct) : 1);
+      
+      // Reload fabrication configs
+      const savedFabConfigs = localStorage.getItem(`budget_fab_configs_${projectId}`);
+      setFabricationConfigs(savedFabConfigs ? JSON.parse(savedFabConfigs) : {});
+      
+      // Reload material tax overrides
+      const savedTaxOverrides = localStorage.getItem(`budget_tax_overrides_${projectId}`);
+      setMaterialTaxOverrides(savedTaxOverrides ? JSON.parse(savedTaxOverrides) : {});
+      
+      // Reload LRCN settings
+      const savedLrcnEnabled = localStorage.getItem(`budget_lrcn_enabled_${projectId}`);
+      setLrcnEnabled(savedLrcnEnabled === 'true');
+      
+      const savedBidRates = localStorage.getItem(`budget_bid_rates_${projectId}`);
+      setBidRates(savedBidRates ? JSON.parse(savedBidRates) : {
+        straightTime: { hours: 0, rate: '92.03' },
+        shiftTime: { hours: 0, rate: '95.70' },
+        overtime: { hours: 0, rate: '121.57' },
+        doubleTime: { hours: 0, rate: '145.38' },
+        shop: { hours: 0, rate: '0' }
+      });
+      
+      const savedBudgetRate = localStorage.getItem(`budget_rate_${projectId}`);
+      setBudgetRate(savedBudgetRate ? parseFloat(savedBudgetRate) : 85);
+      
+      setPrevProjectId(projectId);
+    }
+  }, [projectId, prevProjectId]);
+
+  // Persist settings to localStorage - only save if projectId is not 'default'
+  useEffect(() => {
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
+    }
   }, [jobsiteZipCode, projectId]);
 
   useEffect(() => {
-    if (customTaxRate !== null) {
-      localStorage.setItem(`budget_taxrate_${projectId}`, customTaxRate.toString());
-    } else {
-      localStorage.removeItem(`budget_taxrate_${projectId}`);
+    if (projectId !== 'default') {
+      if (customTaxRate !== null) {
+        localStorage.setItem(`budget_taxrate_${projectId}`, customTaxRate.toString());
+      } else {
+        localStorage.removeItem(`budget_taxrate_${projectId}`);
+      }
     }
   }, [customTaxRate, projectId]);
 
   useEffect(() => {
-    localStorage.setItem(`budget_foreman_enabled_${projectId}`, foremanBonusEnabled.toString());
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_foreman_enabled_${projectId}`, foremanBonusEnabled.toString());
+    }
   }, [foremanBonusEnabled, projectId]);
 
   useEffect(() => {
-    localStorage.setItem(`budget_foreman_pct_${projectId}`, foremanBonusPercent.toString());
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_foreman_pct_${projectId}`, foremanBonusPercent.toString());
+    }
   }, [foremanBonusPercent, projectId]);
 
   useEffect(() => {
-    localStorage.setItem(`budget_fab_configs_${projectId}`, JSON.stringify(fabricationConfigs));
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_fab_configs_${projectId}`, JSON.stringify(fabricationConfigs));
+    }
   }, [fabricationConfigs, projectId]);
 
   useEffect(() => {
-    localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
+    }
   }, [materialTaxOverrides, projectId]);
 
   // LRCN persistence
   useEffect(() => {
-    localStorage.setItem(`budget_lrcn_enabled_${projectId}`, lrcnEnabled.toString());
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_lrcn_enabled_${projectId}`, lrcnEnabled.toString());
+    }
   }, [lrcnEnabled, projectId]);
 
   useEffect(() => {
-    localStorage.setItem(`budget_bid_rates_${projectId}`, JSON.stringify(bidRates));
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_bid_rates_${projectId}`, JSON.stringify(bidRates));
+    }
   }, [bidRates, projectId]);
 
   useEffect(() => {
-    localStorage.setItem(`budget_rate_${projectId}`, budgetRate.toString());
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_rate_${projectId}`, budgetRate.toString());
+    }
   }, [budgetRate, projectId]);
 
   const taxInfo = useMemo(() => {
