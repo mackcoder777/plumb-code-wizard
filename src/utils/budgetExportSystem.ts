@@ -281,17 +281,16 @@ export function exportBudgetPacket(
                       (budgetAdjustments.foremanBonusHours || 0);
     totalLaborDollars = budgetAdjustments.totalLaborDollars;
 
-    // Material: Use PRE-TAX amounts (tax is added as separate line item)
-    // This prevents double-counting since we add a SALES TAX line below
+    // Material: Include tax directly in each code's amount (tax-inclusive amounts)
     materialData = (budgetAdjustments.materialTaxSummary || [])
       .map(item => ({
         code: item.code,
         description: item.description,
-        amount: item.amount // PRE-TAX amount only - tax added as separate line
+        amount: item.amount + item.taxAmount // Include tax in the material amount
       }))
       .sort((a, b) => a.code.localeCompare(b.code));
 
-    // Total material includes tax (for bottom summary)
+    // Total material includes tax
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
@@ -445,14 +444,7 @@ export function exportBudgetPacket(
     materialRowIndex++;
   });
 
-  // Add SALES TAX line if there's any tax from budget adjustments
-  if (budgetAdjustments && budgetAdjustments.totalMaterialTax > 0) {
-    const taxRow = MATERIAL_START_ROW + materialRowIndex;
-    ws[`B${taxRow}`] = { t: 's', v: '01 0000 TAX' };
-    ws[`D${taxRow}`] = { t: 's', v: `SALES TAX (${budgetAdjustments.taxRate}% - ${budgetAdjustments.taxJurisdiction})` };
-    ws[`H${taxRow}`] = { t: 'n', v: Math.round(budgetAdjustments.totalMaterialTax * 100) / 100, z: '#,##0.00' };
-    materialRowIndex++;
-  }
+  // Note: Sales tax is now included directly in each material code's amount (not a separate line)
 
   // Add LRCN (Labor Rate Contingency) line if enabled and has positive amount
   if (budgetAdjustments && budgetAdjustments.laborRateContingencyEnabled && budgetAdjustments.lrcnAmount > 0) {
