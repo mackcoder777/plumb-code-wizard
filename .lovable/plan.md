@@ -1,83 +1,57 @@
 
-# System-to-Activity Code Mapping Feature
+# System-to-Activity Code Mapping Feature ✅ IMPLEMENTED
 
 ## Overview
-Add a new mapping layer that dynamically assigns the Activity segment (middle part of the labor code format `SECT-ACT-COSTHEAD`) based on the System name. Currently hardcoded as `0000`, this will become customizable per system.
+Add a new mapping layer that dynamically assigns the Activity segment (middle part of the labor code format `SECT-ACT-COSTHEAD`) based on the System name. Previously hardcoded as `0000`, this is now customizable per system.
 
 ### Example
-- Current: `01 0000 VALV` (Cold Water valves)
-- New: `01 00CW VALV` (where CW = Cold Water activity code)
-- Flexible: Users could also map both Cold Water AND Hot Water → `WATR`
+- Before: `01 0000 VALV` (Cold Water valves)
+- After: `01 00CW VALV` (where CW = Cold Water activity code)
+- Flexible: Users can map both Cold Water AND Hot Water → `WATR`
 
 ---
 
-## Technical Implementation
+## Implementation Status: ✅ COMPLETE
 
-### 1. Database Table
-Create new table `system_activity_mappings`:
+### 1. Database Table ✅
+Created `system_activity_mappings` table with:
+- `id` (uuid) - Primary key
+- `project_id` (uuid) - FK to estimate_projects
+- `system_pattern` (text) - System name to match
+- `activity_code` (text) - 2-4 char code (e.g., CW)
+- `description` (text) - Optional label
+- `created_at` / `updated_at` - Timestamps
+- Full RLS policies for user access
 
-```text
-+-------------------+----------+---------------------------+
-| Column            | Type     | Notes                     |
-+-------------------+----------+---------------------------+
-| id                | uuid     | Primary key               |
-| project_id        | uuid     | FK to estimate_projects   |
-| system_pattern    | text     | System name to match      |
-| activity_code     | text     | 2-4 char code (e.g., CW)  |
-| description       | text     | Optional label            |
-| created_at        | timestamp| Auto                      |
-| updated_at        | timestamp| Auto                      |
-+-------------------+----------+---------------------------+
-```
-
-RLS policies: Users can CRUD mappings for their own projects.
-
-### 2. New Hook: `useSystemActivityMappings.ts`
-Following the pattern of `useFloorSectionMappings.ts`:
+### 2. New Hook ✅
+`src/hooks/useSystemActivityMappings.ts`:
 - `useSystemActivityMappings(projectId)` - Fetch all mappings
 - `useSaveSystemActivityMapping()` - Upsert single mapping
 - `useBatchSaveSystemActivityMappings()` - Bulk save
 - `useDeleteSystemActivityMapping()` - Remove mapping
 - `getActivityFromSystem(system, mappings)` - Helper function
+- `suggestActivityCode(systemName)` - Auto-suggest based on keywords
+- `ACTIVITY_CODE_SUGGESTIONS` - Pre-populated options
 
-### 3. New Component: `SystemActivityMappingPanel.tsx`
-UI panel (similar to FloorSectionMappingPanel) with:
-- Table showing unique systems from estimate data with item counts
-- Activity code selector with common suggestions (00CW, 00HW, WATR, 0000, etc.)
-- Ability to add custom codes (1-4 characters)
+### 3. New Component ✅
+`src/components/SystemActivityMapping.tsx`:
+- Panel showing unique systems with item counts
+- Activity code selector with common suggestions
+- Custom code entry (1-4 characters)
 - Auto-suggest based on system name keywords
-- Save/Reset/Apply buttons
-- "Apply to Items" to update existing labor codes
+- Save/Reset buttons
+- Located in Labor Mapping tab as collapsible section
 
-### 4. Update Code Assembly Logic
-Modify labor code generation in:
-- `src/pages/Index.tsx` (initial load transformation)
-- `src/components/tabs/SystemMappingTab.tsx` (applyMappings, applyFloorSectionCodes)
+### 4. Code Assembly Logic Updated ✅
+Modified in:
+- `src/components/tabs/SystemMappingTab.tsx` - `buildFullLaborCode()` now accepts system parameter
+- `src/pages/Index.tsx` - `generateCostCode()` uses activity mappings
+- Applied to `applyMappings()`, `applySystemMapping()`, `handleApplySectionCodes()`
 
-Change from:
-```typescript
-const newFullCode = `${section} 0000 ${costHead}`;
-```
-
-To:
-```typescript
-const activityCode = getActivityFromSystem(item.system, systemActivityMappings) || '0000';
-const newFullCode = `${section} ${activityCode} ${costHead}`;
-```
-
-### 5. Integration Points
-- Add new tab section or integrate into existing Labor Mapping workflow
-- Pass activity mappings to SystemMappingTab and code assembly functions
-- Include in "Apply to Items" flow alongside floor-section mappings
-
----
-
-## UI Location Options
-The System-to-Activity mapping panel can be placed:
-1. **New sub-section in Labor Mapping tab** - alongside Floor-to-Section mapping
-2. **Within each System Card** - add Activity field next to Labor Code dropdown
-
-Recommendation: Option 1 - A dedicated panel similar to Floor-to-Section, grouped in the Labor Mapping workflow.
+### 5. Integration Points ✅
+- Activity mappings passed from Index.tsx to SystemMappingTab
+- Included in all code assembly flows
+- Works alongside floor-section and category mappings
 
 ---
 
@@ -91,17 +65,17 @@ Pre-populated options for quick selection:
 - `00SN` - Sanitary
 - `00GS` - Gas
 - `00FX` - Fixtures
+- `00VT` - Vent
+- `00RF` - Roof Drain
 
 Users can add custom codes up to 4 characters.
 
 ---
 
-## Files to Create
-- `supabase/migrations/xxx_create_system_activity_mappings.sql`
+## Files Created
 - `src/hooks/useSystemActivityMappings.ts`
 - `src/components/SystemActivityMapping.tsx`
 
-## Files to Modify
+## Files Modified
 - `src/pages/Index.tsx` - Import hook, pass to components, update code assembly
-- `src/components/tabs/SystemMappingTab.tsx` - Update applyMappings and applyFloorSectionCodes functions
-- `src/integrations/supabase/types.ts` - Will auto-update after migration
+- `src/components/tabs/SystemMappingTab.tsx` - Import components, update buildFullLaborCode
