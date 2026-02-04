@@ -559,7 +559,7 @@ export const useUpdateItemCostCode = () => {
 };
 
 // Batch update cost codes for items matching a system
-// IMPORTANT: This now accepts FULL assembled cost codes per item (with section from floor)
+// IMPORTANT: Uses row_number as the stable identifier (works regardless of ID type)
 export const useBatchUpdateSystemCostCodes = () => {
   const queryClient = useQueryClient();
 
@@ -575,34 +575,49 @@ export const useBatchUpdateSystemCostCodes = () => {
       system: string;
       laborCode?: string;
       materialCode?: string;
-      // New: array of per-item updates with full assembled codes
-      itemUpdates?: Array<{ id: string; cost_code?: string; material_cost_code?: string }>;
+      // Array of per-item updates using row_number (stable identifier)
+      itemUpdates?: Array<{ row_number: number; cost_code?: string; material_cost_code?: string }>;
     }) => {
-      // If itemUpdates provided, update each item individually with its full assembled code
+      // PRIMARY: Use row_number-based updates (works with both numeric and UUID IDs)
       if (itemUpdates && itemUpdates.length > 0) {
-        const results = await Promise.all(
-          itemUpdates.map(async (update) => {
-            const updateData: { cost_code?: string; material_cost_code?: string } = {};
-            if (update.cost_code) updateData.cost_code = update.cost_code;
-            if (update.material_cost_code) updateData.material_cost_code = update.material_cost_code;
-            
-            if (Object.keys(updateData).length === 0) return null;
-            
-            const { data, error } = await supabase
-              .from('estimate_items')
-              .update(updateData)
-              .eq('id', update.id)
-              .select()
-              .single();
-            
-            if (error) {
-              console.error(`Failed to update item ${update.id}:`, error);
-              return null;
-            }
-            return data;
-          })
-        );
-        return results.filter(Boolean) as EstimateItem[];
+        // Process in batches to avoid overwhelming Supabase
+        const BATCH_SIZE = 50;
+        const results: EstimateItem[] = [];
+        
+        for (let i = 0; i < itemUpdates.length; i += BATCH_SIZE) {
+          const batch = itemUpdates.slice(i, i + BATCH_SIZE);
+          
+          // Execute updates in parallel within each batch
+          const batchResults = await Promise.all(
+            batch.map(async (update) => {
+              const updateData: { cost_code?: string; material_cost_code?: string } = {};
+              if (update.cost_code) updateData.cost_code = update.cost_code;
+              if (update.material_cost_code) updateData.material_cost_code = update.material_cost_code;
+              
+              if (Object.keys(updateData).length === 0) return null;
+              
+              // Use composite key: project_id + row_number (always works)
+              const { data, error } = await supabase
+                .from('estimate_items')
+                .update(updateData)
+                .eq('project_id', projectId)
+                .eq('row_number', update.row_number)
+                .select()
+                .single();
+              
+              if (error) {
+                console.error(`Failed to update item row ${update.row_number}:`, error);
+                return null;
+              }
+              return data;
+            })
+          );
+          
+          results.push(...batchResults.filter(Boolean) as EstimateItem[]);
+        }
+        
+        console.log(`[BatchUpdate] Successfully updated ${results.length}/${itemUpdates.length} items`);
+        return results;
       }
       
       // Legacy fallback: update all items with same code (for simple cases)
