@@ -520,6 +520,38 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     };
   }, [data]);
 
+  // Find selected groups that have suggestions available
+  const selectedGroupsWithSuggestions = useMemo(() => {
+    const groupsWithSuggestions: Array<{
+      materialSpec: string;
+      itemType: string;
+      suggestedCode: string;
+      itemCount: number;
+    }> = [];
+
+    selectedGroups.forEach(groupKey => {
+      if (groupKey.includes('|')) {
+        const [spec, type] = groupKey.split('|');
+        const specGroup = groups.find(g => g.materialSpec === spec);
+        const typeGroup = specGroup?.subGroups.find(g => g.itemType === type);
+        
+        if (typeGroup && !typeGroup.assignedCode) {
+          const suggestion = getMaterialSuggestion(spec, type);
+          if (suggestion) {
+            groupsWithSuggestions.push({
+              materialSpec: spec,
+              itemType: type,
+              suggestedCode: suggestion.code,
+              itemCount: typeGroup.items.length
+            });
+          }
+        }
+      }
+    });
+
+    return groupsWithSuggestions;
+  }, [selectedGroups, groups, getMaterialSuggestion]);
+
   // Toggle expand
   const toggleSpec = (spec: string) => {
     setExpandedSpecs(prev => {
@@ -820,6 +852,90 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     setSelectedItems(new Set());
     setSelectedGroups(new Set());
   };
+
+  // Bulk apply suggestions to all selected groups that have suggestions
+  const handleBulkApplySuggestions = useCallback(async () => {
+    if (selectedGroupsWithSuggestions.length === 0) return;
+
+    // Collect all items that need to be updated, grouped by code
+    const codeToItems: Record<string, EstimateItem[]> = {};
+    
+    for (const { materialSpec, itemType, suggestedCode } of selectedGroupsWithSuggestions) {
+      const specGroup = groups.find(g => g.materialSpec === materialSpec);
+      const typeGroup = specGroup?.subGroups.find(g => g.itemType === itemType);
+      if (typeGroup) {
+        if (!codeToItems[suggestedCode]) {
+          codeToItems[suggestedCode] = [];
+        }
+        codeToItems[suggestedCode].push(...typeGroup.items);
+      }
+    }
+
+    // Update all items locally
+    const allItemIds = new Set(Object.values(codeToItems).flat().map(i => i.id));
+    const updatedData = data.map(item => {
+      if (allItemIds.has(item.id)) {
+        // Find which code this item should get
+        for (const [code, items] of Object.entries(codeToItems)) {
+          if (items.some(i => i.id === item.id)) {
+            return { ...item, materialCostCode: code };
+          }
+        }
+      }
+      return item;
+    });
+
+    onDataUpdate(updatedData);
+    
+    const totalItems = Object.values(codeToItems).flat().length;
+    const totalGroups = selectedGroupsWithSuggestions.length;
+
+    if (projectId) {
+      setIsSaving(true);
+      try {
+        // Save each code batch separately
+        for (const [code, items] of Object.entries(codeToItems)) {
+          const itemIds = items.map(item => String(item.id));
+          await batchUpdateMaterialCodes.mutateAsync({
+            projectId,
+            itemIds,
+            materialCode: code
+          });
+          
+          // Learn from this assignment
+          const patterns = items.map(item => ({
+            materialSpec: item.materialSpec,
+            itemType: item.itemType,
+            materialCode: code
+          }));
+          batchLearnPatterns.mutate(patterns);
+        }
+        
+        toast({
+          title: 'Suggestions Applied',
+          description: `Applied ${totalGroups} suggested codes to ${totalItems} items`,
+        });
+      } catch (error) {
+        console.error('Failed to save material codes:', error);
+        toast({
+          title: 'Save Failed',
+          description: 'Some changes may not have been saved. Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      toast({
+        title: 'Suggestions Applied',
+        description: `Applied ${totalGroups} suggested codes to ${totalItems} items (not saved - no project selected)`,
+      });
+    }
+
+    // Clear selections
+    setSelectedItems(new Set());
+    setSelectedGroups(new Set());
+  }, [selectedGroupsWithSuggestions, groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes, batchLearnPatterns]);
   
   // Select all visible groups AND their items
   const selectAllVisible = () => {
@@ -1730,8 +1846,24 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-foreground text-background px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50">
           <span className="text-sm font-medium">
             {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
+            {selectedGroupsWithSuggestions.length > 0 && (
+              <span className="ml-1 text-purple-300">
+                ({selectedGroupsWithSuggestions.length} with suggestions)
+              </span>
+            )}
           </span>
           <div className="h-4 w-px bg-muted-foreground/50" />
+          {selectedGroupsWithSuggestions.length > 0 && (
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              className="h-8 bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={handleBulkApplySuggestions}
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1" />
+              Apply {selectedGroupsWithSuggestions.length} Suggestion{selectedGroupsWithSuggestions.length > 1 ? 's' : ''}
+            </Button>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="secondary" size="sm" className="h-8">
