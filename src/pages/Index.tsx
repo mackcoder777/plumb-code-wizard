@@ -1433,10 +1433,11 @@ const EnhancedCostCodeManager = () => {
     const count = itemCount || systemItems.length;
     
     // Build per-item updates with FULL assembled cost codes (section varies by floor)
-    const itemUpdates: Array<{ id: string; cost_code?: string; material_cost_code?: string }> = [];
+    // CRITICAL: Use row_number as stable identifier (works regardless of ID type)
+    const itemUpdates: Array<{ row_number: number; cost_code?: string; material_cost_code?: string }> = [];
     
     // Update ALL items in this system with BOTH codes - build FULL code per item
-    const updated = estimateData.map(item => {
+    const updated = estimateData.map((item, index) => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
         const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
@@ -1445,14 +1446,14 @@ const EnhancedCostCodeManager = () => {
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
         
-        // Track this item for database update
-        if (typeof item.id === 'string') {
-          itemUpdates.push({
-            id: item.id,
-            cost_code: fullLaborCode || undefined,
-            material_cost_code: materialCode || undefined
-          });
-        }
+        // Track this item for database update using row_number (ALWAYS available)
+        // row_number is set during upload and stored in DB - it's the stable identifier
+        const rowNumber = typeof item.id === 'number' ? item.id : item.row_number ?? index;
+        itemUpdates.push({
+          row_number: rowNumber,
+          cost_code: fullLaborCode || undefined,
+          material_cost_code: materialCode || undefined
+        });
         
         return { 
           ...item, 
