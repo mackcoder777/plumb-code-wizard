@@ -1048,13 +1048,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     const hasSomeAssigned = itemsNeedingAssignment.some(i => i.materialCostCode);
     const isFullyAssigned = !hasUnassignedItems && hasSomeAssigned;
     
-    // Get suggestion for unassigned groups
-    const suggestion = getMaterialSuggestion(materialSpec, itemType);
+    // Get suggestion for unassigned groups - pass items for description-based analysis
+    const suggestion = getMaterialSuggestion(materialSpec, itemType, items);
     
     if (!assignedCode && !hasSomeAssigned) {
       // Show suggestion if available
       if (suggestion) {
-        // Mixed suggestions - show multiple codes, don't auto-apply
+        // Mixed suggestions - show multiple codes with breakdown
         if (suggestion.matchType === 'mixed' && suggestion.additionalCodes) {
           const allCodes = [suggestion.code, ...suggestion.additionalCodes];
           return (
@@ -1069,21 +1069,28 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                     {allCodes.join(', ')}
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">
-                    <strong>Mixed category</strong> - Items need different codes
-                    <br />
-                    Expand to assign at item level
-                    <br />
-                    Based on {suggestion.usageCount} previous assignments
-                  </p>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs font-semibold mb-1">Mixed category - Items need different codes</p>
+                  {suggestion.itemBreakdown && suggestion.itemBreakdown.length > 0 ? (
+                    <div className="text-xs space-y-1">
+                      {suggestion.itemBreakdown.map((b, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="font-mono font-semibold">{b.code}</span>
+                          <span className="text-muted-foreground">→ {b.itemCount} items</span>
+                          <span className="text-muted-foreground truncate">({b.descriptions[0]}...)</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Expand to assign at item level</p>
+                  )}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           );
         }
         
-        // Single suggestion - clicking applies it directly
+        // Single suggestion (exact, partial, or description-based) - clicking applies it directly
         const codeInfo = allMaterialCodes.find(c => c.code === suggestion.code);
         return (
           <TooltipProvider>
@@ -1104,7 +1111,11 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               </TooltipTrigger>
               <TooltipContent>
                 <p className="text-xs">
-                  <strong>Click to apply</strong> - Suggested based on {suggestion.usageCount} previous {suggestion.matchType === 'exact' ? 'exact' : 'similar'} assignment{suggestion.usageCount > 1 ? 's' : ''}
+                  <strong>Click to apply</strong> - {
+                    suggestion.matchType === 'description' 
+                      ? `Detected from item descriptions (${suggestion.usageCount} items)` 
+                      : `Based on ${suggestion.usageCount} previous ${suggestion.matchType === 'exact' ? 'exact' : 'similar'} assignments`
+                  }
                   <br />
                   Confidence: {Math.round(suggestion.confidence * 100)}%
                 </p>
