@@ -1,100 +1,107 @@
 
-
-# Plan: Add Manual Code Entry for Material Mapping
+# System-to-Activity Code Mapping Feature
 
 ## Overview
-Add the ability to manually type and assign a custom material code that doesn't exist in the cost code library. This gives users flexibility when they need to use codes not yet added to the system.
+Add a new mapping layer that dynamically assigns the Activity segment (middle part of the labor code format `SECT-ACT-COSTHEAD`) based on the System name. Currently hardcoded as `0000`, this will become customizable per system.
 
-## Current Behavior
-- Users can only select codes from the existing `cost_codes` database (category='M')
-- If a code doesn't exist, there's no way to assign it
+### Example
+- Current: `01 0000 VALV` (Cold Water valves)
+- New: `01 00CW VALV` (where CW = Cold Water activity code)
+- Flexible: Users could also map both Cold Water AND Hot Water → `WATR`
 
-## Proposed Solution
-Add a manual entry input field to the CodePicker component that allows users to type any code value and apply it directly.
+---
 
-## Implementation Details
+## Technical Implementation
 
-### 1. Update CodePicker Component
-**File:** `src/components/tabs/MaterialMappingTab.tsx`
+### 1. Database Table
+Create new table `system_activity_mappings`:
 
-Modify the `CodePicker` component to include:
-- A text input field for manual code entry
-- A button to apply the manually entered code
-- Visual separation between "Search Library" and "Manual Entry" sections
-
-**Before:**
 ```text
-+----------------------------------+
-| Search material codes...         |
-+----------------------------------+
-| 9511 - Cast Iron Pipe & Fittings |
-| 9512 - Copper Pipe & Fittings    |
-| ...                              |
-+----------------------------------+
++-------------------+----------+---------------------------+
+| Column            | Type     | Notes                     |
++-------------------+----------+---------------------------+
+| id                | uuid     | Primary key               |
+| project_id        | uuid     | FK to estimate_projects   |
+| system_pattern    | text     | System name to match      |
+| activity_code     | text     | 2-4 char code (e.g., CW)  |
+| description       | text     | Optional label            |
+| created_at        | timestamp| Auto                      |
+| updated_at        | timestamp| Auto                      |
++-------------------+----------+---------------------------+
 ```
 
-**After:**
-```text
-+----------------------------------+
-| Search material codes...         |
-+----------------------------------+
-| 9511 - Cast Iron Pipe & Fittings |
-| 9512 - Copper Pipe & Fittings    |
-| ...                              |
-+----------------------------------+
-| ────── Or enter manually ──────  |
-+----------------------------------+
-| [Custom code input    ] [Apply]  |
-+----------------------------------+
-```
+RLS policies: Users can CRUD mappings for their own projects.
 
-### 2. Code Changes
+### 2. New Hook: `useSystemActivityMappings.ts`
+Following the pattern of `useFloorSectionMappings.ts`:
+- `useSystemActivityMappings(projectId)` - Fetch all mappings
+- `useSaveSystemActivityMapping()` - Upsert single mapping
+- `useBatchSaveSystemActivityMappings()` - Bulk save
+- `useDeleteSystemActivityMapping()` - Remove mapping
+- `getActivityFromSystem(system, mappings)` - Helper function
 
-Add local state for manual entry:
+### 3. New Component: `SystemActivityMappingPanel.tsx`
+UI panel (similar to FloorSectionMappingPanel) with:
+- Table showing unique systems from estimate data with item counts
+- Activity code selector with common suggestions (00CW, 00HW, WATR, 0000, etc.)
+- Ability to add custom codes (1-4 characters)
+- Auto-suggest based on system name keywords
+- Save/Reset/Apply buttons
+- "Apply to Items" to update existing labor codes
+
+### 4. Update Code Assembly Logic
+Modify labor code generation in:
+- `src/pages/Index.tsx` (initial load transformation)
+- `src/components/tabs/SystemMappingTab.tsx` (applyMappings, applyFloorSectionCodes)
+
+Change from:
 ```typescript
-const [manualCode, setManualCode] = useState('');
+const newFullCode = `${section} 0000 ${costHead}`;
 ```
 
-Add manual entry UI below the command list:
+To:
 ```typescript
-<div className="border-t p-3">
-  <div className="text-xs text-muted-foreground mb-2 text-center">
-    Or enter code manually
-  </div>
-  <div className="flex gap-2">
-    <Input 
-      placeholder="Enter code..."
-      value={manualCode}
-      onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-      className="h-8 text-sm font-mono"
-    />
-    <Button 
-      size="sm"
-      disabled={!manualCode.trim()}
-      onClick={() => {
-        onSelect(manualCode.trim());
-        setManualCode('');
-      }}
-    >
-      Apply
-    </Button>
-  </div>
-</div>
+const activityCode = getActivityFromSystem(item.system, systemActivityMappings) || '0000';
+const newFullCode = `${section} ${activityCode} ${costHead}`;
 ```
 
-### 3. User Experience
-- Manual entry input auto-converts to uppercase for consistency
-- Apply button is disabled until user types something
-- Selecting a code from the list OR clicking Apply both close the picker and assign the code
-- Toast notification confirms assignment
+### 5. Integration Points
+- Add new tab section or integrate into existing Labor Mapping workflow
+- Pass activity mappings to SystemMappingTab and code assembly functions
+- Include in "Apply to Items" flow alongside floor-section mappings
+
+---
+
+## UI Location Options
+The System-to-Activity mapping panel can be placed:
+1. **New sub-section in Labor Mapping tab** - alongside Floor-to-Section mapping
+2. **Within each System Card** - add Activity field next to Labor Code dropdown
+
+Recommendation: Option 1 - A dedicated panel similar to Floor-to-Section, grouped in the Labor Mapping workflow.
+
+---
+
+## Common Activity Code Suggestions
+Pre-populated options for quick selection:
+- `0000` - Default/General
+- `00CW` - Cold Water
+- `00HW` - Hot Water
+- `WATR` - Combined Water Systems
+- `00SD` - Storm Drain
+- `00SN` - Sanitary
+- `00GS` - Gas
+- `00FX` - Fixtures
+
+Users can add custom codes up to 4 characters.
+
+---
+
+## Files to Create
+- `supabase/migrations/xxx_create_system_activity_mappings.sql`
+- `src/hooks/useSystemActivityMappings.ts`
+- `src/components/SystemActivityMapping.tsx`
 
 ## Files to Modify
-| File | Change |
-|------|--------|
-| `src/components/tabs/MaterialMappingTab.tsx` | Add manual entry UI to CodePicker component |
-
-## Edge Cases Handled
-- Empty input: Apply button is disabled
-- Whitespace-only: Trimmed before applying
-- Case consistency: Auto-converted to uppercase
-
+- `src/pages/Index.tsx` - Import hook, pass to components, update code assembly
+- `src/components/tabs/SystemMappingTab.tsx` - Update applyMappings and applyFloorSectionCodes functions
+- `src/integrations/supabase/types.ts` - Will auto-update after migration
