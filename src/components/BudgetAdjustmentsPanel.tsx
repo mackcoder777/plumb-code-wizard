@@ -237,6 +237,19 @@ interface FabricationConfig {
   percentage: number;
 }
 
+export interface BidRate {
+  hours: number;
+  rate: string; // String to support editing decimal values
+}
+
+export interface BidRates {
+  straightTime: BidRate;
+  shiftTime: BidRate;
+  overtime: BidRate;
+  doubleTime: BidRate;
+  shop: BidRate;
+}
+
 export interface BudgetAdjustments {
   jobsiteZipCode: string;
   taxRate: number;
@@ -275,6 +288,13 @@ export interface BudgetAdjustments {
   totalLaborDollars: number;
   totalMaterialWithTax: number;
   totalMaterialPreTax: number;
+  // LRCN (Labor Rate Contingency)
+  laborRateContingencyEnabled: boolean;
+  bidRates: BidRates;
+  budgetRate: number;
+  bidTotal: number;
+  budgetTotal: number;
+  lrcnAmount: number;
 }
 
 interface BudgetAdjustmentsPanelProps {
@@ -318,6 +338,28 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return saved ? JSON.parse(saved) : {};
   });
 
+  // LRCN (Labor Rate Contingency) state
+  const [lrcnEnabled, setLrcnEnabled] = useState(() => {
+    const saved = localStorage.getItem(`budget_lrcn_enabled_${projectId}`);
+    return saved === 'true';
+  });
+  
+  const [bidRates, setBidRates] = useState<BidRates>(() => {
+    const saved = localStorage.getItem(`budget_bid_rates_${projectId}`);
+    return saved ? JSON.parse(saved) : {
+      straightTime: { hours: 0, rate: '92.03' },
+      shiftTime: { hours: 0, rate: '95.70' },
+      overtime: { hours: 0, rate: '121.57' },
+      doubleTime: { hours: 0, rate: '145.38' },
+      shop: { hours: 0, rate: '0' }
+    };
+  });
+  
+  const [budgetRate, setBudgetRate] = useState(() => {
+    const saved = localStorage.getItem(`budget_rate_${projectId}`);
+    return saved ? parseFloat(saved) : 85;
+  });
+
   // Persist settings to localStorage
   useEffect(() => {
     localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
@@ -347,6 +389,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
   }, [materialTaxOverrides, projectId]);
 
+  // LRCN persistence
+  useEffect(() => {
+    localStorage.setItem(`budget_lrcn_enabled_${projectId}`, lrcnEnabled.toString());
+  }, [lrcnEnabled, projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(`budget_bid_rates_${projectId}`, JSON.stringify(bidRates));
+  }, [bidRates, projectId]);
+
+  useEffect(() => {
+    localStorage.setItem(`budget_rate_${projectId}`, budgetRate.toString());
+  }, [budgetRate, projectId]);
+
   const taxInfo = useMemo(() => {
     if (customTaxRate !== null) {
       return { rate: customTaxRate, jurisdiction: 'Custom Rate' };
@@ -356,6 +411,35 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     }
     return { rate: 7.25, jurisdiction: 'Enter ZIP Code' };
   }, [jobsiteZipCode, customTaxRate]);
+
+  // LRCN calculations
+  const lrcnCalculations = useMemo(() => {
+    const parseRate = (rate: string) => parseFloat(rate) || 0;
+    
+    const straightTotal = bidRates.straightTime.hours * parseRate(bidRates.straightTime.rate);
+    const shiftTotal = bidRates.shiftTime.hours * parseRate(bidRates.shiftTime.rate);
+    const overtimeTotal = bidRates.overtime.hours * parseRate(bidRates.overtime.rate);
+    const doubleTimeTotal = bidRates.doubleTime.hours * parseRate(bidRates.doubleTime.rate);
+    const shopTotal = bidRates.shop.hours * parseRate(bidRates.shop.rate);
+    
+    const bidTotal = straightTotal + shiftTotal + overtimeTotal + doubleTimeTotal + shopTotal;
+    const totalHours = bidRates.straightTime.hours + bidRates.shiftTime.hours + 
+                       bidRates.overtime.hours + bidRates.doubleTime.hours + bidRates.shop.hours;
+    const budgetTotal = totalHours * budgetRate;
+    const lrcnAmount = bidTotal - budgetTotal;
+    
+    return {
+      bidTotal,
+      budgetTotal,
+      lrcnAmount,
+      totalHours,
+      straightTotal,
+      shiftTotal,
+      overtimeTotal,
+      doubleTimeTotal,
+      shopTotal
+    };
+  }, [bidRates, budgetRate]);
 
   const calculations = useMemo(() => {
     const originalTotalHours = Object.values(laborSummary)
@@ -501,8 +585,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       totalLaborDollars: calculations.totalLaborDollars,
       totalMaterialWithTax: calculations.totalMaterialWithTax,
       totalMaterialPreTax: calculations.totalMaterialPreTax,
+      // LRCN fields
+      laborRateContingencyEnabled: lrcnEnabled,
+      bidRates,
+      budgetRate,
+      bidTotal: lrcnCalculations.bidTotal,
+      budgetTotal: lrcnCalculations.budgetTotal,
+      lrcnAmount: lrcnCalculations.lrcnAmount,
     });
-  }, [calculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, onAdjustmentsChange]);
+  }, [calculations, lrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, onAdjustmentsChange]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
@@ -656,6 +747,290 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                 </div>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Labor Rate Contingency (LRCN) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <DollarSign className="h-5 w-5 text-teal-500" />
+            Labor Rate Contingency (LRCN)
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>Calculate the difference between bid labor rates and budget rate. The contingency is added to material code LRCN.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Switch checked={lrcnEnabled} onCheckedChange={setLrcnEnabled} />
+            <span className={lrcnEnabled ? 'text-foreground' : 'text-muted-foreground'}>
+              Enable Labor Rate Contingency
+            </span>
+          </div>
+
+          {lrcnEnabled && (
+            <>
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Bid Labor Breakdown</Label>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Labor Type</TableHead>
+                      <TableHead className="text-right w-28">Hours</TableHead>
+                      <TableHead className="text-right w-32">Rate ($/hr)</TableHead>
+                      <TableHead className="text-right w-32">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>Straight Time</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={bidRates.straightTime.hours || ''}
+                          onChange={(e) => setBidRates(prev => ({
+                            ...prev,
+                            straightTime: { ...prev.straightTime, hours: parseFloat(e.target.value) || 0 }
+                          }))}
+                          className="w-24 text-right font-mono"
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          inputMode="decimal"
+                          value={bidRates.straightTime.rate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              setBidRates(prev => ({
+                                ...prev,
+                                straightTime: { ...prev.straightTime, rate: val }
+                              }));
+                            }
+                          }}
+                          className="w-28 text-right font-mono"
+                          placeholder="0.00"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        ${lrcnCalculations.straightTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Shift Time</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={bidRates.shiftTime.hours || ''}
+                          onChange={(e) => setBidRates(prev => ({
+                            ...prev,
+                            shiftTime: { ...prev.shiftTime, hours: parseFloat(e.target.value) || 0 }
+                          }))}
+                          className="w-24 text-right font-mono"
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          inputMode="decimal"
+                          value={bidRates.shiftTime.rate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              setBidRates(prev => ({
+                                ...prev,
+                                shiftTime: { ...prev.shiftTime, rate: val }
+                              }));
+                            }
+                          }}
+                          className="w-28 text-right font-mono"
+                          placeholder="0.00"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        ${lrcnCalculations.shiftTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Overtime</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={bidRates.overtime.hours || ''}
+                          onChange={(e) => setBidRates(prev => ({
+                            ...prev,
+                            overtime: { ...prev.overtime, hours: parseFloat(e.target.value) || 0 }
+                          }))}
+                          className="w-24 text-right font-mono"
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          inputMode="decimal"
+                          value={bidRates.overtime.rate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              setBidRates(prev => ({
+                                ...prev,
+                                overtime: { ...prev.overtime, rate: val }
+                              }));
+                            }
+                          }}
+                          className="w-28 text-right font-mono"
+                          placeholder="0.00"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        ${lrcnCalculations.overtimeTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Double Time</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={bidRates.doubleTime.hours || ''}
+                          onChange={(e) => setBidRates(prev => ({
+                            ...prev,
+                            doubleTime: { ...prev.doubleTime, hours: parseFloat(e.target.value) || 0 }
+                          }))}
+                          className="w-24 text-right font-mono"
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          inputMode="decimal"
+                          value={bidRates.doubleTime.rate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              setBidRates(prev => ({
+                                ...prev,
+                                doubleTime: { ...prev.doubleTime, rate: val }
+                              }));
+                            }
+                          }}
+                          className="w-28 text-right font-mono"
+                          placeholder="0.00"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        ${lrcnCalculations.doubleTimeTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Shop</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={bidRates.shop.hours || ''}
+                          onChange={(e) => setBidRates(prev => ({
+                            ...prev,
+                            shop: { ...prev.shop, hours: parseFloat(e.target.value) || 0 }
+                          }))}
+                          className="w-24 text-right font-mono"
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          inputMode="decimal"
+                          value={bidRates.shop.rate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              setBidRates(prev => ({
+                                ...prev,
+                                shop: { ...prev.shop, rate: val }
+                              }));
+                            }
+                          }}
+                          className="w-28 text-right font-mono"
+                          placeholder="0.00"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        ${lrcnCalculations.shopTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="border-t-2 font-bold bg-muted/50">
+                      <TableCell>BID TOTAL</TableCell>
+                      <TableCell className="text-right font-mono">{lrcnCalculations.totalHours.toLocaleString()}</TableCell>
+                      <TableCell className="text-right"></TableCell>
+                      <TableCell className="text-right font-mono text-lg">
+                        ${lrcnCalculations.bidTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="budgetRate">Budget Rate ($/hr)</Label>
+                  <Input
+                    id="budgetRate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={budgetRate}
+                    onChange={(e) => setBudgetRate(parseFloat(e.target.value) || 0)}
+                    className="font-mono text-lg"
+                  />
+                  <p className="text-xs text-muted-foreground">Single blended rate for budgeting</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Budget Total</Label>
+                  <div className="h-10 flex items-center px-3 bg-muted rounded-md border font-mono text-lg">
+                    ${lrcnCalculations.budgetTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{lrcnCalculations.totalHours.toLocaleString()} hrs × ${budgetRate.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className={`rounded-lg p-4 border ${lrcnCalculations.lrcnAmount >= 0 ? 'bg-teal-50 dark:bg-teal-950 border-teal-200 dark:border-teal-800' : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'}`}>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className={`text-sm ${lrcnCalculations.lrcnAmount >= 0 ? 'text-teal-700 dark:text-teal-300' : 'text-red-700 dark:text-red-300'}`}>
+                      Labor Rate Contingency (LRCN)
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Bid Total - Budget Total = LRCN
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-mono font-bold text-2xl ${lrcnCalculations.lrcnAmount >= 0 ? 'text-teal-700 dark:text-teal-200' : 'text-red-700 dark:text-red-200'}`}>
+                      ${lrcnCalculations.lrcnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    {lrcnCalculations.lrcnAmount >= 0 && (
+                      <div className="text-xs text-teal-600 dark:text-teal-400 mt-1">
+                        → Material Code LRCN
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
