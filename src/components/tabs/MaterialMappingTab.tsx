@@ -884,6 +884,16 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     );
   };
 
+  // Handle quick accept of a suggested code
+  const handleAcceptSuggestion = useCallback(async (materialSpec: string, itemType: string, suggestedCode: string) => {
+    const groupKey = `${materialSpec}|${itemType}`;
+    await handleAssignCode(groupKey, suggestedCode);
+    toast({
+      title: 'Suggestion Applied',
+      description: `Applied suggested code ${suggestedCode} to ${itemType} items`,
+    });
+  }, [handleAssignCode]);
+
   // Render child status badge with suggestions
   const renderChildStatusBadge = (typeGroup: ItemTypeGroup, materialSpec: string) => {
     const { assignedCode, items, itemType } = typeGroup;
@@ -897,14 +907,21 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     const suggestion = getMaterialSuggestion(materialSpec, itemType);
     
     if (!assignedCode && !hasSomeAssigned) {
-      // Show suggestion if available
+      // Show suggestion if available - clicking applies it directly
       if (suggestion) {
         const codeInfo = allMaterialCodes.find(c => c.code === suggestion.code);
         return (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30 font-mono cursor-help">
+                <Badge 
+                  variant="outline" 
+                  className="bg-purple-500/10 text-purple-600 border-purple-500/30 font-mono cursor-pointer hover:bg-purple-500/20 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAcceptSuggestion(materialSpec, itemType, suggestion.code);
+                  }}
+                >
                   <Sparkles className="h-3 w-3 mr-1" />
                   {suggestion.code}
                   {codeInfo && <span className="ml-1 font-normal opacity-75 truncate max-w-24">- {codeInfo.description}</span>}
@@ -912,7 +929,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               </TooltipTrigger>
               <TooltipContent>
                 <p className="text-xs">
-                  Suggested based on {suggestion.usageCount} previous {suggestion.matchType === 'exact' ? 'exact' : 'similar'} assignment{suggestion.usageCount > 1 ? 's' : ''}
+                  <strong>Click to apply</strong> - Suggested based on {suggestion.usageCount} previous {suggestion.matchType === 'exact' ? 'exact' : 'similar'} assignment{suggestion.usageCount > 1 ? 's' : ''}
                   <br />
                   Confidence: {Math.round(suggestion.confidence * 100)}%
                 </p>
