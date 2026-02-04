@@ -354,7 +354,9 @@ const DEFAULT_COST_HEAD_MAPPING = {
   }
 };
 
-const FLOOR_MAPPING = {
+// LEGACY FLOOR_MAPPING - kept for initial file processing ONLY when no DB mappings exist
+// Once DB floor mappings are configured, those take priority via getSectionFromFloor()
+const FLOOR_MAPPING_FALLBACK = {
   '01': [/level.*0?1$/i, /^l1$/i, /floor.*1$/i, /first.*floor/i],
   '02': [/level.*0?2$/i, /^l2$/i, /floor.*2$/i, /second.*floor/i],
   '03': [/level.*0?3$/i, /^l3$/i, /floor.*3$/i, /third.*floor/i],
@@ -581,17 +583,30 @@ const EnhancedCostCodeManager = () => {
 
   const COST_CODES = getAllCodes();
 
-  // Generate cost code with audit trail - uses smart matching against database codes
-  const generateCostCode = useCallback((item) => {
-    let section = '01';
-    const floorText = (item.floor || '').toLowerCase().trim();
-
-    for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
+  // Helper to get section from floor - uses DB mappings first, falls back to patterns
+  const getSectionForFloor = useCallback((floor: string): string => {
+    // Priority 1: Use database floor mappings if available
+    if (dbFloorMappings.length > 0) {
+      const section = getSectionFromFloor(floor, dbFloorMappings);
+      if (section !== '01') return section; // Return if found non-default
+    }
+    
+    // Priority 2: Fallback to hardcoded patterns (for initial setup before DB mappings)
+    const floorText = (floor || '').toLowerCase().trim();
+    for (const [code, patterns] of Object.entries(FLOOR_MAPPING_FALLBACK)) {
       if (patterns.some(pattern => pattern.test(floorText))) {
-        section = code;
-        break;
+        return code;
       }
     }
+    
+    // Default
+    return '01';
+  }, [dbFloorMappings]);
+
+  // Generate cost code with audit trail - uses smart matching against database codes
+  const generateCostCode = useCallback((item) => {
+    // Use database floor mappings for section
+    const section = getSectionForFloor(item.floor || '');
 
     // Get activity code from system-to-activity mappings
     const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
@@ -654,7 +669,7 @@ const EnhancedCostCodeManager = () => {
       matchReason: matchReason,
       description: description
     };
-  }, [customMappings, dbCostCodes, dbActivityMappings]);
+  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor]);
 
   // Load saved items when project changes - apply category mappings during load
   useEffect(() => {
@@ -699,15 +714,8 @@ const EnhancedCostCodeManager = () => {
         if (!item.cost_code && dbCategoryMappings.length > 0 && item.report_cat) {
           const categoryCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
           if (categoryCode) {
-            // Build the full cost code with section and activity
-            const floorText = (item.floor || '').toLowerCase().trim();
-            let section = '01';
-            for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
-              if (patterns.some(pattern => pattern.test(floorText))) {
-                section = code;
-                break;
-              }
-            }
+            // Build the full cost code with section (from DB floor mappings) and activity
+            const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
             const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
             baseItem.costCode = `${section} ${activity} ${categoryCode}`;
           }
@@ -724,7 +732,7 @@ const EnhancedCostCodeManager = () => {
       setFilteredData(transformedItems);
       setFileName(currentProject.file_name || '');
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings, dbFloorMappings, dbActivityMappings]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
@@ -1392,6 +1400,7 @@ const EnhancedCostCodeManager = () => {
   };
 
   // Execute the actual apply logic with BOTH material and labor codes
+  // CRITICAL: Builds FULL cost codes per item with section from floor mappings
   const executeApplyDualCodes = (system: string, materialCode?: string, laborCode?: string, itemCount?: number) => {
     const systemLower = system.toLowerCase().trim();
     
@@ -1400,16 +1409,35 @@ const EnhancedCostCodeManager = () => {
     );
     const count = itemCount || systemItems.length;
     
-    // Update ALL items in this system with BOTH codes
+    // Build per-item updates with FULL assembled cost codes (section varies by floor)
+    const itemUpdates: Array<{ id: string; cost_code?: string; material_cost_code?: string }> = [];
+    
+    // Update ALL items in this system with BOTH codes - build FULL code per item
     const updated = estimateData.map(item => {
       if (item.system?.toLowerCase().trim() === systemLower) {
+        // Get section from floor mappings for THIS specific item's floor
+        const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
+        const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
+        
+        // Build the FULL assembled labor code with section and activity
+        const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
+        
+        // Track this item for database update
+        if (typeof item.id === 'string') {
+          itemUpdates.push({
+            id: item.id,
+            cost_code: fullLaborCode || undefined,
+            material_cost_code: materialCode || undefined
+          });
+        }
+        
         return { 
           ...item, 
-          costCode: laborCode || item.costCode,
+          costCode: fullLaborCode,
           materialCostCode: materialCode || item.materialCostCode,
           suggestedCode: {
             ...item.suggestedCode,
-            code: laborCode || item.costCode,
+            code: fullLaborCode,
             costHead: laborCode || item.costCode,
             source: 'system-mapping'
           }
@@ -1447,13 +1475,15 @@ const EnhancedCostCodeManager = () => {
       // Get the original auto-suggestion for persistence
       const originalAutoSuggested = systemAutoSuggestions[systemLower] || generateCostCode({ system }).costHead;
       
-      // Update cost codes on estimate items with BOTH material and labor codes
-      batchUpdateSystemCostCodes.mutate({
-        projectId: currentProject.id,
-        system: system,
-        laborCode: laborCode,
-        materialCode: materialCode
-      });
+      // Update cost codes on estimate items with FULL assembled codes per item
+      if (itemUpdates.length > 0) {
+        console.log(`[Apply] Saving ${itemUpdates.length} items with full codes to database`);
+        batchUpdateSystemCostCodes.mutate({
+          projectId: currentProject.id,
+          system: system,
+          itemUpdates: itemUpdates // Pass per-item updates with full assembled codes
+        });
+      }
       
       // UPSERT the mapping with applied status - store both codes in cost_head as "material|labor"
       const combinedCostHead = `${materialCode || ''}|${laborCode || ''}`;
