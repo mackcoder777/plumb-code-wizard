@@ -559,6 +559,7 @@ export const useUpdateItemCostCode = () => {
 };
 
 // Batch update cost codes for items matching a system
+// IMPORTANT: This now accepts FULL assembled cost codes per item (with section from floor)
 export const useBatchUpdateSystemCostCodes = () => {
   const queryClient = useQueryClient();
 
@@ -567,28 +568,50 @@ export const useBatchUpdateSystemCostCodes = () => {
       projectId, 
       system,
       laborCode,
-      materialCode
+      materialCode,
+      itemUpdates
     }: { 
       projectId: string; 
       system: string;
       laborCode?: string;
       materialCode?: string;
+      // New: array of per-item updates with full assembled codes
+      itemUpdates?: Array<{ id: string; cost_code?: string; material_cost_code?: string }>;
     }) => {
+      // If itemUpdates provided, update each item individually with its full assembled code
+      if (itemUpdates && itemUpdates.length > 0) {
+        const results = await Promise.all(
+          itemUpdates.map(async (update) => {
+            const updateData: { cost_code?: string; material_cost_code?: string } = {};
+            if (update.cost_code) updateData.cost_code = update.cost_code;
+            if (update.material_cost_code) updateData.material_cost_code = update.material_cost_code;
+            
+            if (Object.keys(updateData).length === 0) return null;
+            
+            const { data, error } = await supabase
+              .from('estimate_items')
+              .update(updateData)
+              .eq('id', update.id)
+              .select()
+              .single();
+            
+            if (error) {
+              console.error(`Failed to update item ${update.id}:`, error);
+              return null;
+            }
+            return data;
+          })
+        );
+        return results.filter(Boolean) as EstimateItem[];
+      }
+      
+      // Legacy fallback: update all items with same code (for simple cases)
       const updates: { cost_code?: string; material_cost_code?: string } = {};
+      if (laborCode) updates.cost_code = laborCode;
+      if (materialCode) updates.material_cost_code = materialCode;
       
-      // Build update object based on what's provided
-      if (laborCode) {
-        updates.cost_code = laborCode;
-      }
-      if (materialCode) {
-        updates.material_cost_code = materialCode;
-      }
+      if (Object.keys(updates).length === 0) return [];
       
-      if (Object.keys(updates).length === 0) {
-        return [];
-      }
-      
-      // Update all items with matching system
       const { data, error } = await supabase
         .from('estimate_items')
         .update(updates)
