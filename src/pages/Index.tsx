@@ -24,6 +24,7 @@ import {
   EstimateProject
 } from '@/hooks/useEstimateProjects';
 import { useFloorSectionMappings, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
+import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useAuth } from '@/hooks/useAuth';
 import { Auth } from '@/components/Auth';
@@ -458,6 +459,9 @@ const EnhancedCostCodeManager = () => {
   // Fetch floor-to-section mappings for labor code section derivation
   const { data: dbFloorMappings = [] } = useFloorSectionMappings(currentProject?.id || null);
   
+  // Fetch system-to-activity mappings for labor code activity segment
+  const { data: dbActivityMappings = [] } = useSystemActivityMappings(currentProject?.id || null);
+  
   // Fetch category labor mappings for priority-based code assignment
   const { data: dbCategoryMappings = [] } = useCategoryMappings(currentProject?.id || null);
   
@@ -589,7 +593,8 @@ const EnhancedCostCodeManager = () => {
       }
     }
 
-    const activity = '0000';
+    // Get activity code from system-to-activity mappings
+    const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
     const systemLower = (item.system || '').toLowerCase().trim();
 
     // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
@@ -649,7 +654,7 @@ const EnhancedCostCodeManager = () => {
       matchReason: matchReason,
       description: description
     };
-  }, [customMappings, dbCostCodes]);
+  }, [customMappings, dbCostCodes, dbActivityMappings]);
 
   // Load saved items when project changes - apply category mappings during load
   useEffect(() => {
@@ -693,7 +698,7 @@ const EnhancedCostCodeManager = () => {
         if (dbCategoryMappings.length > 0 && item.report_cat) {
           const categoryCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
           if (categoryCode) {
-            // Build the full cost code with section
+            // Build the full cost code with section and activity
             const floorText = (item.floor || '').toLowerCase().trim();
             let section = '01';
             for (const [code, patterns] of Object.entries(FLOOR_MAPPING)) {
@@ -702,7 +707,8 @@ const EnhancedCostCodeManager = () => {
                 break;
               }
             }
-            baseItem.costCode = `${section} 0000 ${categoryCode}`;
+            const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
+            baseItem.costCode = `${section} ${activity} ${categoryCode}`;
           }
         }
         
@@ -2310,6 +2316,7 @@ const EnhancedCostCodeManager = () => {
                 }}
                 projectId={currentProject?.id}
                 floorSectionMappings={dbFloorMappings}
+                systemActivityMappings={dbActivityMappings}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
@@ -2397,7 +2404,7 @@ const EnhancedCostCodeManager = () => {
                       
                       // Derive section from floor using floor mappings
                       const section = getSectionFromFloor(item.floor, dbFloorMappings);
-                      const activity = '0000';
+                      const activity = getActivityFromSystem(item.system, dbActivityMappings);
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
                       if (!summary[fullCode]) {

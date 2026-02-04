@@ -18,7 +18,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight } from 'lucide-react';
+import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -29,7 +29,9 @@ import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/aut
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
+import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
 import { FloorSectionMapping, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
+import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -37,6 +39,7 @@ interface SystemMappingTabProps {
   onNavigateToEstimates?: (systemFilter: string) => void;
   projectId?: string | null;
   floorSectionMappings?: FloorSectionMapping[];
+  systemActivityMappings?: SystemActivityMapping[];
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -65,7 +68,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], importedCostCodes = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], importedCostCodes = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -478,12 +481,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   }, [suggestions]);
 
-  // Helper to build full labor code with section prefix
-  const buildFullLaborCode = useCallback((costHead: string, floor: string): string => {
+  // Helper to build full labor code with section prefix and activity code
+  const buildFullLaborCode = useCallback((costHead: string, floor: string, system?: string): string => {
     const section = getSectionFromFloor(floor, floorSectionMappings);
-    const activity = '0000'; // Default activity code (4 characters)
+    const activity = system ? getActivityFromSystem(system, systemActivityMappings) : '0000';
     return `${section} ${activity} ${costHead}`;
-  }, [floorSectionMappings]);
+  }, [floorSectionMappings, systemActivityMappings]);
 
   // Handler to apply section codes to all items that already have labor codes
   const handleApplySectionCodes = useCallback((floorMappingsToApply: Record<string, string>) => {
@@ -516,8 +519,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         }
       }
       
-      // Build new full code
-      const newFullCode = `${newSection} 0000 ${costHead}`;
+      // Build new full code with activity from system
+      const activityCode = getActivityFromSystem(item.system, systemActivityMappings);
+      const newFullCode = `${newSection} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
@@ -583,7 +587,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         if (assignmentSource === 'category') categoryAssignments++;
         if (assignmentSource === 'system') systemAssignments++;
         systemItemCounts[systemKey] = (systemItemCounts[systemKey] || 0) + 1;
-        const fullCode = buildFullLaborCode(costHead, item.floor || '');
+        const fullCode = buildFullLaborCode(costHead, item.floor || '', item.system);
         return { ...item, costCode: fullCode };
       }
       return item;
@@ -663,7 +667,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       
       if (costHead) {
         itemsAffected++;
-        const fullCode = buildFullLaborCode(costHead, item.floor || '');
+        const fullCode = buildFullLaborCode(costHead, item.floor || '', item.system);
         return { ...item, costCode: fullCode };
       }
       return item;
@@ -780,6 +784,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             projectId={projectId}
             onMappingsChange={setFloorMappings}
             onApplySectionCodes={handleApplySectionCodes}
+          />
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* System to Activity Mapping - Collapsible */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              System to Activity Mapping
+              <Badge variant="secondary" className="ml-2 text-xs">NEW</Badge>
+            </div>
+            <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-4">
+          <SystemActivityMappingPanel
+            estimateData={data}
+            projectId={projectId || null}
           />
         </CollapsibleContent>
       </Collapsible>

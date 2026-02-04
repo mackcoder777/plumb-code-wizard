@@ -423,6 +423,44 @@ export type Database = {
         }
         Relationships: []
       }
+      system_activity_mappings: {
+        Row: {
+          activity_code: string
+          created_at: string
+          description: string | null
+          id: string
+          project_id: string
+          system_pattern: string
+          updated_at: string
+        }
+        Insert: {
+          activity_code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id: string
+          system_pattern: string
+          updated_at?: string
+        }
+        Update: {
+          activity_code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id?: string
+          system_pattern?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_activity_mappings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_mappings: {
         Row: {
           applied_at: string | null
