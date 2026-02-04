@@ -101,11 +101,20 @@ export const useMaterialCodeSuggestion = (materialSpec: string, itemType: string
   
   // Try partial match: same material TYPE + same item type
   // This requires the material spec to be of the same material family (e.g., both copper)
-  const sameTypeMatch = patterns.find(
+  // But first check if this item type typically has mixed codes
+  const sameTypeMatches = patterns.filter(
     p => normalizePattern(p.item_type_pattern) === normalizedType &&
          areSameMaterialType(p.material_spec_pattern, materialSpec)
   );
   
+  // If multiple different codes are learned for same material type + item type, it's mixed
+  const uniqueCodes = new Set(sameTypeMatches.map(p => p.material_code));
+  if (uniqueCodes.size > 1) {
+    // Mixed category - don't suggest a single code
+    return null;
+  }
+  
+  const sameTypeMatch = sameTypeMatches[0];
   if (sameTypeMatch && sameTypeMatch.usage_count >= 2) {
     return {
       code: sameTypeMatch.material_code,
@@ -129,13 +138,21 @@ export const useGetMaterialSuggestions = () => {
     const normalizedSpec = normalizePattern(materialSpec);
     const normalizedType = normalizePattern(itemType);
     
-    // Find exact match first (material spec + item type)
-    const exactMatch = patterns.find(
+    // Check for exact matches with THIS specific material spec + item type
+    const exactMatches = patterns.filter(
       p => normalizePattern(p.material_spec_pattern) === normalizedSpec &&
            normalizePattern(p.item_type_pattern) === normalizedType
     );
     
-    if (exactMatch) {
+    // If there are multiple different codes for exact same spec+type, it's a mixed category
+    const exactUniqueCodes = new Set(exactMatches.map(p => p.material_code));
+    if (exactUniqueCodes.size > 1) {
+      // This exact category has been assigned multiple codes - it's mixed
+      return null;
+    }
+    
+    if (exactMatches.length > 0) {
+      const exactMatch = exactMatches[0];
       return {
         code: exactMatch.material_code,
         confidence: Math.min(exactMatch.confidence_score, 1),
@@ -146,11 +163,19 @@ export const useGetMaterialSuggestions = () => {
     
     // Try partial match: same material TYPE + same item type
     // This requires the material spec to be of the same material family
-    const sameTypeMatch = patterns.find(
+    const sameTypeMatches = patterns.filter(
       p => normalizePattern(p.item_type_pattern) === normalizedType &&
            areSameMaterialType(p.material_spec_pattern, materialSpec)
     );
     
+    // If multiple different codes are learned for same material type + item type, it's mixed
+    const uniqueCodes = new Set(sameTypeMatches.map(p => p.material_code));
+    if (uniqueCodes.size > 1) {
+      // Mixed category - don't suggest a single code
+      return null;
+    }
+    
+    const sameTypeMatch = sameTypeMatches[0];
     if (sameTypeMatch && sameTypeMatch.usage_count >= 2) {
       return {
         code: sameTypeMatch.material_code,
