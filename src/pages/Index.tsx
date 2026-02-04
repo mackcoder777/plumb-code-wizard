@@ -2404,14 +2404,20 @@ const EnhancedCostCodeManager = () => {
                       const rawCostHead = item.costCode || item.laborCostCode;
                       if (!rawCostHead) return;
                       
-                      // Check if costHead already contains section/activity format (e.g., "BG 0000 BGGW")
+                      // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
                       const parts = rawCostHead.trim().split(/\s+/);
                       let costHead: string;
                       let existingSection: string | null = null;
                       let existingActivity: string | null = null;
                       
-                      if (parts.length >= 3) {
-                        // Already has section and activity, extract just the cost head
+                      // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
+                      if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
+                        // Doubled - extract real values
+                        existingSection = parts[0];
+                        existingActivity = parts[1];
+                        costHead = parts.slice(4).join(' ');
+                      } else if (parts.length >= 3) {
+                        // Normal format with section/activity
                         existingSection = parts[0];
                         existingActivity = parts[1];
                         costHead = parts.slice(2).join(' ');

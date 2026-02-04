@@ -680,18 +680,18 @@ function getLaborCostHeadDescription(costHead: string): string {
 function parseLaborCode(code: string): { section: string; activity: string; costHead: string; fullCode: string } {
   const parts = code.trim().split(/\s+/);
   
-  // If we have 6 parts like "BG 0000 BG 0000 BGGW", it's doubled
-  // If we have 3 parts like "BG 0000 BGGW", it's normal
-  if (parts.length >= 6) {
-    // Doubled - take first, second, and last part
+  // Detect doubled codes: "BG 0000 BG 0000 BGGW" (5 parts) or "BG 0000 BG 0000 BGGW EXTRA" (6+ parts)
+  // Pattern: parts[0] === parts[2] && parts[1] === parts[3] indicates duplication
+  if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
+    // Doubled - take section from [0], activity from [1], cost head from [4] onwards
     return {
       section: parts[0],
       activity: parts[1],
-      costHead: parts[parts.length - 1],
-      fullCode: `${parts[0]} ${parts[1]} ${parts[parts.length - 1]}`
+      costHead: parts.slice(4).join(' '),
+      fullCode: `${parts[0]} ${parts[1]} ${parts.slice(4).join(' ')}`
     };
   } else if (parts.length >= 3) {
-    // Normal format
+    // Normal format "BG 0000 BGGW"
     return {
       section: parts[0],
       activity: parts[1],
