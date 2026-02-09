@@ -1,100 +1,88 @@
 
-# Labor Rate Contingency (LRCN) Calculator
 
-## Overview
-Add a new section to the Budget Builder that calculates the difference between estimated labor costs (at bid rates) and budgeted labor costs (at a typically lower budget rate). This difference represents a contingency fund that gets assigned to a material code called **LRCN**.
+# Bulk Buyout Feature
 
-## How It Works
+A new full-featured tab that consolidates estimate line items by Material Spec + Size for early procurement tracking, vendor quoting, and savings analysis.
 
-```text
-+------------------------------------------+
-|         BID LABOR BREAKDOWN              |
-+------------------------------------------+
-| Type          | Hours  | Rate    | Total |
-|---------------|--------|---------|-------|
-| Straight Time | 2,240  | $92.03  | $206K |
-| Shift Time    |    0   | $95.70  | $0    |
-| Overtime      | 1,008  | $121.57 | $123K |
-| Double Time   |    0   | $145.38 | $0    |
-| Shop          |    0   | $0.00   | $0    |
-+------------------------------------------+
-| BID TOTAL     | 3,248  |         | $329K |
-+------------------------------------------+
+## What You'll Get
 
-BUDGET RATE INPUT:  $85.00
-BUDGET TOTAL:       3,248 × $85 = $276K
+**Buyout Setup Panel** -- A slider to select buyout percentage (50-100%), with estimate items automatically consolidated into buyout lines grouped by Material Spec + Size. Each line shows total quantities, buyout quantities, estimate pricing, and an auto-suggested material cost code (overridable via dropdown).
 
-LABOR RATE CONTINGENCY (LRCN):
-$329K - $276K = $53,080 → Material Code LRCN
-```
+**Vendor Pricing Entry** -- Inline editable columns for Vendor Name, Quoted Unit Price (with auto-calculated totals), and PO Number. A color-coded Savings column shows green for under-budget and red for overages.
 
-## Technical Implementation
+**Summary Dashboard** -- Cards showing Total Estimate Value, Total Buyout Value, Total Savings (dollar and %), and a breakdown by Material Code. A progress bar tracks how many buyout lines have been awarded.
 
-### 1. New State Variables (Index.tsx)
-```typescript
-// Bid rates by labor type
-const [bidRates, setBidRates] = useState({
-  straightTime: { hours: 0, rate: 92.03 },
-  shiftTime: { hours: 0, rate: 95.70 },
-  overtime: { hours: 0, rate: 121.57 },
-  doubleTime: { hours: 0, rate: 145.38 },
-  shop: { hours: 0, rate: 0 }
-});
+**Status Tracking** -- Each buyout line gets a status badge: Not Started, Quoted, Awarded, PO Issued, or Delivered. Color-coded for quick visual scanning.
 
-// Budget rate (separate from bid rates)
-const [budgetRate, setBudgetRate] = useState(85);
-```
+**Excel Export** -- A "Generate Buyout Package" button exports the full buyout report as a standalone Excel file with all columns.
 
-### 2. Update BudgetAdjustments Interface
-Add LRCN fields to track the contingency calculation:
-- `laborRateContingencyEnabled: boolean`
-- `bidRates: { type, hours, rate }[]`
-- `budgetRate: number`
-- `bidTotal: number`
-- `budgetTotal: number`
-- `lrcnAmount: number` (the difference)
+**Header Integration** -- A new "Buyout Value" stat card in the header showing total committed buyout dollars.
 
-### 3. New UI Section in BudgetAdjustmentsPanel
-Add a card between "Foreman Field Bonus" and "Fabrication Hours Strip":
+## Technical Plan
 
-**"Labor Rate Contingency (LRCN)"**
-- Enable/disable toggle
-- Input table for bid labor breakdown:
-  - Labor Straight Time (hours, rate)
-  - Labor Shift (hours, rate)
-  - Labor Overtime (hours, rate)
-  - Labor Double Time (hours, rate)
-  - Labor Shop @ % (hours, rate)
-- Single budget rate input
-- Real-time calculation display showing:
-  - Bid Total
-  - Budget Total
-  - LRCN Amount (the savings/contingency)
+### 1. New Types (`src/types/buyout.ts`)
 
-### 4. Export Integration
-When LRCN is enabled and has a positive amount:
-- Add `LRCN` line to Material Breakdown section
-- Description: "LABOR RATE CONTINGENCY"
-- Amount: calculated contingency value
+Define interfaces for:
+- `BuyoutLine` -- consolidated line with: id, materialSpec, size, materialDesc, totalEstimateQty, buyoutPercent, buyoutQty, estimateUnitCost, estimateTotal, materialCostCode, vendorName, quotedUnitPrice, quotedTotal, savings, savingsPercent, poNumber, status, sourceItemCount
+- `BuyoutStatus` -- union type: 'not_started' | 'quoted' | 'awarded' | 'po_issued' | 'delivered'
+- `BuyoutSummary` -- totals and breakdown by material code
 
-### 5. Persistence
-Store LRCN settings in localStorage per project:
-- `budget_lrcn_enabled_${projectId}`
-- `budget_bid_rates_${projectId}`
-- `budget_rate_${projectId}`
+### 2. New Component (`src/components/tabs/BulkBuyoutTab.tsx`)
 
-## Files to Modify
+Single component (~600-800 lines) containing:
+- **Buyout % selector** -- Slider from 50-100% in 10% increments
+- **Consolidation logic** -- `useMemo` that groups `estimateData` by `materialSpec + size`, sums quantities, calculates average unit cost from listPrice, and counts source items per group
+- **Auto-suggest material codes** -- Uses `useMaterialCodes()` hook, matches materialSpec patterns to suggest codes (reuses pattern matching from MaterialMappingTab)
+- **Editable table** -- Renders consolidated lines with inline inputs for vendor name, quoted price, PO number, and status dropdown
+- **Summary cards** -- Total estimate value, total quoted value, total savings with percentage
+- **Progress bar** -- X of Y lines awarded/completed
+- **Sort controls** -- By savings amount, material code, or status
+- **Export button** -- Generates Excel using `xlsx` library (already installed)
 
-| File | Changes |
+State management: All buyout data (vendor quotes, statuses, PO numbers) stored in component state with `localStorage` persistence keyed by project ID, matching the pattern used by BudgetAdjustmentsPanel.
+
+### 3. Wire Into Index.tsx
+
+- Add `activeTab === 'buyout'` conditional rendering block (similar to other tabs)
+- Pass `estimateData` and `currentProject?.id` as props
+- No new database tables needed -- buyout data persists via localStorage per-project
+
+### 4. Update NavigationTabs.tsx
+
+- Rename existing tab label from "Buyout Reports" to "Bulk Buyout"
+
+### 5. Update EstimateHeader.tsx
+
+- Add a 5th stat card "Buyout Value" showing total committed (awarded) buyout dollars
+- Accept optional `buyoutTotal` prop from Index.tsx
+- Adjust grid from `grid-cols-4` to `grid-cols-5`
+
+### 6. Export Utility (`src/utils/buyoutExport.ts`)
+
+Standalone Excel export function using the `xlsx` library:
+- Single sheet with columns: Material Code, Material Description, Size, Estimate Qty, Buyout Qty, Buyout %, Estimate Unit Cost, Estimate Total, Vendor, Quoted Unit Price, Quoted Total, Savings $, Savings %, PO Number, Status
+- Header row with project name and date
+- Summary row at bottom with totals
+
+### Files Created
+| File | Purpose |
 |------|---------|
-| `src/components/BudgetAdjustmentsPanel.tsx` | Add LRCN card UI, calculation logic, state management |
-| `src/pages/Index.tsx` | Add bid rates state, pass to BudgetAdjustmentsPanel |
-| `src/utils/budgetExportSystem.ts` | Include LRCN in material export if enabled |
+| `src/types/buyout.ts` | Type definitions |
+| `src/components/tabs/BulkBuyoutTab.tsx` | Main tab component |
+| `src/utils/buyoutExport.ts` | Excel export utility |
 
-## User Experience
-1. User enables "Labor Rate Contingency" toggle
-2. Enters hours and rates from their bid breakdown (matching the estimate)
-3. Enters the budget rate they plan to use
-4. System auto-calculates the contingency
-5. LRCN amount appears as a material line item in exports
-6. All settings persist across sessions
+### Files Modified
+| File | Change |
+|------|--------|
+| `src/pages/Index.tsx` | Add buyout tab rendering + pass buyout total to header |
+| `src/components/NavigationTabs.tsx` | Rename tab label |
+| `src/components/EstimateHeader.tsx` | Add Buyout Value stat card |
+| `src/types/estimate.ts` | Add optional `buyoutTotal` to `ProjectStats` |
+
+### Design Details
+- Dark theme compatible using existing CSS variables (bg-card, text-foreground, border-border, etc.)
+- Font classes: `font-mono` for numbers, default sans for text (matching existing patterns)
+- Status badge colors: gray (Not Started), blue (Quoted), green (Awarded), orange (PO Issued), emerald (Delivered)
+- Savings: green text/bg for positive savings, red for overages
+- Consolidation grouping shows item count badge (e.g., "12 items" rolled up)
+
