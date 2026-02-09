@@ -56,6 +56,7 @@ export interface ProjectStats {
   totalHours: number;
   itemsCoded: number;
   codingCompletion: number;
+  buyoutTotal?: number;
 }
 
 export interface SystemMapping {

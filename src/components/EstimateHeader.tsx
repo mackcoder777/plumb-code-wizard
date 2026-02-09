@@ -1,7 +1,7 @@
 import React from 'react';
 import { ProjectStats } from '@/types/estimate';
 import { Button } from '@/components/ui/button';
-import { FileText, DollarSign, Clock, Package } from 'lucide-react';
+import { FileText, DollarSign, Clock, Package, ShoppingCart } from 'lucide-react';
 
 interface EstimateHeaderProps {
   projectName: string;
@@ -41,7 +41,7 @@ export const EstimateHeader: React.FC<EstimateHeaderProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+      <div className={`grid grid-cols-2 ${stats.buyoutTotal !== undefined ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4 mt-8`}>
         <StatCard
           icon={<Package className="w-6 h-6" />}
           label="Total Items"
@@ -62,6 +62,13 @@ export const EstimateHeader: React.FC<EstimateHeaderProps> = ({
           label="Coding Progress"
           value={`${stats.codingCompletion}%`}
         />
+        {stats.buyoutTotal !== undefined && (
+          <StatCard
+            icon={<ShoppingCart className="w-6 h-6" />}
+            label="Buyout Value"
+            value={`$${stats.buyoutTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          />
+        )}
       </div>
     </header>
   );

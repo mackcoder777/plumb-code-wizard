@@ -24,7 +24,7 @@ const tabs = [
   { id: 'pdf-import', label: 'PDF Import', icon: FileText },
   { id: 'costcodes', label: 'Cost Codes', icon: DollarSign },
   { id: 'automation', label: 'Auto-Assignment', icon: Bot },
-  { id: 'buyout', label: 'Buyout Reports', icon: ShoppingCart },
+  { id: 'buyout', label: 'Bulk Buyout', icon: ShoppingCart },
   { id: 'comparison', label: 'Estimate vs Actual', icon: TrendingUp },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
 ];
