@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import BulkBuyoutTab from '@/components/tabs/BulkBuyoutTab';
 import * as XLSX from 'xlsx';
 import { MappingCombobox } from '@/components/MappingCombobox';
 import { MaterialMappingTab } from '@/components/tabs/MaterialMappingTab';
@@ -1888,7 +1889,7 @@ const EnhancedCostCodeManager = () => {
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50 items-center">
-          {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'rules'].map((tab) => (
+          {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'buyout', 'rules'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1903,6 +1904,7 @@ const EnhancedCostCodeManager = () => {
               {tab === 'mapping' && '🔗 Labor Mapping'}
               {tab === 'material-mapping' && '📦 Material Mapping'}
               {tab === 'budget' && '💰 Budget Builder'}
+              {tab === 'buyout' && '🛒 Bulk Buyout'}
               {tab === 'rules' && '🤖 Rules'}
             </button>
           ))}
@@ -2533,6 +2535,14 @@ const EnhancedCostCodeManager = () => {
                 </p>
               </div>
             )
+          )}
+
+          {/* Bulk Buyout Tab */}
+          {activeTab === 'buyout' && (
+            <BulkBuyoutTab
+              estimateData={estimateData}
+              projectId={currentProject?.id || 'default'}
+            />
           )}
 
           {/* PDF Import Tab */}
