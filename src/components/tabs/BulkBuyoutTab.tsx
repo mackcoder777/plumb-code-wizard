@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import {
   ShoppingCart, Download, TrendingUp, TrendingDown, Package,
-  DollarSign, BarChart3, ArrowUpDown, Layers,
+  DollarSign, BarChart3, ArrowUpDown, Layers, Search, X, Filter,
 } from 'lucide-react';
 import { useMaterialCodes, CostCode } from '@/hooks/useCostCodes';
 import {
@@ -116,6 +116,13 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
     }
   });
 
+  // Filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterSpec, setFilterSpec] = useState<string>('__all__');
+  const [filterSize, setFilterSize] = useState<string>('__all__');
+  const [filterCode, setFilterCode] = useState<string>('__all__');
+  const [filterStatus, setFilterStatus] = useState<string>('__all__');
+
   // Sort state
   const [sortField, setSortField] = useState<SortField>('estimateTotal');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -212,10 +219,55 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
     });
   }, [estimateData, buyoutPercent, vendorData, materialCodes]);
 
+  // ---------- filter options ----------
+
+  const filterOptions = useMemo(() => {
+    const specs = new Set<string>();
+    const sizes = new Set<string>();
+    const codes = new Set<string>();
+    consolidatedLines.forEach((l) => {
+      specs.add(l.materialSpec);
+      sizes.add(l.size);
+      if (l.materialCostCode) codes.add(l.materialCostCode);
+    });
+    return {
+      specs: Array.from(specs).sort(),
+      sizes: Array.from(sizes).sort(),
+      codes: Array.from(codes).sort(),
+    };
+  }, [consolidatedLines]);
+
+  // ---------- filtered lines ----------
+
+  const filteredLines = useMemo(() => {
+    return consolidatedLines.filter((l) => {
+      if (filterSpec !== '__all__' && l.materialSpec !== filterSpec) return false;
+      if (filterSize !== '__all__' && l.size !== filterSize) return false;
+      if (filterCode !== '__all__' && l.materialCostCode !== filterCode) return false;
+      if (filterStatus !== '__all__' && l.status !== filterStatus) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const searchable = `${l.materialSpec} ${l.materialDesc} ${l.size} ${l.vendorName} ${l.materialCostCode}`.toLowerCase();
+        if (!searchable.includes(term)) return false;
+      }
+      return true;
+    });
+  }, [consolidatedLines, filterSpec, filterSize, filterCode, filterStatus, searchTerm]);
+
+  const hasActiveFilters = filterSpec !== '__all__' || filterSize !== '__all__' || filterCode !== '__all__' || filterStatus !== '__all__' || searchTerm !== '';
+
+  const clearAllFilters = () => {
+    setFilterSpec('__all__');
+    setFilterSize('__all__');
+    setFilterCode('__all__');
+    setFilterStatus('__all__');
+    setSearchTerm('');
+  };
+
   // ---------- sorting ----------
 
   const sortedLines = useMemo(() => {
-    const sorted = [...consolidatedLines];
+    const sorted = [...filteredLines];
     sorted.sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
@@ -238,15 +290,15 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [consolidatedLines, sortField, sortDir]);
+  }, [filteredLines, sortField, sortDir]);
 
-  // ---------- summary ----------
+  // ---------- summary (based on filtered lines) ----------
 
   const summary = useMemo(() => {
-    const totalEstimateValue = consolidatedLines.reduce(
+    const totalEstimateValue = filteredLines.reduce(
       (s, l) => s + l.estimateTotal, 0,
     );
-    const quotedLines = consolidatedLines.filter(
+    const quotedLines = filteredLines.filter(
       (l) => l.quotedUnitPrice !== null,
     );
     const totalQuotedValue = quotedLines.reduce(
@@ -257,12 +309,12 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
       totalEstimateValue > 0
         ? (totalSavings / totalEstimateValue) * 100
         : 0;
-    const awardedLines = consolidatedLines.filter(
+    const awardedLines = filteredLines.filter(
       (l) => l.status === 'awarded' || l.status === 'po_issued' || l.status === 'delivered',
     ).length;
 
     const byMaterialCode: Record<string, { code: string; estimateValue: number; quotedValue: number; savings: number }> = {};
-    consolidatedLines.forEach((l) => {
+    filteredLines.forEach((l) => {
       const code = l.materialCostCode || 'UNASSIGNED';
       if (!byMaterialCode[code]) {
         byMaterialCode[code] = { code, estimateValue: 0, quotedValue: 0, savings: 0 };
@@ -277,11 +329,11 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
       totalQuotedValue,
       totalSavings,
       totalSavingsPercent,
-      totalLines: consolidatedLines.length,
+      totalLines: filteredLines.length,
       awardedLines,
       byMaterialCode,
     };
-  }, [consolidatedLines]);
+  }, [filteredLines]);
 
   // ---------- mutations ----------
 
@@ -352,8 +404,9 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
             Bulk Buyout
           </h2>
           <p className="text-muted-foreground text-sm mt-1">
-            {summary.totalLines} consolidated lines from{' '}
-            {estimateData.length.toLocaleString()} estimate items
+            {hasActiveFilters
+              ? `${summary.totalLines} of ${consolidatedLines.length} lines (filtered)`
+              : `${summary.totalLines} consolidated lines from ${estimateData.length.toLocaleString()} estimate items`}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -378,11 +431,80 @@ const BulkBuyoutTab: React.FC<BulkBuyoutTabProps> = ({ estimateData, projectId }
             onClick={() => exportBuyoutPackage(sortedLines, `Project_${projectId}`)}
             variant="outline"
             className="gap-2"
+            title={hasActiveFilters ? 'Exports filtered lines only' : 'Exports all buyout lines'}
           >
             <Download className="w-4 h-4" />
-            Generate Buyout Package
+            {hasActiveFilters ? `Export Filtered (${sortedLines.length})` : 'Generate Buyout Package'}
           </Button>
         </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-lg p-3">
+        <Filter className="w-4 h-4 text-muted-foreground" />
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            className="h-8 text-sm pl-7 w-[180px]"
+            placeholder="Search materials..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <Select value={filterSpec} onValueChange={setFilterSpec}>
+          <SelectTrigger className="h-8 text-xs w-[180px]">
+            <SelectValue placeholder="Material Spec" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Specs</SelectItem>
+            {filterOptions.specs.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterSize} onValueChange={setFilterSize}>
+          <SelectTrigger className="h-8 text-xs w-[120px]">
+            <SelectValue placeholder="Size" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Sizes</SelectItem>
+            {filterOptions.sizes.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterCode} onValueChange={setFilterCode}>
+          <SelectTrigger className="h-8 text-xs w-[140px]">
+            <SelectValue placeholder="Cost Code" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Codes</SelectItem>
+            {filterOptions.codes.map((c) => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="h-8 text-xs w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Statuses</SelectItem>
+            {STATUS_ORDER.map((s) => (
+              <SelectItem key={s} value={s}>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-block w-2 h-2 rounded-full ${BUYOUT_STATUS_CONFIG[s].bgColor}`} />
+                  {BUYOUT_STATUS_CONFIG[s].label}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-8 text-xs gap-1">
+            <X className="w-3 h-3" /> Clear Filters
+          </Button>
+        )}
       </div>
 
       {/* Summary Cards */}
