@@ -157,6 +157,12 @@ export function aggregateLaborByCostCode(
   const aggregated = new Map<string, AggregatedLabor>();
 
   items.forEach(item => {
+    const hours = parseFloat(String(item.hours)) || 0;
+    const laborDollars = parseFloat(String(item.laborDollars)) || 0;
+    
+    // Skip zero-hour items entirely
+    if (hours === 0 && laborDollars === 0) return;
+
     // Priority: explicit laborSec > floor mapping > suggested section > default
     let sec = item.laborSec || item.suggestedCode?.section;
     if (!sec && item.floor) {
@@ -175,12 +181,15 @@ export function aggregateLaborByCostCode(
       costHead = item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '';
     }
     
-    if (!costHead) return; // Skip items without labor code
+    let description = item.laborDescription || item.suggestedCode?.description || '';
+
+    // CRITICAL FIX: Bucket uncoded items instead of dropping them
+    if (!costHead) {
+      costHead = 'UNCD';
+      description = 'UNCODED ITEMS';
+    }
     
     const costCode = `${sec} ${act} ${costHead}`;
-    const description = item.laborDescription || item.suggestedCode?.description || '';
-    const hours = parseFloat(String(item.hours)) || 0;
-    const laborDollars = parseFloat(String(item.laborDollars)) || 0;
 
     if (aggregated.has(costCode)) {
       const existing = aggregated.get(costCode)!;
@@ -235,6 +244,30 @@ export function aggregateMaterialByCostCode(items: ExportEstimateItem[]): Aggreg
 
   return Array.from(aggregated.values())
     .sort((a, b) => a.costCode.localeCompare(b.costCode));
+}
+
+/**
+ * Validates that exported hours match raw item hours.
+ * Logs a warning if there's a mismatch (prevents silent hour loss).
+ */
+function validateHoursReconciliation(
+  items: ExportEstimateItem[],
+  laborSummary: AggregatedLabor[]
+): void {
+  const rawTotal = items.reduce((sum, item) => {
+    return sum + (parseFloat(String(item.hours)) || 0);
+  }, 0);
+  
+  const exportTotal = laborSummary.reduce((sum, entry) => sum + entry.hours, 0);
+  const delta = Math.abs(rawTotal - exportTotal);
+  
+  if (delta >= 0.1) {
+    console.warn(
+      `⚠️ HOURS RECONCILIATION MISMATCH: Raw ${rawTotal.toFixed(2)} hrs vs export ${exportTotal.toFixed(2)} hrs. Delta: ${delta.toFixed(2)} hrs.`
+    );
+  } else {
+    console.log(`✓ Hours reconciliation passed: ${rawTotal.toFixed(2)} hrs`);
+  }
 }
 
 // ============================================
@@ -295,6 +328,7 @@ export function exportBudgetPacket(
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
     const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, categoryMappings);
+    validateHoursReconciliation(items, rawLaborSummary);
     laborData = rawLaborSummary.map(item => ({
       code: item.costCode,
       description: item.description,
