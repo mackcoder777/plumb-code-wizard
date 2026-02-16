@@ -309,10 +309,10 @@ export function exportBudgetPacket(
       }))
       .sort((a, b) => a.code.localeCompare(b.code));
 
-    // CORRECT: totalFieldHours + totalFabHours already accounts for all strips
-    // Foreman bonus hours are NOT included in labor - they become FCNT (material contingency)
-    totalLaborHours = budgetAdjustments.totalFieldHours + budgetAdjustments.totalFabHours;
-    totalLaborDollars = budgetAdjustments.totalLaborDollars;
+    // CRITICAL: Compute totals from the SAME data that gets written to rows
+    // This ensures H55 totals always match the sum of individual rows
+    totalLaborHours = laborData.reduce((sum, i) => sum + i.hours, 0);
+    totalLaborDollars = laborData.reduce((sum, i) => sum + i.dollars, 0);
 
     // Material: Include tax directly in each code's amount (tax-inclusive amounts)
     materialData = (budgetAdjustments.materialTaxSummary || [])
@@ -389,9 +389,12 @@ export function exportBudgetPacket(
   ws['I18'] = { t: 's', v: 'RATE' };
   ws['J18'] = { t: 's', v: 'TOTAL COST' };
 
-  // Labor data: Rows 19-54 (35 rows max, but need room for section headers)
+  // Labor data: dynamic row count based on actual data
   const LABOR_START_ROW = 19;
-  const LABOR_END_ROW = 54;
+  // Calculate needed rows: count items + section headers
+  const sectionCount = new Set(laborData.map(item => parseLaborCode(item.code).section)).size;
+  const neededLaborRows = laborData.length + sectionCount;
+  const LABOR_END_ROW = LABOR_START_ROW + neededLaborRows; // Dynamic end
   
   // Parse and normalize labor codes, group by section
   const parsedLabor = laborData.map(item => {
@@ -422,21 +425,18 @@ export function exportBudgetPacket(
   const sortedSections = Array.from(sectionGroups.keys()).sort();
   
   let laborRowIndex = 0;
+  const laborDataRows: number[] = []; // Track rows with actual hour data for SUM formulas
   sortedSections.forEach(section => {
-    const items = sectionGroups.get(section)!;
+    const sectionItems = sectionGroups.get(section)!;
     
-    // Add section header if there's room
-    if (laborRowIndex < 34) {
-      const headerRow = LABOR_START_ROW + laborRowIndex;
-      const sectionDesc = getSectionDescription(section);
-      ws[`B${headerRow}`] = { t: 's', v: `SECTION ${section} - ${sectionDesc}` };
-      laborRowIndex++;
-    }
+    // Add section header
+    const headerRow = LABOR_START_ROW + laborRowIndex;
+    const sectionDesc = getSectionDescription(section);
+    ws[`B${headerRow}`] = { t: 's', v: `SECTION ${section} - ${sectionDesc}` };
+    laborRowIndex++;
     
     // Add items in this section
-    items.forEach(item => {
-      if (laborRowIndex >= 35) return; // Max rows reached
-      
+    sectionItems.forEach(item => {
       const row = LABOR_START_ROW + laborRowIndex;
       
       ws[`B${row}`] = { t: 's', v: item.normalizedCode };
@@ -448,55 +448,67 @@ export function exportBudgetPacket(
       }
       
       ws[`J${row}`] = { t: 'n', v: Math.round(item.dollars * 100) / 100, z: '#,##0' };
+      laborDataRows.push(row); // Track this row for SUM formula
       laborRowIndex++;
     });
   });
 
-  // Fill remaining labor rows with formula structure
-  for (let row = LABOR_START_ROW + laborRowIndex; row <= LABOR_END_ROW; row++) {
-    ws[`J${row}`] = { t: 'n', f: `I${row}*H${row}`, v: 0, z: '#,##0' };
-  }
+  // TOTALS row: dynamic position right after data
+  const TOTALS_ROW = LABOR_START_ROW + laborRowIndex + 1;
+  
+  // Use SUM formulas so totals ALWAYS match the visible rows
+  const hoursSumParts = laborDataRows.map(r => `H${r}`).join('+');
+  const dollarsSumParts = laborDataRows.map(r => `J${r}`).join('+');
+  
+  ws[`E${TOTALS_ROW}`] = { t: 's', v: 'TOTALS' };
+  ws[`H${TOTALS_ROW}`] = { 
+    t: 'n', 
+    f: hoursSumParts || '0',
+    v: Math.round(laborData.reduce((s, i) => s + i.hours, 0) * 10) / 10,
+    z: '#,##0.0' 
+  };
+  ws[`J${TOTALS_ROW}`] = { 
+    t: 'n', 
+    f: dollarsSumParts || '0',
+    v: Math.round(laborData.reduce((s, i) => s + i.dollars, 0) * 100) / 100,
+    z: '#,##0' 
+  };
 
-  // Row 55: Labor TOTALS
-  ws['E55'] = { t: 's', v: 'TOTALS' };
-  ws['H55'] = { t: 'n', v: Math.round(totalLaborHours * 10) / 10, z: '#,##0.0' };
-  ws['J55'] = { t: 'n', v: Math.round(totalLaborDollars * 100) / 100, z: '#,##0' };
+  // ===== SECOND HEADER BLOCK - Before Material Section =====
+  const HEADER2_START = TOTALS_ROW + 3;
+  ws[`D${HEADER2_START}`] = { t: 's', v: '   CHANGE ORDER' };
+  ws[`E${HEADER2_START + 1}`] = { t: 's', v: '   WORKSHEET' };
+  
+  ws[`B${HEADER2_START + 4}`] = { t: 's', v: 'JOB #:' };
+  ws[`C${HEADER2_START + 4}`] = { t: 's', v: projectInfo.jobNumber };
+  ws[`G${HEADER2_START + 4}`] = { t: 's', v: '0' };
+  ws[`H${HEADER2_START + 4}`] = { t: 's', v: '  Pending Change Order (MPCO)' };
+  
+  ws[`B${HEADER2_START + 5}`] = { t: 's', v: 'JOB NAME:' };
+  ws[`C${HEADER2_START + 5}`] = { t: 's', v: projectInfo.jobName };
+  ws[`H${HEADER2_START + 5}`] = { t: 's', v: ' MCE # (s)' };
+  ws[`I${HEADER2_START + 5}`] = { t: 's', v: 'Initial Budget' };
+  
+  ws[`B${HEADER2_START + 6}`] = { t: 's', v: 'DATE:' };
+  ws[`C${HEADER2_START + 6}`] = { t: 's', v: projectInfo.date.toLocaleDateString() };
+  
+  ws[`B${HEADER2_START + 7}`] = { t: 's', v: 'BY:' };
+  ws[`C${HEADER2_START + 7}`] = { t: 's', v: projectInfo.preparedBy };
+  ws[`H${HEADER2_START + 7}`] = { t: 's', v: '  Change Order  (CO)' };
+  
+  ws[`H${HEADER2_START + 8}`] = { t: 's', v: ' (if PCO transfer to CO, see page 2)' };
+  ws[`H${HEADER2_START + 9}`] = { t: 's', v: '     CO # ' };
+  ws[`I${HEADER2_START + 9}`] = { t: 's', v: '0' };
+  
+  ws[`B${HEADER2_START + 11}`] = { t: 's', v: 'Client Change Reference:' };
+  ws[`G${HEADER2_START + 11}`] = { t: 's', v: 'X' };
+  ws[`H${HEADER2_START + 11}`] = { t: 's', v: 'Original Budget' };
+  ws[`I${HEADER2_START + 12}`] = { t: 's', v: '0' };
 
-  // ===== SECOND HEADER BLOCK (Rows 58-71) - Before Material Section =====
-  ws['D58'] = { t: 's', v: '   CHANGE ORDER' };
-  ws['E59'] = { t: 's', v: '   WORKSHEET' };
-  
-  ws['B62'] = { t: 's', v: 'JOB #:' };
-  ws['C62'] = { t: 's', v: projectInfo.jobNumber };
-  ws['G62'] = { t: 's', v: '0' };
-  ws['H62'] = { t: 's', v: '  Pending Change Order (MPCO)' };
-  
-  ws['B63'] = { t: 's', v: 'JOB NAME:' };
-  ws['C63'] = { t: 's', v: projectInfo.jobName };
-  ws['H63'] = { t: 's', v: ' MCE # (s)' };
-  ws['I63'] = { t: 's', v: 'Initial Budget' };
-  
-  ws['B64'] = { t: 's', v: 'DATE:' };
-  ws['C64'] = { t: 's', v: projectInfo.date.toLocaleDateString() };
-  
-  ws['B65'] = { t: 's', v: 'BY:' };
-  ws['C65'] = { t: 's', v: projectInfo.preparedBy };
-  ws['H65'] = { t: 's', v: '  Change Order  (CO)' };
-  
-  ws['H66'] = { t: 's', v: ' (if PCO transfer to CO, see page 2)' };
-  ws['H67'] = { t: 's', v: '     CO # ' };
-  ws['I67'] = { t: 's', v: '0' };
-  
-  ws['B69'] = { t: 's', v: 'Client Change Reference:' };
-  ws['G69'] = { t: 's', v: 'X' };
-  ws['H69'] = { t: 's', v: 'Original Budget' };
-  ws['I70'] = { t: 's', v: '0' };
-
-  // ===== MATERIAL BREAKDOWN SECTION (Rows 73-108) =====
-  const MATERIAL_HEADER_ROW = 73;
-  const MATERIAL_COLS_ROW = 74;
-  const MATERIAL_START_ROW = 75;
-  const MATERIAL_END_ROW = 108;
+  // ===== MATERIAL BREAKDOWN SECTION =====
+  const MATERIAL_HEADER_ROW = HEADER2_START + 15;
+  const MATERIAL_COLS_ROW = MATERIAL_HEADER_ROW + 1;
+  const MATERIAL_START_ROW = MATERIAL_COLS_ROW + 1;
   
   ws[`B${MATERIAL_HEADER_ROW}`] = { t: 's', v: 'MATERIAL BREAKDOWN' };
   
@@ -504,11 +516,9 @@ export function exportBudgetPacket(
   ws[`D${MATERIAL_COLS_ROW}`] = { t: 's', v: 'DESCRIPTION' };
   ws[`H${MATERIAL_COLS_ROW}`] = { t: 's', v: 'AMOUNT' };
 
-  // Material data: Rows 75-108 (33 rows max)
+  // Material data rows
   let materialRowIndex = 0;
   materialData.forEach((item) => {
-    if (materialRowIndex >= 32) return; // Leave room for tax line
-    
     const row = MATERIAL_START_ROW + materialRowIndex;
     
     // Format material code as "01 0000 {code}" to match template format
@@ -520,15 +530,12 @@ export function exportBudgetPacket(
     materialRowIndex++;
   });
 
-  // Note: Sales tax is now included directly in each material code's amount (not a separate line)
-
   // Add Foreman Bonus Contingency (FCNT) to material section if enabled
   if (budgetAdjustments && budgetAdjustments.foremanBonusEnabled && budgetAdjustments.foremanBonusDollars > 0) {
     const fcntRow = MATERIAL_START_ROW + materialRowIndex;
     ws[`B${fcntRow}`] = { t: 's', v: 'GC 0000 FCNT' };
     ws[`D${fcntRow}`] = { t: 's', v: `FIELD BONUS CONTINGENCY ${budgetAdjustments.foremanBonusPercent}% - STRIP OF FIELD LABOR` };
     ws[`H${fcntRow}`] = { t: 'n', v: Math.round(budgetAdjustments.foremanBonusDollars * 100) / 100, z: '#,##0.00' };
-    // Update totalMaterialDollars to include FCNT
     totalMaterialDollars += budgetAdjustments.foremanBonusDollars;
     materialRowIndex++;
   }
@@ -539,47 +546,48 @@ export function exportBudgetPacket(
     ws[`B${lrcnRow}`] = { t: 's', v: '01 0000 LRCN' };
     ws[`D${lrcnRow}`] = { t: 's', v: 'LABOR RATE CONTINGENCY' };
     ws[`H${lrcnRow}`] = { t: 'n', v: Math.round(budgetAdjustments.lrcnAmount * 100) / 100, z: '#,##0.00' };
-    // Update totalMaterialDollars to include LRCN
     totalMaterialDollars += budgetAdjustments.lrcnAmount;
     materialRowIndex++;
   }
 
-  // ===== RIGHT-SIDE SUMMARY BOX (Rows 77-81, Columns J-K) =====
+  // ===== RIGHT-SIDE SUMMARY BOX (next to material section) =====
   const grandTotal = totalLaborDollars + totalMaterialDollars;
-  ws['J77'] = { t: 's', v: 'TOTAL COST' };
-  ws['K77'] = { 
+  const SUMMARY_BOX_ROW = MATERIAL_START_ROW + 2;
+  ws[`J${SUMMARY_BOX_ROW}`] = { t: 's', v: 'TOTAL COST' };
+  ws[`K${SUMMARY_BOX_ROW}`] = { 
     t: 'n', 
     v: Math.round(grandTotal * 100) / 100,
     z: '#,##0.00'
   };
   
-  ws['J78'] = { t: 's', v: 'PLUS' };
+  ws[`J${SUMMARY_BOX_ROW + 1}`] = { t: 's', v: 'PLUS' };
   
-  ws['J79'] = { t: 's', v: 'MARKUP' };
-  ws['K79'] = { t: 'n', v: 0, z: '#,##0' };
+  ws[`J${SUMMARY_BOX_ROW + 2}`] = { t: 's', v: 'MARKUP' };
+  ws[`K${SUMMARY_BOX_ROW + 2}`] = { t: 'n', v: 0, z: '#,##0' };
   
-  ws['J80'] = { t: 's', v: 'TOTAL' };
-  ws['K80'] = { 
+  ws[`J${SUMMARY_BOX_ROW + 3}`] = { t: 's', v: 'TOTAL' };
+  ws[`K${SUMMARY_BOX_ROW + 3}`] = { 
     t: 'n', 
     v: Math.round(grandTotal * 100) / 100,
     z: '#,##0.00'
   };
   
-  ws['J81'] = { t: 's', v: '(PCO, TRNSFR, CO, or RVSN)' };
+  ws[`J${SUMMARY_BOX_ROW + 4}`] = { t: 's', v: '(PCO, TRNSFR, CO, or RVSN)' };
 
-  // ===== BOTTOM SUMMARY ROWS (Rows 110, 112, 114) =====
-  ws['G110'] = { t: 's', v: 'MATERIAL TOTAL -->' };
-  ws['H110'] = { 
+  // ===== BOTTOM SUMMARY ROWS =====
+  const BOTTOM_START = MATERIAL_START_ROW + materialRowIndex + 2;
+  ws[`G${BOTTOM_START}`] = { t: 's', v: 'MATERIAL TOTAL -->' };
+  ws[`H${BOTTOM_START}`] = { 
     t: 'n', 
     v: Math.round(totalMaterialDollars * 100) / 100,
     z: '#,##0.00'
   };
   
-  ws['G112'] = { t: 's', v: 'LABOR TOTAL -->' };
-  ws['H112'] = { t: 'n', v: Math.round(totalLaborDollars * 100) / 100, z: '#,##0.00' };
+  ws[`G${BOTTOM_START + 2}`] = { t: 's', v: 'LABOR TOTAL -->' };
+  ws[`H${BOTTOM_START + 2}`] = { t: 'n', v: Math.round(totalLaborDollars * 100) / 100, z: '#,##0.00' };
   
-  ws['G114'] = { t: 's', v: 'TOTAL -->' };
-  ws['H114'] = { t: 'n', v: Math.round(grandTotal * 100) / 100, z: '#,##0.00' };
+  ws[`G${BOTTOM_START + 4}`] = { t: 's', v: 'TOTAL -->' };
+  ws[`H${BOTTOM_START + 4}`] = { t: 'n', v: Math.round(grandTotal * 100) / 100, z: '#,##0.00' };
 
   // ===== WORKSHEET CONFIGURATION =====
   ws['!cols'] = [
@@ -596,7 +604,8 @@ export function exportBudgetPacket(
     { wch: 14 },  // K - Summary values
   ];
 
-  ws['!ref'] = 'A1:K115';
+  const lastRow = BOTTOM_START + 5;
+  ws['!ref'] = `A1:K${lastRow}`;
 
   XLSX.utils.book_append_sheet(wb, ws, 'Initial Budget');
 
