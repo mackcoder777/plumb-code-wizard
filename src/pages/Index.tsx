@@ -695,13 +695,22 @@ const EnhancedCostCodeManager = () => {
     };
   }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor]);
 
-  // Load saved items when project changes - apply category mappings during load
+  // Guard ref to prevent auto-apply from running multiple times per project
+  const hasAutoAppliedRef = useRef<string | null>(null);
+
+  // Reset auto-apply guard when project changes
+  useEffect(() => {
+    if (currentProject?.id && hasAutoAppliedRef.current !== currentProject.id) {
+      hasAutoAppliedRef.current = null;
+    }
+  }, [currentProject?.id]);
+
+  // Load saved items when project changes - apply category AND system mappings during load, then persist
   useEffect(() => {
     if (savedItems.length > 0 && currentProject?.id) {
-      // Transform database items to the format used by the UI
-      // AND apply category labor mappings during transformation
+      const itemsNeedingPersist: Array<{ row_number: number; cost_code: string }> = [];
+
       const transformedItems = savedItems.map((item) => {
-        // Start with base transformation
         const baseItem = {
           id: item.id,
           drawing: item.drawing || '',
@@ -732,31 +741,92 @@ const EnhancedCostCodeManager = () => {
             floor: item.floor || ''
           })
         };
-        
-        // Apply category labor mapping ONLY if item doesn't already have a saved cost_code
-        // This preserves system mappings that were already applied and saved to the database
-        if (!item.cost_code && dbCategoryMappings.length > 0 && item.report_cat) {
-          const categoryCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
-          if (categoryCode) {
-            // Build the full cost code with section (from DB floor mappings) and activity
-            const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
-            const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
-            baseItem.costCode = `${section} ${activity} ${categoryCode}`;
+
+        // Priority 1: Existing DB code — keep as-is
+        if (item.cost_code) {
+          return baseItem;
+        }
+
+        // Priority 2: Category mapping
+        let appliedCode: string | null = null;
+        if (dbCategoryMappings.length > 0 && item.report_cat) {
+          appliedCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
+        }
+
+        // Priority 3: System mapping fallback (when category returns null, including __SYSTEM__ defer)
+        if (!appliedCode && item.system && savedMappings.length > 0) {
+          const normalizedSystem = (item.system || '').toLowerCase().trim();
+          const sysMapping = savedMappings.find(
+            m => m.system_name.toLowerCase().trim() === normalizedSystem
+          );
+          if (sysMapping?.cost_head) {
+            const costHead = sysMapping.cost_head;
+            const [, laborCode] = costHead.includes('|')
+              ? costHead.split('|')
+              : ['', costHead];
+            if (laborCode) {
+              appliedCode = laborCode;
+            }
           }
         }
-        
+
+        // Build full cost code with section + activity + cost head
+        if (appliedCode) {
+          const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
+          const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
+          baseItem.costCode = `${section} ${activity} ${appliedCode}`;
+
+          // Track for batch persistence
+          itemsNeedingPersist.push({
+            row_number: item.row_number,
+            cost_code: baseItem.costCode
+          });
+        }
+
         return baseItem;
       });
-      
+
       const appliedCount = transformedItems.filter(i => i.costCode).length;
       const preservedCount = savedItems.filter(i => i.cost_code).length;
-      console.log(`[Load] Loaded ${transformedItems.length} items, ${preservedCount} had saved labor codes (preserved), ${appliedCount - preservedCount} got category mappings applied`);
-      
+      const newlyApplied = itemsNeedingPersist.length;
+      console.log(`[Load] Loaded ${transformedItems.length} items, ${preservedCount} preserved from DB, ${newlyApplied} newly applied from mappings`);
+
       setEstimateData(transformedItems);
       setFilteredData(transformedItems);
       setFileName(currentProject.file_name || '');
+
+      // Batch persist newly applied codes to database (once per project load)
+      if (newlyApplied > 0 && hasAutoAppliedRef.current !== currentProject.id) {
+        hasAutoAppliedRef.current = currentProject.id;
+        console.log(`[AutoApply] Persisting ${newlyApplied} labor codes to database...`);
+
+        // Save in batches of 50
+        const batchSize = 50;
+        const batches: Array<Array<{ row_number: number; cost_code: string }>> = [];
+        for (let i = 0; i < itemsNeedingPersist.length; i += batchSize) {
+          batches.push(itemsNeedingPersist.slice(i, i + batchSize));
+        }
+
+        (async () => {
+          try {
+            for (const batch of batches) {
+              await batchUpdateSystemCostCodes.mutateAsync({
+                projectId: currentProject.id,
+                system: '__auto_apply__',
+                itemUpdates: batch.map(u => ({
+                  row_number: u.row_number,
+                  cost_code: u.cost_code
+                }))
+              });
+            }
+            console.log(`[AutoApply] Successfully saved ${newlyApplied} labor codes to database`);
+          } catch (err) {
+            console.error('[AutoApply] Failed to persist labor codes:', err);
+          }
+        })();
+      }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings, dbFloorMappings, dbActivityMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings, dbFloorMappings, dbActivityMappings, savedMappings]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
