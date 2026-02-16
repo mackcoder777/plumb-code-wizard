@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Download, ChevronDown, FileSpreadsheet, FileText, Check, X, Settings2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Download, ChevronDown, FileSpreadsheet, FileText, Check, X, Settings2, AlertTriangle } from 'lucide-react';
 import { 
   exportBudgetPacket, 
   exportAuditReport, 
@@ -34,6 +34,21 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [includeAdjustments, setIncludeAdjustments] = useState(true);
+
+  // Calculate uncoded items stats
+  const uncodedStats = useMemo(() => {
+    let uncodedItems = 0;
+    let uncodedHours = 0;
+    items.forEach(item => {
+      const costHead = item.laborCostHead || item.costCode || '';
+      const hours = parseFloat(String(item.hours)) || 0;
+      if (!costHead && hours > 0) {
+        uncodedItems++;
+        uncodedHours += hours;
+      }
+    });
+    return { uncodedItems, uncodedHours };
+  }, [items]);
 
   // Check if there are any adjustments available
   const hasAdjustments = budgetAdjustments && (
@@ -187,6 +202,18 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
                 <div className="flex items-center gap-2 text-xs text-amber-700">
                   <Settings2 className="h-3 w-3" />
                   No adjustments configured in Budget Builder
+                </div>
+              </div>
+            )}
+
+            {/* Uncoded Items Warning */}
+            {uncodedStats.uncodedItems > 0 && (
+              <div className="px-3 py-2 border-b border-border">
+                <div className="flex items-center gap-2 text-xs font-medium text-amber-600">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>
+                    {uncodedStats.uncodedItems} items ({uncodedStats.uncodedHours.toFixed(1)} hrs) have no labor code — will export as UNCD
+                  </span>
                 </div>
               </div>
             )}

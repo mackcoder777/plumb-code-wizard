@@ -2528,27 +2528,36 @@ const EnhancedCostCodeManager = () => {
                     const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
                     estimateData.forEach((item: any) => {
                       const rawCostHead = item.costCode || item.laborCostCode;
-                      if (!rawCostHead) return;
+                      const hours = item.hours || 0;
                       
-                      // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
-                      const parts = rawCostHead.trim().split(/\s+/);
+                      // Skip zero-hour items
+                      if (hours === 0) return;
+
                       let costHead: string;
                       let existingSection: string | null = null;
                       let existingActivity: string | null = null;
                       
-                      // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
-                      if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                        // Doubled - extract real values
-                        existingSection = parts[0];
-                        existingActivity = parts[1];
-                        costHead = parts.slice(4).join(' ');
-                      } else if (parts.length >= 3) {
-                        // Normal format with section/activity
-                        existingSection = parts[0];
-                        existingActivity = parts[1];
-                        costHead = parts.slice(2).join(' ');
+                      if (!rawCostHead) {
+                        // CRITICAL FIX: Bucket uncoded items instead of skipping
+                        costHead = 'UNCD';
+                        existingSection = getSectionFromFloor(item.floor, dbFloorMappings);
+                        existingActivity = '0000';
                       } else {
-                        costHead = rawCostHead;
+                        // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
+                        const parts = rawCostHead.trim().split(/\s+/);
+                        
+                        // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
+                        if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
+                          existingSection = parts[0];
+                          existingActivity = parts[1];
+                          costHead = parts.slice(4).join(' ');
+                        } else if (parts.length >= 3) {
+                          existingSection = parts[0];
+                          existingActivity = parts[1];
+                          costHead = parts.slice(2).join(' ');
+                        } else {
+                          costHead = rawCostHead;
+                        }
                       }
                       
                       // Use existing section/activity if present, otherwise derive from floor/system
@@ -2560,12 +2569,12 @@ const EnhancedCostCodeManager = () => {
                         const codeInfo = COST_CODES.find(c => c.code === costHead);
                         summary[fullCode] = {
                           code: fullCode,
-                          description: codeInfo?.description || costHead,
+                          description: costHead === 'UNCD' ? 'UNCODED ITEMS' : (codeInfo?.description || costHead),
                           fieldHours: 0,
                           rate: bidLaborRate
                         };
                       }
-                      summary[fullCode].fieldHours += item.hours || 0;
+                      summary[fullCode].fieldHours += hours;
                     });
                     return summary;
                   })()}
