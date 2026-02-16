@@ -1,88 +1,85 @@
 
 
-# Bulk Buyout Feature
+# Fix: Labor Code Assignments Lost on Every Reload
 
-A new full-featured tab that consolidates estimate line items by Material Spec + Size for early procurement tracking, vendor quoting, and savings analysis.
+## Problem
 
-## What You'll Get
+All 1033 estimate items have **empty `cost_code` in the database**, despite having 22 system mappings and 13 category mappings fully configured. The current load logic (Index.tsx line 738) applies category mappings to local React state only -- it never writes them back to the database. System mappings are never applied during load at all. Every page refresh starts from scratch with empty codes.
 
-**Buyout Setup Panel** -- A slider to select buyout percentage (50-100%), with estimate items automatically consolidated into buyout lines grouped by Material Spec + Size. Each line shows total quantities, buyout quantities, estimate pricing, and an auto-suggested material cost code (overridable via dropdown).
+This is a **design flaw**, not a one-off bug. The system has three layers of mapping rules (category, system, item-type) but no mechanism to automatically apply AND persist them on load.
 
-**Vendor Pricing Entry** -- Inline editable columns for Vendor Name, Quoted Unit Price (with auto-calculated totals), and PO Number. A color-coded Savings column shows green for under-budget and red for overages.
+## Root Cause (Three Issues)
 
-**Summary Dashboard** -- Cards showing Total Estimate Value, Total Buyout Value, Total Savings (dollar and %), and a breakdown by Material Code. A progress bar tracks how many buyout lines have been awarded.
+1. **Category mappings applied but not saved**: On load, the code checks `if (!item.cost_code)` and applies category mappings to local state (line 738-746), but never calls the database save mutation. Next reload, `cost_code` is empty again.
 
-**Status Tracking** -- Each buyout line gets a status badge: Not Started, Quoted, Awarded, PO Issued, or Delivered. Color-coded for quick visual scanning.
+2. **System mappings never applied on load**: For items where the category mapping is `__SYSTEM__` (Pipe, Fittings, Miscellaneous, Pipe_Fit -- which are the majority of items), `getLaborCodeFromCategory` returns `null`, so those items get no code. The system-to-labor-code mappings (e.g., "cold water" -> WATR) are only applied when the user manually clicks "Apply" in the Labor Mapping tab.
 
-**Excel Export** -- A "Generate Buyout Package" button exports the full buyout report as a standalone Excel file with all columns.
+3. **No batch persist after load-time application**: Even if both mapping types were applied during load, there is no batch database write to make those assignments stick.
 
-**Header Integration** -- A new "Buyout Value" stat card in the header showing total committed buyout dollars.
+## Solution
 
-## Technical Plan
+Add an automatic "apply all mappings and persist" step that runs once after project data loads. This uses the existing mapping rules (category + system) to assign codes to every item and batch-saves them to the database.
 
-### 1. New Types (`src/types/buyout.ts`)
+### Step 1: Apply System Mappings During Load (Index.tsx)
 
-Define interfaces for:
-- `BuyoutLine` -- consolidated line with: id, materialSpec, size, materialDesc, totalEstimateQty, buyoutPercent, buyoutQty, estimateUnitCost, estimateTotal, materialCostCode, vendorName, quotedUnitPrice, quotedTotal, savings, savingsPercent, poNumber, status, sourceItemCount
-- `BuyoutStatus` -- union type: 'not_started' | 'quoted' | 'awarded' | 'po_issued' | 'delivered'
-- `BuyoutSummary` -- totals and breakdown by material code
+In the existing `useEffect` that transforms saved items (line 698-759), add system mapping logic as a fallback when category mapping returns null:
 
-### 2. New Component (`src/components/tabs/BulkBuyoutTab.tsx`)
+```
+For each item with no cost_code:
+  1. Try category mapping (existing logic)
+  2. If category returns null (including __SYSTEM__ defer):
+     Look up system mapping from savedMappings (dbMappings)
+     Extract the laborCode from the stored cost_head (format: "materialCode|laborCode")
+     Build full code: section + activity + laborCode
+  3. Assign to item
+```
 
-Single component (~600-800 lines) containing:
-- **Buyout % selector** -- Slider from 50-100% in 10% increments
-- **Consolidation logic** -- `useMemo` that groups `estimateData` by `materialSpec + size`, sums quantities, calculates average unit cost from listPrice, and counts source items per group
-- **Auto-suggest material codes** -- Uses `useMaterialCodes()` hook, matches materialSpec patterns to suggest codes (reuses pattern matching from MaterialMappingTab)
-- **Editable table** -- Renders consolidated lines with inline inputs for vendor name, quoted price, PO number, and status dropdown
-- **Summary cards** -- Total estimate value, total quoted value, total savings with percentage
-- **Progress bar** -- X of Y lines awarded/completed
-- **Sort controls** -- By savings amount, material code, or status
-- **Export button** -- Generates Excel using `xlsx` library (already installed)
+This means the load-time transformation now handles both priority levels: Category first, System as fallback.
 
-State management: All buyout data (vendor quotes, statuses, PO numbers) stored in component state with `localStorage` persistence keyed by project ID, matching the pattern used by BudgetAdjustmentsPanel.
+### Step 2: Batch Persist Applied Codes to Database (Index.tsx)
 
-### 3. Wire Into Index.tsx
+After the load-time transformation, if any items received new codes (were previously empty in DB), trigger a batch database update using the existing `batchUpdateSystemCostCodes` mutation:
 
-- Add `activeTab === 'buyout'` conditional rendering block (similar to other tabs)
-- Pass `estimateData` and `currentProject?.id` as props
-- No new database tables needed -- buyout data persists via localStorage per-project
+```
+After transforming items:
+  - Collect all items that got codes applied (where DB had empty cost_code)
+  - Build itemUpdates array with row_number + cost_code pairs
+  - Call batchUpdateSystemCostCodes to save in batches of 50
+  - Log: "Auto-applied and saved X labor codes from mappings"
+```
 
-### 4. Update NavigationTabs.tsx
+This ensures codes survive the next reload because they are now in the database.
 
-- Rename existing tab label from "Buyout Reports" to "Bulk Buyout"
+### Step 3: Prevent Re-application Loop
 
-### 5. Update EstimateHeader.tsx
+Add a guard to prevent the auto-apply from firing repeatedly:
 
-- Add a 5th stat card "Buyout Value" showing total committed (awarded) buyout dollars
-- Accept optional `buyoutTotal` prop from Index.tsx
-- Adjust grid from `grid-cols-4` to `grid-cols-5`
+- Use a ref (`hasAutoAppliedRef`) that tracks whether auto-apply has already run for the current project
+- Reset the ref when `currentProject.id` changes
+- Only run the batch persist once per project load
 
-### 6. Export Utility (`src/utils/buyoutExport.ts`)
+## Technical Details
 
-Standalone Excel export function using the `xlsx` library:
-- Single sheet with columns: Material Code, Material Description, Size, Estimate Qty, Buyout Qty, Buyout %, Estimate Unit Cost, Estimate Total, Vendor, Quoted Unit Price, Quoted Total, Savings $, Savings %, PO Number, Status
-- Header row with project name and date
-- Summary row at bottom with totals
-
-### Files Created
-| File | Purpose |
-|------|---------|
-| `src/types/buyout.ts` | Type definitions |
-| `src/components/tabs/BulkBuyoutTab.tsx` | Main tab component |
-| `src/utils/buyoutExport.ts` | Excel export utility |
-
-### Files Modified
 | File | Change |
 |------|--------|
-| `src/pages/Index.tsx` | Add buyout tab rendering + pass buyout total to header |
-| `src/components/NavigationTabs.tsx` | Rename tab label |
-| `src/components/EstimateHeader.tsx` | Add Buyout Value stat card |
-| `src/types/estimate.ts` | Add optional `buyoutTotal` to `ProjectStats` |
+| `src/pages/Index.tsx` | Expand load-time useEffect (line 698-759) to also apply system mappings as fallback when category returns null |
+| `src/pages/Index.tsx` | Add a follow-up useEffect that batch-persists newly applied codes to DB using `batchUpdateSystemCostCodes` |
+| `src/pages/Index.tsx` | Add `hasAutoAppliedRef` guard to prevent re-application loops |
 
-### Design Details
-- Dark theme compatible using existing CSS variables (bg-card, text-foreground, border-border, etc.)
-- Font classes: `font-mono` for numbers, default sans for text (matching existing patterns)
-- Status badge colors: gray (Not Started), blue (Quoted), green (Awarded), orange (PO Issued), emerald (Delivered)
-- Savings: green text/bg for positive savings, red for overages
-- Consolidation grouping shows item count badge (e.g., "12 items" rolled up)
+### Mapping Priority (preserved)
+
+```text
+1. Saved DB code (cost_code not empty) --> keep as-is
+2. Category mapping (e.g., Valves -> VALV) --> apply + save
+3. System mapping (e.g., Cold Water -> WATR) --> apply + save
+4. No mapping found --> leave empty
+```
+
+### What Changes for the User
+
+- On project load, all items automatically get their labor codes from the configured mappings
+- Those codes are saved to the database immediately
+- Next reload shows 100% coded (or whatever percentage has mappings configured)
+- No manual "Apply" step needed -- mappings are always enforced
+- Manual overrides in the DB are still preserved (priority 1 above)
 
