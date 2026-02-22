@@ -23,8 +23,10 @@ import {
 } from '@/hooks/useFloorSectionMappings';
 
 interface FloorData {
-  floor: string;
+  displayName: string;
+  childFloors: string[];
   itemCount: number;
+  isGroup: boolean;
 }
 
 interface FloorSectionMappingPanelProps {
@@ -237,20 +239,46 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
 
-  // Extract unique floors from estimate data with counts
+  // Extract unique floors from estimate data, grouping by building
   const floorData = useMemo<FloorData[]>(() => {
-    const floorCounts = new Map<string, number>();
-    
+    const floorCounts: Record<string, number> = {};
     estimateData.forEach(item => {
-      const floor = (item.floor || '').trim();
-      if (floor) {
-        floorCounts.set(floor, (floorCounts.get(floor) || 0) + 1);
+      const f = (item.floor || '').trim();
+      if (f) floorCounts[f] = (floorCounts[f] || 0) + 1;
+    });
+
+    const buildingGroups: Record<string, { displayName: string; childFloors: string[]; itemCount: number }> = {};
+    const standaloneFloors: { floor: string; itemCount: number }[] = [];
+
+    Object.keys(floorCounts).forEach(floor => {
+      const bldgMatch = floor.match(/^bldg\s*(\w+)/i);
+      if (bldgMatch) {
+        const bldgKey = `Bldg ${bldgMatch[1]}`;
+        if (!buildingGroups[bldgKey]) {
+          buildingGroups[bldgKey] = { displayName: bldgKey, childFloors: [], itemCount: 0 };
+        }
+        buildingGroups[bldgKey].childFloors.push(floor);
+        buildingGroups[bldgKey].itemCount += floorCounts[floor];
+      } else {
+        standaloneFloors.push({ floor, itemCount: floorCounts[floor] });
       }
     });
-    
-    return Array.from(floorCounts.entries())
-      .map(([floor, itemCount]) => ({ floor, itemCount }))
-      .sort((a, b) => b.itemCount - a.itemCount);
+
+    const grouped = Object.entries(buildingGroups).map(([, group]) => ({
+      displayName: group.displayName,
+      childFloors: group.childFloors,
+      itemCount: group.itemCount,
+      isGroup: true,
+    }));
+
+    const standalone = standaloneFloors.map(({ floor, itemCount }) => ({
+      displayName: floor,
+      childFloors: [floor],
+      itemCount,
+      isGroup: false,
+    }));
+
+    return [...grouped, ...standalone].sort((a, b) => b.itemCount - a.itemCount);
   }, [estimateData]);
 
   // Extract custom codes from existing mappings (codes not in common list)
@@ -286,11 +314,14 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     onMappingsChange?.(localMappings);
   }, [localMappings, onMappingsChange]);
 
-  const handleSectionChange = useCallback((floor: string, sectionCode: string) => {
-    setLocalMappings(prev => ({
-      ...prev,
-      [floor]: sectionCode,
-    }));
+  const handleSectionChange = useCallback((childFloors: string[], sectionCode: string) => {
+    setLocalMappings(prev => {
+      const next = { ...prev };
+      childFloors.forEach(floor => {
+        next[floor] = sectionCode;
+      });
+      return next;
+    });
     setHasChanges(true);
   }, []);
 
@@ -356,43 +387,47 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     setHasChanges(false);
   }, [dbMappings]);
 
-  // Auto-suggest section based on floor name
-  const suggestSection = (floor: string): string => {
-    const lowerFloor = floor.toLowerCase();
-    
-    if (lowerFloor.includes('basement') || lowerFloor.includes('below') || lowerFloor === 'bg' || lowerFloor === 'ug') {
-      return 'BG';
-    }
-    if (lowerFloor.includes('roof') || lowerFloor === 'rf') {
-      return 'RF';
-    }
-    if (lowerFloor.includes('parking') || lowerFloor.startsWith('p')) {
-      if (lowerFloor.includes('1') || lowerFloor === 'p1') return 'P1';
-      if (lowerFloor.includes('2') || lowerFloor === 'p2') return 'P2';
-      if (lowerFloor.includes('3') || lowerFloor === 'p3') return 'P3';
-    }
-    
-    // Try to extract level number
-    const levelMatch = lowerFloor.match(/(?:level|floor|l|f)\s*(\d+)/i);
-    if (levelMatch) {
-      const num = parseInt(levelMatch[1]);
-      if (num >= 1 && num <= 10) {
-        return num.toString().padStart(2, '0');
+  // Auto-suggest section based on floor/building name
+  const suggestSection = (displayName: string): string => {
+    const bldgMatch = displayName.match(/^bldg\s*(\w+)/i);
+    if (bldgMatch) {
+      const num = bldgMatch[1];
+      // Numeric buildings: single-digit get B prefix (Bldg 3 → B3), double-digit stay as-is (Bldg 12 → 12)
+      if (!isNaN(Number(num))) {
+        return Number(num) >= 10 ? num : `B${num}`;
       }
+      // Letter buildings get B prefix (Bldg A → BA)
+      return `B${num.toUpperCase()}`;
     }
-    
-    // Default
-    return '01';
+
+    const lower = displayName.toLowerCase();
+    if (lower.includes('basement') || lower.includes('below') || lower === 'bg' || lower === 'ug') return 'BG';
+    if (lower.includes('roof') || lower === 'rf') return 'RF';
+    if (lower.includes('crawl')) return 'CS';
+    if (lower.includes('mezzanine') || lower.includes('mezz')) return 'MZ';
+    if (lower.includes('parking') || lower.startsWith('p')) {
+      if (lower.includes('1') || lower === 'p1') return 'P1';
+      if (lower.includes('2') || lower === 'p2') return 'P2';
+      if (lower.includes('3') || lower === 'p3') return 'P3';
+    }
+    const levelMatch = lower.match(/(?:level|floor|l|f)\s*(\d+)/i);
+    if (levelMatch) {
+      return `L${levelMatch[1]}`;
+    }
+    return '';
   };
 
   const handleAutoSuggestAll = useCallback(() => {
     const newMappings: Record<string, string> = {};
-    floorData.forEach(({ floor }) => {
-      if (!localMappings[floor]) {
-        newMappings[floor] = suggestSection(floor);
-      } else {
-        newMappings[floor] = localMappings[floor];
-      }
+    floorData.forEach(({ displayName, childFloors }) => {
+      const suggested = suggestSection(displayName);
+      childFloors.forEach(floor => {
+        if (!localMappings[floor]) {
+          newMappings[floor] = suggested;
+        } else {
+          newMappings[floor] = localMappings[floor];
+        }
+      });
     });
     setLocalMappings(newMappings);
     setHasChanges(true);
@@ -523,13 +558,20 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {floorData.map(({ floor, itemCount }) => (
-                  <TableRow key={floor}>
-                    <TableCell className="font-medium">{floor}</TableCell>
+                {floorData.map(({ displayName, childFloors, itemCount, isGroup }) => (
+                  <TableRow key={displayName}>
+                    <TableCell>
+                      <span className="font-medium">{displayName}</span>
+                      {isGroup && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          ({childFloors.length} floor{childFloors.length > 1 ? 's' : ''})
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <SectionCodeInput
-                        value={localMappings[floor] || ''}
-                        onChange={(value) => handleSectionChange(floor, value)}
+                        value={localMappings[childFloors[0]] || ''}
+                        onChange={(value) => handleSectionChange(childFloors, value)}
                         customCodes={customCodes}
                       />
                     </TableCell>
