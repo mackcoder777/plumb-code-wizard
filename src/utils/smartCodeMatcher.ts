@@ -133,7 +133,7 @@ const levenshteinDistance = (s1: string, s2: string): number => {
 export interface MatchResult {
   code: string;
   description: string;
-  category: 'L' | 'M' | 'O';
+  category: 'L' | 'M' | 'O' | 'R' | 'S';
   confidence: number;
   matchReason: string;
 }

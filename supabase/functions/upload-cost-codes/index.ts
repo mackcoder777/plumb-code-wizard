@@ -8,7 +8,7 @@ const corsHeaders = {
 interface CostCode {
   code: string;
   description: string;
-  category: 'L' | 'M';
+  category: 'L' | 'M' | 'O' | 'R' | 'S';
   subcategory?: string;
   units?: string;
 }
