@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, startTransition } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
 import { useLaborCodes } from '@/hooks/useCostCodes';
@@ -491,8 +492,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [floorSectionMappings, systemActivityMappings]);
 
   // Handler to apply section codes to all items that already have labor codes
-  const handleApplySectionCodes = useCallback((floorMappingsToApply: Record<string, string>) => {
+  // Also persists the updated codes to the database
+  const handleApplySectionCodes = useCallback(async (floorMappingsToApply: Record<string, string>) => {
     let itemsUpdated = 0;
+    const dbUpdates: Array<{ id: string; cost_code: string }> = [];
     
     const updatedData = data.map(item => {
       if (!item.costCode || !item.costCode.trim()) return item;
@@ -509,7 +512,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       }
       
       // Get new section from floor mapping using the consistent helper function
-      // This supports both exact and partial matching (e.g., "Club Level" matches "P2.101 - CLUB LEVEL")
       const newSection = getSectionFromFloor(item.floor || '', floorSectionMappings);
       
       // Build new full code with activity from system
@@ -518,6 +520,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
+        dbUpdates.push({ id: String(item.id), cost_code: newFullCode });
         return { ...item, costCode: newFullCode };
       }
       return item;
@@ -525,7 +528,31 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
     if (itemsUpdated > 0) {
       onDataUpdate(updatedData);
+      
+      // Persist to database in chunks of 500
+      const CHUNK_SIZE = 500;
+      try {
+        for (let i = 0; i < dbUpdates.length; i += CHUNK_SIZE) {
+          const chunk = dbUpdates.slice(i, i + CHUNK_SIZE);
+          await Promise.all(
+            chunk.map(({ id, cost_code }) =>
+              supabase
+                .from('estimate_items')
+                .update({ cost_code })
+                .eq('id', id)
+            )
+          );
+        }
+        console.log(`[ReapplySections] Persisted ${dbUpdates.length} updated codes to database`);
+      } catch (err) {
+        console.error('[ReapplySections] Failed to persist:', err);
+      }
     }
+    
+    toast({
+      title: 'Section Codes Re-applied',
+      description: `Updated ${itemsUpdated} of ${data.filter(i => i.costCode).length} coded items.`,
+    });
     
     return itemsUpdated;
   }, [data, categoryMappings, floorSectionMappings, systemActivityMappings, onDataUpdate]);
