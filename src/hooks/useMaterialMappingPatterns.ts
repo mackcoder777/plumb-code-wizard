@@ -35,7 +35,7 @@ const MATERIAL_KEYWORDS = [
 
 // Description keywords that indicate specific material codes
 // Maps description keywords to material codes
-const DESCRIPTION_CODE_KEYWORDS: Record<string, string[]> = {
+export const DESCRIPTION_CODE_KEYWORDS: Record<string, string[]> = {
   '9521': ['hanger', 'clevis', 'support', 'strut', 'unistrut', 'channel', 'trapeze', 'rod', 'threaded rod', 'beam clamp', 'c-clamp'],
   '9523': ['pipe id', 'pipeid', 'valve tag', 'identification', 'label', 'marker', 'id tag'],
   '9524': ['valve', 'ball valve', 'gate valve', 'check valve', 'butterfly', 'prv', 'pressure reducing'],
