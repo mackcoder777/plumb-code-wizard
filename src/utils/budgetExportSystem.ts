@@ -5,6 +5,8 @@
 
 import * as XLSX from 'xlsx';
 import { BudgetAdjustments } from '../components/BudgetAdjustmentsPanel';
+import { BuildingSectionMapping, resolveSectionStatic, getSectionFromFloorNullable } from '@/hooks/useBuildingSectionMappings';
+import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 
 // ============================================
 // TYPES
@@ -88,10 +90,24 @@ interface AggregatedMaterial {
 // ============================================
 
 /**
- * Get section code from floor value using floor mappings
+ * Get section code from floor value using floor mappings, with optional building fallback
  */
-function getSectionFromFloor(floor: string | undefined, floorMappings: FloorSectionMap): string {
-  if (!floor || Object.keys(floorMappings).length === 0) return '01';
+function getSectionFromFloor(
+  floor: string | undefined, 
+  floorMappings: FloorSectionMap, 
+  drawing?: string,
+  buildingMappings?: BuildingSectionMapping[],
+  dbFloorMappings?: FloorSectionMapping[]
+): string {
+  if (!floor) return '01';
+  
+  // If we have structured mappings, use the building-aware resolver
+  if (buildingMappings && buildingMappings.length > 0 && dbFloorMappings) {
+    return resolveSectionStatic(floor, drawing || '', dbFloorMappings, buildingMappings);
+  }
+  
+  // Fallback to simple floor map
+  if (Object.keys(floorMappings).length === 0) return '01';
   
   const normalizedFloor = floor.toLowerCase().trim();
   
@@ -152,7 +168,9 @@ function getLaborCodeFromCategory(reportCat: string | undefined, categoryMapping
 export function aggregateLaborByCostCode(
   items: ExportEstimateItem[],
   floorMappings: FloorSectionMap = {},
-  categoryMappings: CategoryLaborMap = {}
+  categoryMappings: CategoryLaborMap = {},
+  buildingMappings: BuildingSectionMapping[] = [],
+  dbFloorMappings: FloorSectionMapping[] = []
 ): AggregatedLabor[] {
   const aggregated = new Map<string, AggregatedLabor>();
 
@@ -166,7 +184,7 @@ export function aggregateLaborByCostCode(
     // Priority: explicit laborSec > floor mapping > suggested section > default
     let sec = item.laborSec || item.suggestedCode?.section;
     if (!sec && item.floor) {
-      sec = getSectionFromFloor(item.floor, floorMappings);
+      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings);
     }
     sec = sec || '01';
     
@@ -286,7 +304,9 @@ export function exportBudgetPacket(
   laborRate: number = 0,
   budgetAdjustments?: BudgetAdjustments | null,
   floorMappings: FloorSectionMap = {},
-  categoryMappings: CategoryLaborMap = {}
+  categoryMappings: CategoryLaborMap = {},
+  buildingMappings: BuildingSectionMapping[] = [],
+  dbFloorMappings: FloorSectionMapping[] = []
 ): { laborCodes: number; materialCodes: number; totalLaborHours: number; totalLaborDollars: number; totalMaterialDollars: number; grandTotal: number } {
   const wb = XLSX.utils.book_new();
   const ws: XLSX.WorkSheet = {};
@@ -327,7 +347,7 @@ export function exportBudgetPacket(
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
-    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, categoryMappings);
+    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, categoryMappings, buildingMappings, dbFloorMappings);
     validateHoursReconciliation(items, rawLaborSummary);
     laborData = rawLaborSummary.map(item => ({
       code: item.costCode,

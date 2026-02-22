@@ -8,6 +8,8 @@ import {
   FloorSectionMap,
   CategoryLaborMap
 } from '@/utils/budgetExportSystem';
+import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
+import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { toast } from '@/components/ui/use-toast';
 import { BudgetAdjustments } from './BudgetAdjustmentsPanel';
 import { Switch } from '@/components/ui/switch';
@@ -21,6 +23,8 @@ interface ExportDropdownProps {
   budgetAdjustments?: BudgetAdjustments | null;
   floorMappings?: FloorSectionMap;
   categoryMappings?: CategoryLaborMap;
+  buildingMappings?: BuildingSectionMapping[];
+  dbFloorMappings?: FloorSectionMapping[];
 }
 
 export const ExportDropdown: React.FC<ExportDropdownProps> = ({ 
@@ -31,6 +35,8 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   budgetAdjustments = null,
   floorMappings = {},
   categoryMappings = {},
+  buildingMappings = [],
+  dbFloorMappings = [],
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [includeAdjustments, setIncludeAdjustments] = useState(true);
@@ -64,7 +70,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   const handleExportBudgetPacket = () => {
     try {
       const adjustmentsToUse = includeAdjustments && hasAdjustments ? budgetAdjustments : null;
-      const result = exportBudgetPacket(items, projectInfo, laborRate, adjustmentsToUse, floorMappings, categoryMappings);
+      const result = exportBudgetPacket(items, projectInfo, laborRate, adjustmentsToUse, floorMappings, categoryMappings, buildingMappings, dbFloorMappings);
       toast({
         title: "Budget Packet Exported",
         description: includeAdjustments && hasAdjustments
