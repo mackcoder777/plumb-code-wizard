@@ -471,6 +471,65 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     }
   }, [budgetRate, projectId]);
 
+  // One-time migration: convert full-code keys (e.g. "BA 0000 DWTR") to cost-head-only keys ("DWTR")
+  useEffect(() => {
+    const migrateStorageKey = (storageKey: string) => {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const needsMigration = Object.keys(parsed).some(k => k.includes(' '));
+        if (!needsMigration) return;
+        const migrated: Record<string, unknown> = {};
+        Object.entries(parsed).forEach(([key, value]) => {
+          const parts = key.trim().split(/\s+/);
+          const costHead = parts[parts.length - 1];
+          migrated[costHead] = value;
+        });
+        localStorage.setItem(storageKey, JSON.stringify(migrated));
+        // Also update in-memory state
+        if (storageKey === `budget_fab_configs_${projectId}`) {
+          setFabricationConfigs(migrated as Record<string, FabricationConfig>);
+        }
+      } catch {
+        // Silent
+      }
+    };
+    migrateStorageKey(`budget_fab_configs_${projectId}`);
+    migrateStorageKey(`budget_tax_overrides_${projectId}`);
+  }, [projectId]);
+
+  // Aggregate laborSummary by cost head (last segment of full code)
+  const groupedByCostHead = useMemo(() => {
+    const grouped: Record<string, {
+      costHead: string;
+      description: string;
+      totalHours: number;
+      totalDollars: number;
+      fullCodes: string[];
+    }> = {};
+
+    Object.entries(laborSummary).forEach(([fullCode, data]) => {
+      const parts = fullCode.trim().split(/\s+/);
+      const costHead = parts[parts.length - 1];
+
+      if (!grouped[costHead]) {
+        grouped[costHead] = {
+          costHead,
+          description: data.description || costHead,
+          totalHours: 0,
+          totalDollars: 0,
+          fullCodes: [],
+        };
+      }
+      grouped[costHead].totalHours += data.fieldHours || 0;
+      grouped[costHead].totalDollars += (data.fieldHours || 0) * (data.rate || 0);
+      grouped[costHead].fullCodes.push(fullCode);
+    });
+
+    return grouped;
+  }, [laborSummary]);
+
   const taxInfo = useMemo(() => {
     if (customTaxRate !== null) {
       return { rate: customTaxRate, jurisdiction: 'Custom Rate' };
@@ -530,7 +589,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
     Object.entries(laborSummary).forEach(([code, data]) => {
       const hoursAfterForeman = (data.fieldHours || 0) * foremanStripRatio;
-      const fabConfig = fabricationConfigs[code];
+      // Look up fab config by cost head (last segment)
+      const parts = code.trim().split(/\s+/);
+      const costHead = parts[parts.length - 1];
+      const fabConfig = fabricationConfigs[costHead];
       const fabEnabled = fabConfig?.enabled || false;
       const fabPercent = fabConfig?.percentage || 0;
 
@@ -1120,7 +1182,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">FAB</TableHead>
-                  <TableHead>Labor Code</TableHead>
+                  <TableHead>Cost Head</TableHead>
                   <TableHead className="text-right">Original Hours</TableHead>
                   {foremanBonusEnabled && (
                     <>
@@ -1135,66 +1197,71 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {Object.entries(laborSummary).map(([code, data]) => {
-                  const fabConfig = fabricationConfigs[code];
-                  const isEnabled = fabConfig?.enabled || false;
-                  const fabPercent = fabConfig?.percentage || 15;
+                {Object.entries(groupedByCostHead)
+                  .sort((a, b) => b[1].totalHours - a[1].totalHours)
+                  .map(([costHead, group]) => {
+                    const fabConfig = fabricationConfigs[costHead];
+                    const isEnabled = fabConfig?.enabled || false;
+                    const fabPercent = fabConfig?.percentage || 15;
 
-                  const originalHours = data.fieldHours || 0;
-                  const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
-                  const hoursAfterForeman = originalHours - foremanStripHours;
-                  const fabHours = isEnabled ? hoursAfterForeman * (fabPercent / 100) : 0;
-                  const finalFieldHours = hoursAfterForeman - fabHours;
+                    const originalHours = group.totalHours;
+                    const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
+                    const hoursAfterForeman = originalHours - foremanStripHours;
+                    const fabHours = isEnabled ? hoursAfterForeman * (fabPercent / 100) : 0;
+                    const finalFieldHours = hoursAfterForeman - fabHours;
 
-                  return (
-                    <TableRow key={code} className={isEnabled ? 'bg-purple-50/30 dark:bg-purple-950/30' : ''}>
-                      <TableCell>
-                        <Switch checked={isEnabled} onCheckedChange={(checked) => toggleFabForCode(code, checked)} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-mono text-sm">{code}</div>
-                        <div className="text-xs text-muted-foreground truncate max-w-[150px]">{data.description}</div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{originalHours.toFixed(1)}</TableCell>
-                      {foremanBonusEnabled && (
-                        <>
-                          <TableCell className="text-center font-mono text-amber-600 bg-amber-50/50 dark:bg-amber-950/50">
-                            {foremanBonusPercent}%
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-amber-600 bg-amber-50/50 dark:bg-amber-950/50">
-                            -{foremanStripHours.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono bg-amber-50/50 dark:bg-amber-950/50">
-                            {hoursAfterForeman.toFixed(1)}
-                          </TableCell>
-                        </>
-                      )}
-                      <TableCell className="bg-purple-50/50 dark:bg-purple-950/50">
-                        {isEnabled ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <Input
-                              type="number"
-                              min="1"
-                              max="50"
-                              value={fabPercent}
-                              onChange={(e) => setFabPercentForCode(code, parseInt(e.target.value) || 15)}
-                              className="w-14 h-7 text-center font-mono text-sm"
-                            />
-                            <span className="text-muted-foreground text-xs">%</span>
+                    return (
+                      <TableRow key={costHead} className={isEnabled ? 'bg-purple-50/30 dark:bg-purple-950/30' : ''}>
+                        <TableCell>
+                          <Switch checked={isEnabled} onCheckedChange={(checked) => toggleFabForCode(costHead, checked)} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-mono text-sm font-semibold">{costHead}</div>
+                          <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                            {group.description}
+                            <span className="ml-1 opacity-50">({group.fullCodes.length} code{group.fullCodes.length > 1 ? 's' : ''})</span>
                           </div>
-                        ) : (
-                          <span className="text-muted-foreground text-center block">—</span>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{originalHours.toFixed(1)}</TableCell>
+                        {foremanBonusEnabled && (
+                          <>
+                            <TableCell className="text-center font-mono text-amber-600 bg-amber-50/50 dark:bg-amber-950/50">
+                              {foremanBonusPercent}%
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-amber-600 bg-amber-50/50 dark:bg-amber-950/50">
+                              -{foremanStripHours.toFixed(1)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono bg-amber-50/50 dark:bg-amber-950/50">
+                              {hoursAfterForeman.toFixed(1)}
+                            </TableCell>
+                          </>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-purple-600 bg-purple-50/50 dark:bg-purple-950/50">
-                        {isEnabled ? `-${fabHours.toFixed(1)}` : '—'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-bold text-green-600">
-                        {finalFieldHours.toFixed(1)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                        <TableCell className="bg-purple-50/50 dark:bg-purple-950/50">
+                          {isEnabled ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                max="50"
+                                value={fabPercent}
+                                onChange={(e) => setFabPercentForCode(costHead, parseInt(e.target.value) || 15)}
+                                className="w-14 h-7 text-center font-mono text-sm"
+                              />
+                              <span className="text-muted-foreground text-xs">%</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-center block">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-purple-600 bg-purple-50/50 dark:bg-purple-950/50">
+                          {isEnabled ? `-${fabHours.toFixed(1)}` : '—'}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">
+                          {finalFieldHours.toFixed(1)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           </div>
