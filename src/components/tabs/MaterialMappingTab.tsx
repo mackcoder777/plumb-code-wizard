@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns, getCodeFromDescription } from '@/hooks/useMaterialMappingPatterns';
+import { SmartAssignPreviewDialog } from '@/components/SmartAssignPreviewDialog';
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
@@ -84,6 +85,13 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   const [expandedItemSearch, setExpandedItemSearch] = useState<Record<string, string>>({});
   const [expandedItemFilter, setExpandedItemFilter] = useState<Record<string, 'all' | 'assigned' | 'unassigned'>>({});
   const ITEMS_PER_PAGE = 15;
+
+  // Smart assign preview dialog state
+  const [smartAssignPreview, setSmartAssignPreview] = useState<{
+    codeGroups: Record<string, EstimateItem[]>;
+    unmatched: EstimateItem[];
+  } | null>(null);
+  const smartAssignSavingRef = useRef(false);
 
   // Get unique systems from data
   const uniqueSystems = useMemo(() => {
@@ -895,7 +903,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   );
 
   const handleSmartAssign = useCallback(
-    async (itemsToAssign: EstimateItem[]) => {
+    (itemsToAssign: EstimateItem[]) => {
       const { groups: codeGroups, unmatched } = analyzeSmartAssignGroups(itemsToAssign);
       const codeCount = Object.keys(codeGroups).length;
 
@@ -907,57 +915,54 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         return;
       }
 
-      const preview = Object.entries(codeGroups)
-        .map(([code, its]) => `${its.length} items → ${code}`)
-        .join(', ');
-      const unmatchedNote =
-        unmatched.length > 0 ? ` | ${unmatched.length} items unmatched` : '';
+      // Open the preview dialog instead of window.confirm
+      setSmartAssignPreview({ codeGroups, unmatched });
+    },
+    [analyzeSmartAssignGroups]
+  );
 
-      const confirmed = window.confirm(
-        `Smart Assign Preview:\n\n${preview}${unmatchedNote}\n\nProceed?`
-      );
-      if (!confirmed) return;
+  const confirmSmartAssign = useCallback(async () => {
+    if (!smartAssignPreview || !projectId) return;
+    const { codeGroups, unmatched } = smartAssignPreview;
+    const codeCount = Object.keys(codeGroups).length;
+    const totalAssigned = Object.values(codeGroups).reduce((s, arr) => s + arr.length, 0);
 
-      if (projectId) {
-        setIsSaving(true);
-        try {
-          for (const [code, its] of Object.entries(codeGroups)) {
-            const ids = its.map(i => String(i.id));
-            await batchUpdateMaterialCodes.mutateAsync({
-              projectId,
-              itemIds: ids,
-              materialCode: code
-            });
-          }
-
-          // Update local state
-          const codeMap = new Map<string, string>();
-          for (const [code, its] of Object.entries(codeGroups)) {
-            its.forEach(i => codeMap.set(String(i.id), code));
-          }
-          const updatedData = data.map(item => {
-            const newCode = codeMap.get(String(item.id));
-            return newCode ? { ...item, materialCostCode: newCode } : item;
-          });
-          onDataUpdate(updatedData);
-
-          toast({
-            title: 'Smart Assign complete',
-            description: `Applied ${codeCount} codes to ${itemsToAssign.length - unmatched.length} items.${unmatched.length > 0 ? ` ${unmatched.length} items left unassigned.` : ''}`,
-          });
-        } catch (error) {
-          console.error('Smart assign failed:', error);
-          toast({ title: 'Smart Assign Failed', description: 'Please try again.', variant: 'destructive' });
-        } finally {
-          setIsSaving(false);
-        }
+    setIsSaving(true);
+    try {
+      for (const [code, its] of Object.entries(codeGroups)) {
+        const ids = its.map(i => String(i.id));
+        await batchUpdateMaterialCodes.mutateAsync({
+          projectId,
+          itemIds: ids,
+          materialCode: code
+        });
       }
 
+      // Update local state
+      const codeMap = new Map<string, string>();
+      for (const [code, its] of Object.entries(codeGroups)) {
+        its.forEach(i => codeMap.set(String(i.id), code));
+      }
+      const updatedData = data.map(item => {
+        const newCode = codeMap.get(String(item.id));
+        return newCode ? { ...item, materialCostCode: newCode } : item;
+      });
+      onDataUpdate(updatedData);
+
+      toast({
+        title: 'Smart Assign complete',
+        description: `Applied ${codeCount} codes to ${totalAssigned} items.${unmatched.length > 0 ? ` ${unmatched.length} items left unassigned.` : ''}`,
+      });
+    } catch (error) {
+      console.error('Smart assign failed:', error);
+      toast({ title: 'Smart Assign Failed', description: 'Please try again.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+      setSmartAssignPreview(null);
       setSelectedItems(new Set());
       setSelectedGroups(new Set());
-    },
-    [analyzeSmartAssignGroups, batchUpdateMaterialCodes, projectId, data, onDataUpdate]
-  );
+    }
+  }, [smartAssignPreview, batchUpdateMaterialCodes, projectId, data, onDataUpdate]);
 
   const getSmartAssignBreakdown = useCallback(
     (groupItems: EstimateItem[]) => {
@@ -2115,6 +2120,16 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
           </Button>
         </div>
       )}
+      {/* Smart Assign Preview Dialog */}
+      <SmartAssignPreviewDialog
+        open={!!smartAssignPreview}
+        onOpenChange={(open) => { if (!open) setSmartAssignPreview(null); }}
+        codeGroups={smartAssignPreview?.codeGroups || {}}
+        unmatched={smartAssignPreview?.unmatched || []}
+        onConfirm={confirmSmartAssign}
+        isSaving={isSaving}
+        materialCodes={allMaterialCodes}
+      />
     </div>
   );
 };
