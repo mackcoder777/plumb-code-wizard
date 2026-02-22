@@ -305,6 +305,51 @@ interface BudgetAdjustmentsPanelProps {
   onAdjustmentsChange: (adjustments: BudgetAdjustments) => void;
 }
 
+const FAB_SECTION = 'FP';
+const FAB_ACTIVITY = '0000';
+
+// Maps field labor cost heads → fabrication material cost head
+const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
+  // Cast Iron → CSTF
+  SNWV: 'CSTF',
+  STRM: 'CSTF',
+  BGWV: 'CSTF',
+  OVFL: 'CSTF',
+  GRWV: 'CSTF',
+  CSTI: 'CSTF',
+  // Copper → COPR
+  DWTR: 'COPR',
+  HWTR: 'COPR',
+  RCLM: 'COPR',
+  COPR: 'COPR',
+  // Carbon Steel / Threaded → CRBN
+  NGAS: 'CRBN',
+  MGAS: 'CRBN',
+  FIRE: 'CRBN',
+  STEL: 'CRBN',
+  COND: 'CRBN',
+  // Hangers → HFBS (Hanger Fab Sheets)
+  HNGS: 'HFBS',
+  SUPP: 'HFBS',
+  // Stainless → SSTL
+  SSTL: 'SSTL',
+  ACID: 'SSTL',
+  // Plastic / CPVC → PLST
+  PLST: 'PLST',
+  CPVC: 'PLST',
+};
+
+const FAB_COST_HEAD_DESCRIPTIONS: Record<string, string> = {
+  COPR: 'FABRICATION - COPPER',
+  CSTF: 'FABRICATION - CAST IRON',
+  CRBN: 'FABRICATION - CARBON STEEL',
+  SSTL: 'FABRICATION - STAINLESS STEEL',
+  SS10: 'FABRICATION - STAINLESS 10GA',
+  PLST: 'FABRICATION - PLASTIC / CPVC',
+  BRAZ: 'FABRICATION - BRAZED',
+  HFBS: 'FABRICATION - HANGER FAB SHEETS',
+};
+
 const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   laborSummary,
   materialSummary,
@@ -336,6 +381,16 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [materialTaxOverrides, setMaterialTaxOverrides] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem(`budget_tax_overrides_${projectId}`);
     return saved ? JSON.parse(saved) : {};
+  });
+
+  // Fab code routing map: field cost head → fab material cost head
+  const [fabCodeMap, setFabCodeMap] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem(`budget_fab_code_map_${projectId}`);
+      return saved ? { ...DEFAULT_FAB_CODE_MAP, ...JSON.parse(saved) } : { ...DEFAULT_FAB_CODE_MAP };
+    } catch {
+      return { ...DEFAULT_FAB_CODE_MAP };
+    }
   });
 
   // LRCN (Labor Rate Contingency) state
@@ -406,6 +461,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       
       const savedBudgetRate = localStorage.getItem(`budget_rate_${projectId}`);
       setBudgetRate(savedBudgetRate ? parseFloat(savedBudgetRate) : 85);
+
+      // Reload fab code map
+      const savedFabCodeMap = localStorage.getItem(`budget_fab_code_map_${projectId}`);
+      setFabCodeMap(savedFabCodeMap ? { ...DEFAULT_FAB_CODE_MAP, ...JSON.parse(savedFabCodeMap) } : { ...DEFAULT_FAB_CODE_MAP });
       
       setPrevProjectId(projectId);
     }
@@ -470,6 +529,13 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       localStorage.setItem(`budget_rate_${projectId}`, budgetRate.toString());
     }
   }, [budgetRate, projectId]);
+
+  // Persist fabCodeMap
+  useEffect(() => {
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_fab_code_map_${projectId}`, JSON.stringify(fabCodeMap));
+    }
+  }, [fabCodeMap, projectId]);
 
   // One-time migration: convert full-code keys (e.g. "BA 0000 DWTR") to cost-head-only keys ("DWTR")
   useEffect(() => {
@@ -587,6 +653,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     let totalFieldHours = 0;
     let totalFabHours = 0;
 
+    // Accumulate fab hours by material cost head before assembling codes
+    const fabAccumulator: Record<string, { hours: number }> = {};
+
     Object.entries(laborSummary).forEach(([code, data]) => {
       const hoursAfterForeman = (data.fieldHours || 0) * foremanStripRatio;
       // Look up fab config by cost head (last segment)
@@ -609,20 +678,20 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
           type: 'field'
         };
 
-        const fabCode = code.replace(/(\w+)$/, 'FAB$1');
-        adjustedLaborSummary[fabCode] = {
-          code: fabCode,
-          description: `FAB - ${data.description}`,
-          hours: fabHours,
-          rate: data.rate || bidLaborRate,
-          dollars: fabHours * (data.rate || bidLaborRate),
-          type: 'fab'
-        };
+        // Accumulate into material fab bucket using the routing map
+        const fabCostHead = fabCodeMap[costHead];
+        if (fabCostHead) {
+          fabAccumulator[fabCostHead] = {
+            hours: (fabAccumulator[fabCostHead]?.hours || 0) + fabHours,
+          };
+        } else {
+          console.warn(`No fab material mapping defined for cost head: ${costHead}`);
+        }
 
         fabricationSummary.push({
           code,
           description: data.description,
-          fabCode,
+          fabCode: fabCostHead ? `${FAB_SECTION} ${FAB_ACTIVITY} ${fabCostHead}` : `FP ???? ${costHead}`,
           strippedHours: fabHours,
           remainingFieldHours: fieldHours
         });
@@ -640,6 +709,20 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         };
         totalFieldHours += hoursAfterForeman;
       }
+    });
+
+    // Insert one properly assembled fab code per material type
+    // e.g. "FP 0000 COPR", "FP 0000 CSTF", "FP 0000 HFBS"
+    Object.entries(fabAccumulator).forEach(([fabCostHead, { hours }]) => {
+      const assembledCode = `${FAB_SECTION} ${FAB_ACTIVITY} ${fabCostHead}`;
+      adjustedLaborSummary[assembledCode] = {
+        code: assembledCode,
+        description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || `FABRICATION - ${fabCostHead}`,
+        hours,
+        rate: bidLaborRate,
+        dollars: hours * bidLaborRate,
+        type: 'fab',
+      };
     });
 
     // Note: FCNT (Foreman Contingency) is now a MATERIAL line item, not labor
@@ -686,7 +769,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       totalMaterialWithTax,
       totalMaterialPreTax
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, bidLaborRate]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, bidLaborRate, fabCodeMap]);
 
   useEffect(() => {
     onAdjustmentsChange({
@@ -1265,6 +1348,138 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
               </TableBody>
             </Table>
           </div>
+
+          {/* Fab Material Routing Table */}
+          {Object.keys(groupedByCostHead).some(h => fabricationConfigs[h]?.enabled) && (
+            <details className="mt-4">
+              <summary className="text-sm font-medium cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                ⚙ Fab Material Routing
+                <span className="ml-2 text-xs text-orange-500">
+                  ({Object.keys(
+                    Object.entries(groupedByCostHead)
+                      .filter(([costHead]) => fabricationConfigs[costHead]?.enabled)
+                      .reduce((acc, [costHead]) => {
+                        const fabCostHead = fabCodeMap[costHead];
+                        if (fabCostHead) acc[fabCostHead] = true;
+                        return acc;
+                      }, {} as Record<string, boolean>)
+                  ).length} fab codes will be generated)
+                </span>
+              </summary>
+
+              <div className="mt-3 rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Field Cost Head</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Fab Hrs Stripped</TableHead>
+                      <TableHead>Routes To</TableHead>
+                      <TableHead className="text-center w-16">Reset</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(groupedByCostHead)
+                      .filter(([costHead]) => fabricationConfigs[costHead]?.enabled)
+                      .sort((a, b) => b[1].totalHours - a[1].totalHours)
+                      .map(([costHead, group]) => {
+                        const config = fabricationConfigs[costHead] || { percentage: 15 };
+                        const originalHours = group.totalHours;
+                        const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
+                        const hoursAfterForeman = originalHours - foremanStripHours;
+                        const fabHours = hoursAfterForeman * ((config.percentage || 15) / 100);
+                        const currentFabCostHead = fabCodeMap[costHead] || '';
+                        const assembledCode = currentFabCostHead
+                          ? `${FAB_SECTION} ${FAB_ACTIVITY} ${currentFabCostHead}`
+                          : '—';
+
+                        return (
+                          <TableRow key={costHead}>
+                            <TableCell className="font-mono font-semibold text-blue-500">
+                              {costHead}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {group.description}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="font-mono text-orange-500">{fabHours.toFixed(1)} hrs</span>
+                              <div className="text-xs text-muted-foreground">→ {assembledCode}</div>
+                            </TableCell>
+                            <TableCell>
+                              <select
+                                value={currentFabCostHead}
+                                onChange={(e) =>
+                                  setFabCodeMap(prev => ({ ...prev, [costHead]: e.target.value }))
+                                }
+                                className="bg-background border border-border rounded px-2 py-1 text-sm font-mono w-full"
+                              >
+                                <option value="">-- No Fab Code --</option>
+                                <option value="COPR">FP 0000 COPR — Copper</option>
+                                <option value="CSTF">FP 0000 CSTF — Cast Iron</option>
+                                <option value="CRBN">FP 0000 CRBN — Carbon Steel</option>
+                                <option value="SSTL">FP 0000 SSTL — Stainless Steel</option>
+                                <option value="SS10">FP 0000 SS10 — Stainless 10GA</option>
+                                <option value="PLST">FP 0000 PLST — Plastic / CPVC</option>
+                                <option value="BRAZ">FP 0000 BRAZ — Brazed</option>
+                                <option value="HFBS">FP 0000 HFBS — Hanger Fab Sheets</option>
+                              </select>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <button
+                                onClick={() =>
+                                  setFabCodeMap(prev => ({
+                                    ...prev,
+                                    [costHead]: DEFAULT_FAB_CODE_MAP[costHead] || '',
+                                  }))
+                                }
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                              >
+                                Reset
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Generated Fab Code Summary */}
+              <div className="mt-3 bg-purple-50 dark:bg-purple-950 rounded-lg p-3 border border-purple-200 dark:border-purple-800">
+                <div className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-2">Generated Fabrication Labor Codes:</div>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(
+                    Object.entries(groupedByCostHead)
+                      .filter(([costHead]) => fabricationConfigs[costHead]?.enabled)
+                      .reduce((acc, [costHead, group]) => {
+                        const fabCostHead = fabCodeMap[costHead];
+                        if (fabCostHead) {
+                          const config = fabricationConfigs[costHead] || { percentage: 15 };
+                          const originalHours = group.totalHours;
+                          const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
+                          const hoursAfterForeman = originalHours - foremanStripHours;
+                          const fabHrs = hoursAfterForeman * ((config.percentage || 15) / 100);
+                          acc[fabCostHead] = (acc[fabCostHead] || 0) + fabHrs;
+                        }
+                        return acc;
+                      }, {} as Record<string, number>)
+                  ).map(([fabCostHead, hours]) => (
+                    <div key={fabCostHead} className="bg-background border border-border rounded px-3 py-1.5 text-sm">
+                      <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">
+                        {FAB_SECTION} {FAB_ACTIVITY} {fabCostHead}
+                      </span>
+                      <span className="ml-2 text-muted-foreground text-xs">
+                        {(hours).toFixed(1)} hrs
+                      </span>
+                      <span className="ml-1 text-muted-foreground text-xs">
+                        — {FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || fabCostHead}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          )}
 
           {calculations.totalFabHours > 0 && (
             <div className="bg-purple-50 dark:bg-purple-950 rounded-lg p-4 border border-purple-200 dark:border-purple-800 mt-4">
