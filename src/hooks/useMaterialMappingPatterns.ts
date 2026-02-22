@@ -44,12 +44,12 @@ const DESCRIPTION_CODE_KEYWORDS: Record<string, string[]> = {
 };
 
 // Get suggested code based on item description
-const getCodeFromDescription = (description: string): string | null => {
-  const normalized = normalizePattern(description);
+export const getCodeFromDescription = (description: string, itemName?: string): string | null => {
+  const text = `${description} ${itemName || ''}`.toLowerCase().trim();
   
   for (const [code, keywords] of Object.entries(DESCRIPTION_CODE_KEYWORDS)) {
     for (const keyword of keywords) {
-      if (normalized.includes(keyword)) {
+      if (text.includes(keyword)) {
         return code;
       }
     }
@@ -72,7 +72,7 @@ export const analyzeItemsForSuggestions = (
   
   items.forEach(item => {
     const desc = item.materialDesc || item.itemName || '';
-    const suggestedCode = getCodeFromDescription(desc);
+    const suggestedCode = getCodeFromDescription(desc, item.itemName);
     
     if (suggestedCode) {
       if (!codeToItems[suggestedCode]) {

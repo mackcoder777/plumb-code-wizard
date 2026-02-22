@@ -32,7 +32,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns } from '@/hooks/useMaterialMappingPatterns';
+import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns, getCodeFromDescription } from '@/hooks/useMaterialMappingPatterns';
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
@@ -871,6 +871,105 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     setSelectedGroups(new Set());
   };
 
+  // Smart Assign: analyze items and return code -> items mapping
+  const analyzeSmartAssignGroups = useCallback(
+    (itemsToAnalyze: EstimateItem[]) => {
+      const groups: Record<string, EstimateItem[]> = {};
+      const unmatched: EstimateItem[] = [];
+
+      for (const item of itemsToAnalyze) {
+        const code = getCodeFromDescription(
+          item.materialDesc || '',
+          item.itemName || ''
+        );
+        if (code) {
+          groups[code] = [...(groups[code] || []), item];
+        } else {
+          unmatched.push(item);
+        }
+      }
+
+      return { groups, unmatched };
+    },
+    []
+  );
+
+  const handleSmartAssign = useCallback(
+    async (itemsToAssign: EstimateItem[]) => {
+      const { groups: codeGroups, unmatched } = analyzeSmartAssignGroups(itemsToAssign);
+      const codeCount = Object.keys(codeGroups).length;
+
+      if (codeCount === 0) {
+        toast({
+          title: 'No matches found',
+          description: 'No items matched keyword rules. Assign codes manually.',
+        });
+        return;
+      }
+
+      const preview = Object.entries(codeGroups)
+        .map(([code, its]) => `${its.length} items → ${code}`)
+        .join(', ');
+      const unmatchedNote =
+        unmatched.length > 0 ? ` | ${unmatched.length} items unmatched` : '';
+
+      const confirmed = window.confirm(
+        `Smart Assign Preview:\n\n${preview}${unmatchedNote}\n\nProceed?`
+      );
+      if (!confirmed) return;
+
+      if (projectId) {
+        setIsSaving(true);
+        try {
+          for (const [code, its] of Object.entries(codeGroups)) {
+            const ids = its.map(i => String(i.id));
+            await batchUpdateMaterialCodes.mutateAsync({
+              projectId,
+              itemIds: ids,
+              materialCode: code
+            });
+          }
+
+          // Update local state
+          const codeMap = new Map<string, string>();
+          for (const [code, its] of Object.entries(codeGroups)) {
+            its.forEach(i => codeMap.set(String(i.id), code));
+          }
+          const updatedData = data.map(item => {
+            const newCode = codeMap.get(String(item.id));
+            return newCode ? { ...item, materialCostCode: newCode } : item;
+          });
+          onDataUpdate(updatedData);
+
+          toast({
+            title: 'Smart Assign complete',
+            description: `Applied ${codeCount} codes to ${itemsToAssign.length - unmatched.length} items.${unmatched.length > 0 ? ` ${unmatched.length} items left unassigned.` : ''}`,
+          });
+        } catch (error) {
+          console.error('Smart assign failed:', error);
+          toast({ title: 'Smart Assign Failed', description: 'Please try again.', variant: 'destructive' });
+        } finally {
+          setIsSaving(false);
+        }
+      }
+
+      setSelectedItems(new Set());
+      setSelectedGroups(new Set());
+    },
+    [analyzeSmartAssignGroups, batchUpdateMaterialCodes, projectId, data, onDataUpdate]
+  );
+
+  const getSmartAssignBreakdown = useCallback(
+    (groupItems: EstimateItem[]) => {
+      const { groups: codeGroups, unmatched } = analyzeSmartAssignGroups(groupItems);
+      const codeCount = Object.keys(codeGroups).length;
+      return codeCount >= 2
+        ? { groups: codeGroups, unmatched, eligible: true as const }
+        : { groups: codeGroups, unmatched, eligible: false as const };
+    },
+    [analyzeSmartAssignGroups]
+  );
+
   // Bulk apply suggestions to all selected groups that have suggestions
   const handleBulkApplySuggestions = useCallback(async () => {
     if (selectedGroupsWithSuggestions.length === 0) return;
@@ -1594,7 +1693,32 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                             <div className="col-span-2 text-right font-mono text-sm text-muted-foreground">
                               ${typeGroup.totalMaterial.toLocaleString()}
                             </div>
-                            <div className="col-span-3 flex items-center gap-2">
+                             <div className="col-span-3 flex items-center gap-2">
+                              {/* Smart Assign button for mixed groups */}
+                              {typeGroup.totalMaterial > 0 && (() => {
+                                const breakdown = getSmartAssignBreakdown(typeGroup.items);
+                                if (!breakdown.eligible) return null;
+
+                                const previewText = Object.entries(breakdown.groups)
+                                  .map(([code, its]) => `${its.length} → ${code}`)
+                                  .join(', ');
+
+                                return (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSmartAssign(typeGroup.items);
+                                    }}
+                                    className="h-6 px-2 text-xs text-purple-400 border-purple-500/40 hover:bg-purple-500/10 hover:text-purple-300 gap-1"
+                                    title={`Smart Assign: ${previewText}${breakdown.unmatched.length > 0 ? ` | ${breakdown.unmatched.length} unmatched` : ''}`}
+                                  >
+                                    <Sparkles className="h-3 w-3" />
+                                    Smart Assign
+                                  </Button>
+                                );
+                              })()}
                               {/* Show dismiss button for $0 value groups */}
                               {typeGroup.totalMaterial <= 0 && (
                                 <Button
@@ -1934,6 +2058,22 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               Apply {selectedGroupsWithSuggestions.length} Suggestion{selectedGroupsWithSuggestions.length > 1 ? 's' : ''}
             </Button>
           )}
+          {(() => {
+            const selectedItemObjects = data.filter(i => selectedItems.has(String(i.id)));
+            const breakdown = getSmartAssignBreakdown(selectedItemObjects);
+            if (!breakdown.eligible) return null;
+            return (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleSmartAssign(selectedItemObjects)}
+                className="h-8 bg-purple-600 hover:bg-purple-700 text-white gap-1"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Smart Assign
+              </Button>
+            );
+          })()}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="secondary" size="sm" className="h-8">
