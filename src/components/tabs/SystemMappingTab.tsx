@@ -28,6 +28,7 @@ import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
 import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
+import { BuildingSectionMappingPanel } from '@/components/BuildingSectionMapping';
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
 import { MappingAuditSummary } from '@/components/MappingAuditSummary';
@@ -805,6 +806,28 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           />
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Building to Section Mapping - Collapsible */}
+      {projectId && (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Building → Section Code (Drawing-based)
+                <Badge variant="secondary" className="ml-2 text-xs">NEW</Badge>
+              </div>
+              <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
+            <BuildingSectionMappingPanel
+              projectId={projectId}
+              estimateItems={data}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {/* System to Activity Mapping - Collapsible */}
       <Collapsible>

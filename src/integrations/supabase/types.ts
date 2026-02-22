@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      building_section_mappings: {
+        Row: {
+          building_identifier: string
+          created_at: string | null
+          description: string | null
+          id: string
+          project_id: string
+          section_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          building_identifier: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          project_id: string
+          section_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          building_identifier?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          project_id?: string
+          section_code?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "building_section_mappings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       category_labor_mappings: {
         Row: {
           category_name: string

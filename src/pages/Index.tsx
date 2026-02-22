@@ -25,6 +25,7 @@ import {
   EstimateProject
 } from '@/hooks/useEstimateProjects';
 import { useFloorSectionMappings, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
+import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useAuth } from '@/hooks/useAuth';
@@ -471,6 +472,9 @@ const EnhancedCostCodeManager = () => {
   // Fetch category labor mappings for priority-based code assignment
   const { data: dbCategoryMappings = [] } = useCategoryMappings(currentProject?.id || null);
   
+  // Fetch building-to-section mappings for drawing-based section resolution
+  const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings } = useBuildingSectionMappings(currentProject?.id || null);
+  
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
     const map: FloorSectionMap = {};
@@ -607,15 +611,21 @@ const EnhancedCostCodeManager = () => {
 
   const COST_CODES = getAllCodes();
 
-  // Helper to get section from floor - uses DB mappings first, falls back to patterns
-  const getSectionForFloor = useCallback((floor: string): string => {
+  // Helper to get section from floor - uses DB mappings first, then building from drawing, then fallback patterns
+  const getSectionForFloor = useCallback((floor: string, drawing?: string): string => {
     // Priority 1: Use database floor mappings if available
     if (dbFloorMappings.length > 0) {
       const section = getSectionFromFloor(floor, dbFloorMappings);
       if (section !== '01') return section; // Return if found non-default
     }
     
-    // Priority 2: Fallback to hardcoded patterns (for initial setup before DB mappings)
+    // Priority 2: Building from drawing name (for generic floors like Roof, Crawl Space)
+    if (drawing && dbBuildingMappings.length > 0) {
+      const resolved = resolveSectionStatic(floor, drawing, dbFloorMappings, dbBuildingMappings);
+      if (resolved !== '01') return resolved;
+    }
+    
+    // Priority 3: Fallback to hardcoded patterns (for initial setup before DB mappings)
     const floorText = (floor || '').toLowerCase().trim();
     for (const [code, patterns] of Object.entries(FLOOR_MAPPING_FALLBACK)) {
       if (patterns.some(pattern => pattern.test(floorText))) {
@@ -625,12 +635,12 @@ const EnhancedCostCodeManager = () => {
     
     // Default
     return '01';
-  }, [dbFloorMappings]);
+  }, [dbFloorMappings, dbBuildingMappings]);
 
   // Generate cost code with audit trail - uses smart matching against database codes
   const generateCostCode = useCallback((item) => {
     // Use database floor mappings for section
-    const section = getSectionForFloor(item.floor || '');
+    const section = getSectionForFloor(item.floor || '', item.drawing || '');
 
     // Get activity code from system-to-activity mappings
     const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
@@ -772,7 +782,7 @@ const EnhancedCostCodeManager = () => {
 
         // Build full cost code with section + activity + cost head
         if (appliedCode) {
-          const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
+          const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
           const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
@@ -1511,7 +1521,7 @@ const EnhancedCostCodeManager = () => {
     const updated = estimateData.map((item, index) => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
-        const section = getSectionFromFloor(item.floor || '', dbFloorMappings);
+        const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
         const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
         
         // Build the FULL assembled labor code with section and activity
@@ -2154,6 +2164,8 @@ const EnhancedCostCodeManager = () => {
                   budgetAdjustments={budgetAdjustments}
                   disabled={estimateData.length === 0}
                   floorMappings={floorSectionMap}
+                  buildingMappings={dbBuildingMappings}
+                  dbFloorMappings={dbFloorMappings}
                 />
                 <button
                   onClick={() => setShowCostCodeBrowser(true)}
@@ -2540,7 +2552,7 @@ const EnhancedCostCodeManager = () => {
                       if (!rawCostHead) {
                         // CRITICAL FIX: Bucket uncoded items instead of skipping
                         costHead = 'UNCD';
-                        existingSection = getSectionFromFloor(item.floor, dbFloorMappings);
+                        existingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
                         existingActivity = '0000';
                       } else {
                         // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
@@ -2561,7 +2573,7 @@ const EnhancedCostCodeManager = () => {
                       }
                       
                       // Use existing section/activity if present, otherwise derive from floor/system
-                      const section = existingSection || getSectionFromFloor(item.floor, dbFloorMappings);
+                      const section = existingSection || resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
                       const activity = existingActivity || getActivityFromSystem(item.system, dbActivityMappings);
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
