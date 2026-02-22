@@ -1,85 +1,53 @@
 
 
-# Fix: Labor Code Assignments Lost on Every Reload
+# Add All Missing Material Codes from Spreadsheet
 
-## Problem
+## What's Missing
 
-All 1033 estimate items have **empty `cost_code` in the database**, despite having 22 system mappings and 13 category mappings fully configured. The current load logic (Index.tsx line 738) applies category mappings to local React state only -- it never writes them back to the database. System mappings are never applied during load at all. Every page refresh starts from scratch with empty codes.
+Your database currently has only **L** (Labor, 604 codes) and **M** (Material, 55 codes). The uploaded spreadsheet contains ~130 additional codes across categories that don't exist yet:
 
-This is a **design flaw**, not a one-off bug. The system has three layers of mapping rules (category, system, item-type) but no mechanism to automatically apply AND persist them on load.
+| Category | Description | Count | Examples |
+|----------|-------------|-------|---------|
+| **O** (Other) | GC items, consumables, contract labor | ~80 | ALOW, BOND, 9730 (Consumables), 9740 (Small Tools) |
+| **R** (Rental) | Equipment rentals | 3 | 9610, 9612, 9615 |
+| **S** (Subcontract) | Formal subcontracts | ~40 | 9800-9853 |
+| Special | Warranty, change work | 4 | WRNT, WNTY, MAT1, REN1, TMUM |
 
-## Root Cause (Three Issues)
+## Plan
 
-1. **Category mappings applied but not saved**: On load, the code checks `if (!item.cost_code)` and applies category mappings to local state (line 738-746), but never calls the database save mutation. Next reload, `cost_code` is empty again.
+### Step 1 -- Expand TypeScript types to support R and S categories
 
-2. **System mappings never applied on load**: For items where the category mapping is `__SYSTEM__` (Pipe, Fittings, Miscellaneous, Pipe_Fit -- which are the majority of items), `getLaborCodeFromCategory` returns `null`, so those items get no code. The system-to-labor-code mappings (e.g., "cold water" -> WATR) are only applied when the user manually clicks "Apply" in the Labor Mapping tab.
+Update the category type from `'L' | 'M' | 'O'` to `'L' | 'M' | 'O' | 'R' | 'S'` in these files:
+- `src/hooks/useCostCodes.ts` -- CostCode interface
+- `src/components/AdminCostCodeManager.tsx` -- local type and filter
+- `src/components/CostCodeImport.tsx` -- import type and sheet-name detection (add rules for "rental", "subcontract", "equipment rental" sheet names)
+- `src/components/tabs/CostCodesTab.tsx` -- import type
+- `src/utils/smartCodeMatcher.ts` -- type reference
+- `supabase/functions/upload-cost-codes/index.ts` -- edge function type
 
-3. **No batch persist after load-time application**: Even if both mapping types were applied during load, there is no batch database write to make those assignments stick.
+### Step 2 -- Update Admin UI filter to show new categories
 
-## Solution
+In `AdminCostCodeManager.tsx`, add "Rental" and "Subcontract" as filter options alongside the existing Labor / Material / Other tabs.
 
-Add an automatic "apply all mappings and persist" step that runs once after project data loads. This uses the existing mapping rules (category + system) to assign codes to every item and batch-saves them to the database.
+### Step 3 -- Insert all missing codes via database migration
 
-### Step 1: Apply System Mappings During Load (Index.tsx)
+Run a single SQL migration that inserts all ~130 codes from the spreadsheet using `ON CONFLICT (code, category) DO UPDATE` so existing codes get their descriptions refreshed and new codes are added. Each code will be inserted with the correct category (O, R, S, or M) and description exactly as shown in your spreadsheet.
 
-In the existing `useEffect` that transforms saved items (line 698-759), add system mapping logic as a fallback when category mapping returns null:
+This covers:
+- General Conditions codes (ALOW through WHSX)
+- Equipment Rental codes (9610, 9612, 9615)
+- Consumable/Other codes (9720, 9730, 9731, 9732, 9740, 9741, 9742)
+- Tier One codes (9690-9693)
+- Contract Labor/WA codes (9617-9680, ODTL, OENG)
+- Subcontract codes (9800-9853)
+- Special codes (WRNT, WNTY, MAT1, REN1, TMUM)
 
-```
-For each item with no cost_code:
-  1. Try category mapping (existing logic)
-  2. If category returns null (including __SYSTEM__ defer):
-     Look up system mapping from savedMappings (dbMappings)
-     Extract the laborCode from the stored cost_head (format: "materialCode|laborCode")
-     Build full code: section + activity + laborCode
-  3. Assign to item
-```
+### Step 4 -- Update CostCodeImport sheet detection
 
-This means the load-time transformation now handles both priority levels: Category first, System as fallback.
+Add logic so importing future spreadsheets with sheets named "rental", "subcontract", "equipment", "general conditions", etc. will automatically assign the correct R or S category.
 
-### Step 2: Batch Persist Applied Codes to Database (Index.tsx)
-
-After the load-time transformation, if any items received new codes (were previously empty in DB), trigger a batch database update using the existing `batchUpdateSystemCostCodes` mutation:
-
-```
-After transforming items:
-  - Collect all items that got codes applied (where DB had empty cost_code)
-  - Build itemUpdates array with row_number + cost_code pairs
-  - Call batchUpdateSystemCostCodes to save in batches of 50
-  - Log: "Auto-applied and saved X labor codes from mappings"
-```
-
-This ensures codes survive the next reload because they are now in the database.
-
-### Step 3: Prevent Re-application Loop
-
-Add a guard to prevent the auto-apply from firing repeatedly:
-
-- Use a ref (`hasAutoAppliedRef`) that tracks whether auto-apply has already run for the current project
-- Reset the ref when `currentProject.id` changes
-- Only run the batch persist once per project load
-
-## Technical Details
-
-| File | Change |
-|------|--------|
-| `src/pages/Index.tsx` | Expand load-time useEffect (line 698-759) to also apply system mappings as fallback when category returns null |
-| `src/pages/Index.tsx` | Add a follow-up useEffect that batch-persists newly applied codes to DB using `batchUpdateSystemCostCodes` |
-| `src/pages/Index.tsx` | Add `hasAutoAppliedRef` guard to prevent re-application loops |
-
-### Mapping Priority (preserved)
-
-```text
-1. Saved DB code (cost_code not empty) --> keep as-is
-2. Category mapping (e.g., Valves -> VALV) --> apply + save
-3. System mapping (e.g., Cold Water -> WATR) --> apply + save
-4. No mapping found --> leave empty
-```
-
-### What Changes for the User
-
-- On project load, all items automatically get their labor codes from the configured mappings
-- Those codes are saved to the database immediately
-- Next reload shows 100% coded (or whatever percentage has mappings configured)
-- No manual "Apply" step needed -- mappings are always enforced
-- Manual overrides in the DB are still preserved (priority 1 above)
+## No changes needed to
+- Database schema (the `category` column is already `text`, so R and S values work)
+- RLS policies (no changes to access patterns)
+- Material mapping UI (it already filters by category M/O)
 
