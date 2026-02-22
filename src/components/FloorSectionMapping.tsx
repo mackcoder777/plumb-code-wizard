@@ -476,15 +476,21 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             >
               Auto-Suggest
             </Button>
-            {itemCounts.withCodes > 0 && onApplySectionCodes && !hasChanges && (
+            {itemCounts.withCodes > 0 && onApplySectionCodes && (
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={handleApplySectionCodes}
+                onClick={() => {
+                  if (hasChanges) {
+                    handleSaveAll().then(() => handleApplySectionCodes());
+                  } else {
+                    handleApplySectionCodes();
+                  }
+                }}
                 title={`${itemCounts.withCodes} items have labor codes. ${itemCounts.totalWithFloor} total items have floor values.`}
               >
                 <RefreshCw className="h-4 w-4 mr-1" />
-                Apply to {itemCounts.withCodes} Coded Items
+                Re-apply Sections ({itemCounts.withCodes} items)
               </Button>
             )}
             {hasChanges && (

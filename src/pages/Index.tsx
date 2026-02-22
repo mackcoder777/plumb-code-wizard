@@ -718,6 +718,15 @@ const EnhancedCostCodeManager = () => {
   // Load saved items when project changes - apply category AND system mappings during load, then persist
   useEffect(() => {
     if (savedItems.length > 0 && currentProject?.id) {
+      // GUARD: If project likely has floor mappings but they haven't loaded yet, wait
+      // We check if dbFloorMappings is still empty — the query may not have resolved yet
+      const floorMappingsLoaded = dbFloorMappings.length > 0;
+      const hasFloorsInData = savedItems.some(i => i.floor && i.floor.trim());
+      if (hasFloorsInData && !floorMappingsLoaded) {
+        // Floor data exists but mappings haven't loaded — skip this cycle, will re-run when they load
+        console.log('[Load] Deferring auto-apply: floor mappings not yet loaded');
+        return;
+      }
       const itemsNeedingPersist: Array<{ row_number: number; cost_code: string }> = [];
 
       const transformedItems = savedItems.map((item) => {
@@ -836,7 +845,7 @@ const EnhancedCostCodeManager = () => {
         })();
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings, dbFloorMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
