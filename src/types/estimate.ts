@@ -36,7 +36,7 @@ export interface CostCodeSuggestion {
 export interface CostCodeEntry {
   code: string;
   description: string;
-  category: 'L' | 'M';
+  category: 'L' | 'M' | 'O' | 'R' | 'S';
   keywords: string[];
 }
 

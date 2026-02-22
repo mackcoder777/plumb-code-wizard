@@ -9,7 +9,7 @@ interface CostCodeImportProps {
   onImport: (codes: Array<{
     code: string;
     description: string;
-    category: 'L' | 'M' | 'O';
+    category: 'L' | 'M' | 'O' | 'R' | 'S';
     subcategory?: string;
     units?: string;
   }>) => void;
@@ -32,7 +32,7 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
       const allCodes: Array<{
         code: string;
         description: string;
-        category: 'L' | 'M' | 'O';
+        category: 'L' | 'M' | 'O' | 'R' | 'S';
         subcategory?: string;
         units?: string;
       }> = [];
@@ -54,10 +54,14 @@ export const CostCodeImport: React.FC<CostCodeImportProps> = ({ onImport, onClos
 
         // Determine category from sheet name ONLY - ignore any category column
         const sheetNameLower = sheetName.toLowerCase();
-        let sheetCategory: 'L' | 'M' | 'O' = 'L';
+        let sheetCategory: 'L' | 'M' | 'O' | 'R' | 'S' = 'L';
         if (sheetNameLower.includes('material')) {
           sheetCategory = 'M';
-        } else if (sheetNameLower.includes('other') || sheetNameLower.includes('consumable') || sheetNameLower.includes('field supply')) {
+        } else if (sheetNameLower.includes('rental') || sheetNameLower.includes('equipment rental')) {
+          sheetCategory = 'R';
+        } else if (sheetNameLower.includes('subcontract') || sheetNameLower.includes('sub contract')) {
+          sheetCategory = 'S';
+        } else if (sheetNameLower.includes('other') || sheetNameLower.includes('consumable') || sheetNameLower.includes('field supply') || sheetNameLower.includes('general condition')) {
           sheetCategory = 'O';
         }
         

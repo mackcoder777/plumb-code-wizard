@@ -13,7 +13,7 @@ interface CostCodesTabProps {
   onImportCostCodes?: (codes: Array<{
     code: string;
     description: string;
-    category: 'L' | 'M' | 'O';
+    category: 'L' | 'M' | 'O' | 'R' | 'S';
     subcategory?: string;
     units?: string;
   }>) => void;
