@@ -1,53 +1,77 @@
 
 
-# Add All Missing Material Codes from Spreadsheet
+# Smart Assign Preview Dialog
 
-## What's Missing
+## Problem
 
-Your database currently has only **L** (Labor, 604 codes) and **M** (Material, 55 codes). The uploaded spreadsheet contains ~130 additional codes across categories that don't exist yet:
+When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
+- See WHICH items go to which code
+- Understand the high-level breakdown by description/size
+- Verify the assignments are correct before applying
 
-| Category | Description | Count | Examples |
-|----------|-------------|-------|---------|
-| **O** (Other) | GC items, consumables, contract labor | ~80 | ALOW, BOND, 9730 (Consumables), 9740 (Small Tools) |
-| **R** (Rental) | Equipment rentals | 3 | 9610, 9612, 9615 |
-| **S** (Subcontract) | Formal subcontracts | ~40 | 9800-9853 |
-| Special | Warranty, change work | 4 | WRNT, WNTY, MAT1, REN1, TMUM |
+## What 9524 Covers (for reference)
 
-## Plan
+Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
 
-### Step 1 -- Expand TypeScript types to support R and S categories
+In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
 
-Update the category type from `'L' | 'M' | 'O'` to `'L' | 'M' | 'O' | 'R' | 'S'` in these files:
-- `src/hooks/useCostCodes.ts` -- CostCode interface
-- `src/components/AdminCostCodeManager.tsx` -- local type and filter
-- `src/components/CostCodeImport.tsx` -- import type and sheet-name detection (add rules for "rental", "subcontract", "equipment rental" sheet names)
-- `src/components/tabs/CostCodesTab.tsx` -- import type
-- `src/utils/smartCodeMatcher.ts` -- type reference
-- `supabase/functions/upload-cost-codes/index.ts` -- edge function type
+## Solution: Smart Assign Preview Dialog
 
-### Step 2 -- Update Admin UI filter to show new categories
+Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
 
-In `AdminCostCodeManager.tsx`, add "Rental" and "Subcontract" as filter options alongside the existing Labor / Material / Other tabs.
+### UI Design
 
-### Step 3 -- Insert all missing codes via database migration
+When you click "Smart Assign", a dialog opens with:
 
-Run a single SQL migration that inserts all ~130 codes from the spreadsheet using `ON CONFLICT (code, category) DO UPDATE` so existing codes get their descriptions refreshed and new codes are added. Each code will be inserted with the correct category (O, R, S, or M) and description exactly as shown in your spreadsheet.
+1. **Summary header** showing total items and code count
+2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
+3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
+4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
+5. **Confirm** and **Cancel** buttons at the bottom
 
-This covers:
-- General Conditions codes (ALOW through WHSX)
-- Equipment Rental codes (9610, 9612, 9615)
-- Consumable/Other codes (9720, 9730, 9731, 9732, 9740, 9741, 9742)
-- Tier One codes (9690-9693)
-- Contract Labor/WA codes (9617-9680, ODTL, OENG)
-- Subcontract codes (9800-9853)
-- Special codes (WRNT, WNTY, MAT1, REN1, TMUM)
+```text
++--------------------------------------------------+
+|  Smart Assign Preview                        [X]  |
+|                                                   |
+|  425 items will be assigned to 2 codes            |
+|                                                   |
+|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
+|  [Unmatched (0)]                                  |
+|                                                   |
+|  9525 - Plumbing Fixtures                         |
+|  +-----------+-------------------------+-----+    |
+|  | Qty       | Description             | $   |    |
+|  +-----------+-------------------------+-----+    |
+|  | 45        | Wall Lavatories          | 12k |    |
+|  | 32        | Urinal Wall Hung         | 8k  |    |
+|  | 28        | Water Closet             | 15k |    |
+|  | ...       | ...                      | ... |    |
+|  +-----------+-------------------------+-----+    |
+|                                                   |
+|            [Cancel]    [Apply All (425 items)]    |
++--------------------------------------------------+
+```
 
-### Step 4 -- Update CostCodeImport sheet detection
+### Technical Changes
 
-Add logic so importing future spreadsheets with sheets named "rental", "subcontract", "equipment", "general conditions", etc. will automatically assign the correct R or S category.
+#### File: `src/components/tabs/MaterialMappingTab.tsx`
 
-## No changes needed to
-- Database schema (the `category` column is already `text`, so R and S values work)
-- RLS policies (no changes to access patterns)
-- Material mapping UI (it already filters by category M/O)
+1. **Add state** for the preview dialog:
+   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
+   - When not null, the dialog is open
+
+2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
+
+3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
+   - Uses the existing `Dialog` component from shadcn
+   - `Tabs` component for switching between code groups
+   - Each tab aggregates items by description/size and shows counts + dollar totals
+   - A summary row at the bottom of each tab
+   - "Apply All" button calls the existing batch update logic
+
+#### File: `src/hooks/useMaterialMappingPatterns.ts`
+
+4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+
+### No database changes needed.
 
