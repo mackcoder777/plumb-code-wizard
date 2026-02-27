@@ -295,6 +295,9 @@ export interface BudgetAdjustments {
   bidTotal: number;
   budgetTotal: number;
   lrcnAmount: number;
+  // Computed rates
+  computedBidLaborRate: number;
+  shopRate: number;
 }
 
 interface BudgetAdjustmentsPanelProps {
@@ -635,6 +638,30 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     };
   }, [bidRates, budgetRate]);
 
+  // computedBidLaborRate — field hours only, no shop
+  const computedBidLaborRate = useMemo(() => {
+    const fieldHours =
+      (parseFloat(String(bidRates.straightTime.hours)) || 0) +
+      (parseFloat(String(bidRates.shiftTime.hours)) || 0) +
+      (parseFloat(String(bidRates.overtime.hours)) || 0) +
+      (parseFloat(String(bidRates.doubleTime.hours)) || 0);
+
+    if (!lrcnEnabled || fieldHours <= 0) return bidLaborRate; // fallback
+
+    const fieldDollars =
+      lrcnCalculations.straightTotal +
+      lrcnCalculations.shiftTotal +
+      lrcnCalculations.overtimeTotal +
+      lrcnCalculations.doubleTimeTotal;
+
+    return fieldDollars / fieldHours;
+  }, [bidRates, lrcnCalculations, lrcnEnabled, bidLaborRate]);
+
+  // shopRate — for fab codes only
+  const shopRate = useMemo(() => {
+    return parseFloat(String(bidRates.shop?.rate)) || bidLaborRate;
+  }, [bidRates.shop?.rate, bidLaborRate]);
+
   const calculations = useMemo(() => {
     const originalTotalHours = Object.values(laborSummary)
       .reduce((sum, item) => sum + (item.fieldHours || 0), 0);
@@ -642,7 +669,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     const foremanBonusHours = foremanBonusEnabled 
       ? originalTotalHours * (foremanBonusPercent / 100) 
       : 0;
-    const foremanBonusDollars = foremanBonusHours * bidLaborRate;
+    const foremanBonusDollars = foremanBonusHours * computedBidLaborRate;
 
     const hoursAfterForemanStrip = originalTotalHours - foremanBonusHours;
     const foremanStripRatio = originalTotalHours > 0 ? hoursAfterForemanStrip / originalTotalHours : 1;
@@ -673,8 +700,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
           code,
           description: data.description,
           hours: fieldHours,
-          rate: data.rate || bidLaborRate,
-          dollars: fieldHours * (data.rate || bidLaborRate),
+          rate: data.rate || computedBidLaborRate,
+          dollars: fieldHours * (data.rate || computedBidLaborRate),
           type: 'field'
         };
 
@@ -703,8 +730,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
           code,
           description: data.description,
           hours: hoursAfterForeman,
-          rate: data.rate || bidLaborRate,
-          dollars: hoursAfterForeman * (data.rate || bidLaborRate),
+          rate: data.rate || computedBidLaborRate,
+          dollars: hoursAfterForeman * (data.rate || computedBidLaborRate),
           type: 'field'
         };
         totalFieldHours += hoursAfterForeman;
@@ -719,8 +746,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         code: assembledCode,
         description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || `FABRICATION - ${fabCostHead}`,
         hours,
-        rate: bidLaborRate,
-        dollars: hours * bidLaborRate,
+        rate: shopRate,
+        dollars: hours * shopRate,
         type: 'fab',
       };
     });
@@ -769,7 +796,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       totalMaterialWithTax,
       totalMaterialPreTax
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, bidLaborRate, fabCodeMap]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, computedBidLaborRate, shopRate, fabCodeMap]);
 
   useEffect(() => {
     onAdjustmentsChange({
@@ -798,8 +825,11 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       bidTotal: lrcnCalculations.bidTotal,
       budgetTotal: lrcnCalculations.budgetTotal,
       lrcnAmount: lrcnCalculations.lrcnAmount,
+      // Computed rates
+      computedBidLaborRate,
+      shopRate,
     });
-  }, [calculations, lrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, onAdjustmentsChange]);
+  }, [calculations, lrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, onAdjustmentsChange]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
