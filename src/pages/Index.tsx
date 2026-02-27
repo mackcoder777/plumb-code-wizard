@@ -2517,29 +2517,43 @@ const EnhancedCostCodeManager = () => {
                     <label className="text-sm font-medium text-gray-700">Bid Labor Rate:</label>
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500">$</span>
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={bidLaborRateInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                            setBidLaborRateInput(val);
-                            const parsed = parseFloat(val);
-                            if (!isNaN(parsed) && parsed > 0) {
-                              setBidLaborRate(parsed);
+                      {budgetAdjustments?.laborRateContingencyEnabled ? (
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono text-right w-20 px-3 py-2 bg-muted rounded text-sm font-semibold">
+                            {(budgetAdjustments.computedBidLaborRate || bidLaborRate).toFixed(2)}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5">Auto from field bid rates</span>
+                        </div>
+                      ) : (
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={bidLaborRateInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                              setBidLaborRateInput(val);
+                              const parsed = parseFloat(val);
+                              if (!isNaN(parsed) && parsed > 0) {
+                                setBidLaborRate(parsed);
+                              }
                             }
-                          }
-                        }}
-                        onBlur={() => {
-                          const parsed = parseFloat(bidLaborRateInput);
-                          if (isNaN(parsed) || parsed <= 0) {
-                            setBidLaborRateInput(bidLaborRate.toString());
-                          }
-                        }}
-                        className="w-20 px-3 py-2 font-mono text-right"
-                      />
+                          }}
+                          onBlur={() => {
+                            const parsed = parseFloat(bidLaborRateInput);
+                            if (isNaN(parsed) || parsed <= 0) {
+                              setBidLaborRateInput(bidLaborRate.toString());
+                            }
+                          }}
+                          className="w-20 px-3 py-2 font-mono text-right"
+                        />
+                      )}
                       <span className="text-gray-500">/hr</span>
+                      {budgetAdjustments?.laborRateContingencyEnabled && budgetAdjustments.shopRate > 0 && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          Shop: ${budgetAdjustments.shopRate.toFixed(2)}/hr
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
