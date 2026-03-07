@@ -638,8 +638,8 @@ const EnhancedCostCodeManager = () => {
 
   // Generate cost code with audit trail - uses smart matching against database codes
   const generateCostCode = useCallback((item) => {
-    // Use database floor mappings for section
-    const section = getSectionForFloor(item.floor || '', item.drawing || '');
+    // Use zone-aware section resolution
+    const section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
 
     // Get activity code: floor activity takes priority over system activity
     const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
