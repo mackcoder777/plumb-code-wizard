@@ -1,77 +1,55 @@
 
 
-# Smart Assign Preview Dialog
+# Fix Plan: Infinite Re-render Loop + System Mapping Display
 
-## Problem
+## Bug 1 (Critical): Infinite Re-render Loop
 
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
-
-## What 9524 Covers (for reference)
-
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
-
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
-
-## Solution: Smart Assign Preview Dialog
-
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
-
-### UI Design
-
-When you click "Smart Assign", a dialog opens with:
-
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
+**Root cause confirmed:** Circular dependency chain in `Index.tsx`:
 
 ```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
+setDatasetProfile (line 816) → datasetProfile changes
+  → getSectionForFloor recreates (line 637, depends on datasetProfile)
+  → generateCostCode recreates (line 706, depends on getSectionForFloor)
+  → load effect re-fires (line 850, depends on generateCostCode)
+  → calls setDatasetProfile again → ∞
 ```
 
-### Technical Changes
+**Fix — two changes in `src/pages/Index.tsx`:**
 
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
+1. **Remove `generateCostCode` from load effect deps (line 850).** The load effect only uses `generateCostCode` for the `suggestedCode` display hint on each item. The actual mapping dependencies (`dbCategoryMappings`, `savedMappings`, `dbFloorMappings`, etc.) are already in the dep array and correctly trigger re-runs when mapping data changes. Remove just `generateCostCode` from the array.
 
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
+2. **Move `setDatasetProfile` out of the load effect.** Create a separate `useEffect` that computes and sets `datasetProfile` from `estimateData`, guarded by a ref so it only runs once per project load (when `estimateData` transitions from empty to populated for the current project). This breaks the circular chain completely.
 
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
+   ```ts
+   // New effect — runs once when estimateData first populates for a project
+   const datasetProfileSetRef = useRef<string | null>(null);
+   useEffect(() => {
+     if (estimateData.length > 0 && currentProject?.id && datasetProfileSetRef.current !== currentProject.id) {
+       datasetProfileSetRef.current = currentProject.id;
+       setDatasetProfile(profileDataset(estimateData));
+     }
+   }, [estimateData, currentProject?.id]);
+   ```
 
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
+   Remove `setDatasetProfile(profileDataset(transformedItems))` from line 816 of the load effect.
 
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
+## Bug 2: System Mapping Shows 0/0
 
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+This is a downstream symptom of Bug 1. The infinite loop prevents `useSystemIndex` from ever completing (worker/sync gets terminated and restarted on every re-render cycle). Once Bug 1 is fixed:
 
-### No database changes needed.
+- `data` reference stabilizes → `useSystemIndex` completes → `systemIndex` populates with 36 systems
+- System cards render → `dbMappings` restore logic populates the 20+ saved mappings
+- Mapping Audit Summary reads from both `systemIndex` and `systemMappings` → shows correct counts
+
+No additional code changes needed for Bug 2 — it resolves automatically once the render loop stops.
+
+## Files changed
+
+| File | Change |
+|---|---|
+| `src/pages/Index.tsx` | Remove `generateCostCode` from load effect deps; extract `setDatasetProfile` into guarded one-shot effect |
+
+## Validation
+
+After fix: Labor Mapping tab loads all 36 systems with 20+ verified mappings. "Processing..." completes in under 10 seconds. No mapping data is altered.
 
