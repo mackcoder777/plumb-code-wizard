@@ -33,7 +33,7 @@ import { BuildingSectionMappingPanel } from '@/components/BuildingSectionMapping
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
 import { MappingAuditSummary } from '@/components/MappingAuditSummary';
-import { FloorSectionMapping, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
+import { FloorSectionMapping, getFloorMapping } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 
 interface SystemMappingTabProps {

@@ -24,7 +24,8 @@ import {
   useUpsertAndApplyMapping,
   EstimateProject
 } from '@/hooks/useEstimateProjects';
-import { useFloorSectionMappings, getSectionFromFloor } from '@/hooks/useFloorSectionMappings';
+import { useFloorSectionMappings, getFloorMapping } from '@/hooks/useFloorSectionMappings';
+import { resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
