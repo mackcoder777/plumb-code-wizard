@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
-import { DatasetProfile, getBuildingFromZone } from '@/utils/datasetProfiler';
+import { DatasetProfile, getBuildingFromZone, getZonePatternMatch } from '@/utils/datasetProfiler';
 
 /** Floors that exist across multiple buildings and need zone-based section resolution */
 const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
@@ -12,6 +12,7 @@ export interface BuildingSectionMapping {
   building_identifier: string;
   section_code: string;
   description: string | null;
+  zone_pattern: string | null;
 }
 
 export interface DetectedBuilding {

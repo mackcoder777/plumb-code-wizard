@@ -206,6 +206,26 @@ export function getBuildingFromZone(zone: string): string | null {
   return null;
 }
 
+// ─── Zone Pattern Matching (Priority 2) ──────────────────────────────────────
+
+/**
+ * Checks if a zone string matches any user-configured zone_pattern
+ * from building_section_mappings. Used as Priority 2 fallback when
+ * getBuildingFromZone (Priority 1 regex) returns null.
+ */
+export function getZonePatternMatch(
+  zone: string,
+  buildingMappings: Array<{ building_identifier: string; zone_pattern?: string | null }>
+): { building_identifier: string } | null {
+  if (!zone) return null;
+  for (const m of buildingMappings) {
+    if (m.zone_pattern && zone.toLowerCase().includes(m.zone_pattern.toLowerCase())) {
+      return { building_identifier: m.building_identifier };
+    }
+  }
+  return null;
+}
+
 // ─── Human-readable description ──────────────────────────────────────────────
 
 /** Returns a human-readable description of the detected profile */
