@@ -626,7 +626,7 @@ const EnhancedCostCodeManager = () => {
     
     // Priority 2: Building from drawing name (for generic floors like Roof, Crawl Space)
     if (drawing && dbBuildingMappings.length > 0) {
-      const resolved = resolveSectionStatic(floor, drawing, dbFloorMappings, dbBuildingMappings);
+      const resolved = resolveSectionStatic(floor, drawing, dbFloorMappings, dbBuildingMappings, { datasetProfile });
       if (resolved !== '01') return resolved;
     }
     
@@ -648,7 +648,7 @@ const EnhancedCostCodeManager = () => {
     const section = getSectionForFloor(item.floor || '', item.drawing || '');
 
     // Get activity code: floor activity takes priority over system activity
-    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
+    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
     const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
     const systemLower = (item.system || '').toLowerCase().trim();
 
@@ -797,8 +797,8 @@ const EnhancedCostCodeManager = () => {
 
         // Build full cost code with section + activity + cost head
         if (appliedCode) {
-          const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
-          const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
+          const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+          const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
           const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
@@ -1539,8 +1539,8 @@ const EnhancedCostCodeManager = () => {
     const updated = estimateData.map((item, index) => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
-        const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
-        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
+        const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
         
         // Build the FULL assembled labor code with section and activity
@@ -2586,7 +2586,7 @@ const EnhancedCostCodeManager = () => {
                       if (!rawCostHead) {
                         // CRITICAL FIX: Bucket uncoded items instead of skipping
                         costHead = 'UNCD';
-                        existingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
+                        existingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                         existingActivity = '0000';
                       } else {
                         // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
@@ -2607,8 +2607,8 @@ const EnhancedCostCodeManager = () => {
                       }
                       
                       // Use existing section/activity if present, otherwise derive from floor/system
-                      const section = existingSection || resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
-                      const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
+                      const section = existingSection || resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                      const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings));
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
