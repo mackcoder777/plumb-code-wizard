@@ -616,21 +616,15 @@ const EnhancedCostCodeManager = () => {
 
   const COST_CODES = getAllCodes();
 
-  // Helper to get section from floor - uses DB mappings first, then building from drawing, then fallback patterns
-  const getSectionForFloor = useCallback((floor: string, drawing?: string): string => {
-    // Priority 1: Use database floor mappings if available
-    if (dbFloorMappings.length > 0) {
-      const floorMap = getFloorMapping(floor, dbFloorMappings);
-      if (floorMap.section !== '01') return floorMap.section;
-    }
-    
-    // Priority 2: Building from drawing name (for generic floors like Roof, Crawl Space)
-    if (drawing && dbBuildingMappings.length > 0) {
-      const resolved = resolveSectionStatic(floor, drawing, dbFloorMappings, dbBuildingMappings, { datasetProfile });
+  // Helper to get section from floor - uses zone-aware resolver with building fallback
+  const getSectionForFloor = useCallback((floor: string, drawing?: string, zone?: string): string => {
+    // Use zone-aware resolver that handles standalone floors (Roof, UG, etc.)
+    if (dbFloorMappings.length > 0 || dbBuildingMappings.length > 0) {
+      const resolved = resolveSectionStatic(floor, drawing || '', dbFloorMappings, dbBuildingMappings, { zone, datasetProfile });
       if (resolved !== '01') return resolved;
     }
     
-    // Priority 3: Fallback to hardcoded patterns (for initial setup before DB mappings)
+    // Fallback to hardcoded patterns (for initial setup before DB mappings)
     const floorText = (floor || '').toLowerCase().trim();
     for (const [code, patterns] of Object.entries(FLOOR_MAPPING_FALLBACK)) {
       if (patterns.some(pattern => pattern.test(floorText))) {
