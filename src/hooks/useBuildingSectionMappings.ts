@@ -3,6 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
 import { DatasetProfile, getBuildingFromZone } from '@/utils/datasetProfiler';
 
+/** Floors that exist across multiple buildings and need zone-based section resolution */
+const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
+
 export interface BuildingSectionMapping {
   id: string;
   project_id: string;
@@ -156,6 +159,20 @@ export function resolveSectionStatic(
   options?: ResolutionOptions
 ): string {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
+
+  // Standalone floors: zone-based section takes priority over floor mapping's section
+  if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
+    const zoneBuilding = getBuildingFromZone(options.zone);
+    if (zoneBuilding) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
+      );
+      if (m) return m.section_code;
+      return suggestSectionForBuilding(zoneBuilding);
+    }
+  }
+
+  // Non-standalone floor with a mapping — use it directly
   if (fromFloor) return fromFloor.section;
 
   // Zone-based building resolution (only when profile says zone = building and confidence >= 0.6)
@@ -175,9 +192,7 @@ export function resolveSectionStatic(
       return suggestSectionForBuilding(zoneBuilding);
     }
   }
-  // 3. Per-item zone fallback — fires for ANY pattern when floor extraction
-  //    yields nothing (handles "Roof", "UG", "Crawl Space" in Pattern 1 datasets)
-  //    Suppressed only when profile explicitly says zone is subzone or phase
+  // Per-item zone fallback (pattern-agnostic, suppressed for subzone/phase)
   if (
     options?.zone &&
     (!profile || (profile.zoneRole !== 'zone' && profile.zoneRole !== 'phase'))
@@ -217,6 +232,21 @@ export function resolveFloorMappingStatic(
   options?: ResolutionOptions
 ): FloorMappingResult {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
+  const floorActivity = fromFloor?.activity || '0000';
+
+  // Standalone floors: zone-based section takes priority, preserve floor's activity
+  if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
+    const zoneBuilding = getBuildingFromZone(options.zone);
+    if (zoneBuilding) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
+      );
+      if (m) return { section: m.section_code, activity: floorActivity };
+      return { section: suggestSectionForBuilding(zoneBuilding), activity: floorActivity };
+    }
+  }
+
+  // Non-standalone floor with a mapping — use it directly
   if (fromFloor) return fromFloor;
 
   // Zone-based building fallback for section, activity stays default
@@ -237,7 +267,7 @@ export function resolveFloorMappingStatic(
     }
   }
 
-  // 3. Per-item zone fallback (pattern-agnostic, suppressed for subzone/phase)
+  // Per-item zone fallback (pattern-agnostic, suppressed for subzone/phase)
   if (
     options?.zone &&
     (!profile || (profile.zoneRole !== 'zone' && profile.zoneRole !== 'phase'))
