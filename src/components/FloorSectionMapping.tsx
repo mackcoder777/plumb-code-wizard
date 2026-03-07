@@ -478,12 +478,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => {
+                onClick={async () => {
                   if (hasChanges) {
-                    handleSaveAll().then(() => handleApplySectionCodes());
-                  } else {
-                    handleApplySectionCodes();
+                    await handleSaveAll();
                   }
+                  handleApplySectionCodes();
                 }}
               >
                 <RefreshCw className="h-4 w-4 mr-1" />
