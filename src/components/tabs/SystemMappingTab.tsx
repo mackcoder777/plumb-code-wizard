@@ -34,8 +34,9 @@ import { BuildingSectionMappingPanel } from '@/components/BuildingSectionMapping
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
 import { MappingAuditSummary } from '@/components/MappingAuditSummary';
-import { FloorSectionMapping, getFloorMapping } from '@/hooks/useFloorSectionMappings';
+import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
+import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -44,6 +45,7 @@ interface SystemMappingTabProps {
   projectId?: string | null;
   floorSectionMappings?: FloorSectionMapping[];
   systemActivityMappings?: SystemActivityMapping[];
+  buildingSectionMappings: BuildingSectionMapping[];
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -75,7 +77,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -488,14 +490,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   }, [suggestions]);
 
-  // Helper to build full labor code with section prefix and activity code
-  const buildFullLaborCode = useCallback((costHead: string, floor: string, system?: string): string => {
-    const floorMap = getFloorMapping(floor, floorSectionMappings);
-    const activity = floorMap.activity !== '0000'
-      ? floorMap.activity
-      : (system ? getActivityFromSystem(system, systemActivityMappings) : '0000');
-    return `${floorMap.section} ${activity} ${costHead}`;
-  }, [floorSectionMappings, systemActivityMappings]);
+  // Helper to build full labor code with zone-aware section resolution
+  const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string }): string => {
+    const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
+    const activity = resolved.activity !== '0000'
+      ? resolved.activity
+      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings) : '0000');
+    return `${resolved.section} ${activity} ${costHead}`;
+  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile]);
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
@@ -517,14 +519,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         costHead = categoryLaborCode;
       }
       
-      // Get new section and activity from floor mapping using the consistent helper function
-      const floorMap = getFloorMapping(item.floor || '', floorSectionMappings);
+      // Get new section and activity from zone-aware resolver
+      const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
-      const activityCode = floorMap.activity !== '0000'
-        ? floorMap.activity
+      const activityCode = resolved.activity !== '0000'
+        ? resolved.activity
         : getActivityFromSystem(item.system, systemActivityMappings);
-      const newFullCode = `${floorMap.section} ${activityCode} ${costHead}`;
+      const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
@@ -563,7 +565,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, floorSectionMappings, systemActivityMappings, onDataUpdate]);
+  }, [data, categoryMappings, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
@@ -615,7 +617,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         if (assignmentSource === 'category') categoryAssignments++;
         if (assignmentSource === 'system') systemAssignments++;
         systemItemCounts[systemKey] = (systemItemCounts[systemKey] || 0) + 1;
-        const fullCode = buildFullLaborCode(costHead, item.floor || '', item.system);
+        const fullCode = buildFullLaborCode(costHead, { floor: item.floor || '', drawing: item.drawing, zone: item.zone, system: item.system });
         return { ...item, costCode: fullCode };
       }
       return item;
@@ -695,7 +697,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       
       if (costHead) {
         itemsAffected++;
-        const fullCode = buildFullLaborCode(costHead, item.floor || '', item.system);
+        const fullCode = buildFullLaborCode(costHead, { floor: item.floor || '', drawing: item.drawing, zone: item.zone, system: item.system });
         return { ...item, costCode: fullCode };
       }
       return item;
