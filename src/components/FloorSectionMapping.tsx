@@ -598,9 +598,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40%]">Floor Value</TableHead>
-                  <TableHead className="w-[30%]">Section Code</TableHead>
-                  <TableHead className="w-[30%] text-right">Item Count</TableHead>
+                  <TableHead className="w-[35%]">Floor Value</TableHead>
+                  <TableHead className="w-[25%]">Section Code</TableHead>
+                  <TableHead className="w-[20%]">Activity Code</TableHead>
+                  <TableHead className="w-[20%] text-right">Item Count</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -619,6 +620,15 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                         value={localMappings[childFloors[0]] || ''}
                         onChange={(value) => handleSectionChange(childFloors, value)}
                         customCodes={customCodes}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={localActivityMappings[childFloors[0]] || '0000'}
+                        onChange={(e) => handleActivityChange(childFloors, e.target.value.toUpperCase().slice(0, 4))}
+                        placeholder="0000"
+                        className="w-20 h-8 font-mono text-sm"
+                        maxLength={4}
                       />
                     </TableCell>
                     <TableCell className="text-right">
