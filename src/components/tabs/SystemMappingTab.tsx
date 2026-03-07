@@ -29,6 +29,7 @@ import { TableRowCombobox } from './SystemMappingTab/TableRowCombobox';
 import { generateAllSuggestions, SuggestionResult } from './SystemMappingTab/autoSuggestLogic';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FloorSectionMappingPanel } from '@/components/FloorSectionMapping';
+import { DatasetProfile } from '@/utils/datasetProfiler';
 import { BuildingSectionMappingPanel } from '@/components/BuildingSectionMapping';
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
@@ -50,6 +51,8 @@ interface SystemMappingTabProps {
     subcategory?: string;
     units?: string;
   }>;
+  datasetProfile?: DatasetProfile | null;
+  onProfileOverride?: (override: any) => void;
 }
 
 type ViewMode = 'cards' | 'table';
@@ -71,7 +74,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], importedCostCodes = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], importedCostCodes = [], datasetProfile, onProfileOverride }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
