@@ -136,9 +136,8 @@ export const PlumbingEstimateManager: React.FC = () => {
                 onDataUpdate={updateEstimateData}
                 onNavigateToEstimates={(systemFilter) => {
                   setActiveTab('estimates');
-                  // Note: EstimatesTab doesn't currently have a filter prop,
-                  // so navigation just switches tabs for now
                 }}
+                buildingSectionMappings={[]}
                 importedCostCodes={importedCostCodes}
               />
             )}
