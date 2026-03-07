@@ -1,70 +1,77 @@
 
 
-# Per-Item Zone Fallback — Implementation Plan
+# Smart Assign Preview Dialog
 
-## What's Changing
+## Problem
 
-Single file edit: `src/hooks/useBuildingSectionMappings.ts`
+When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
+- See WHICH items go to which code
+- Understand the high-level breakdown by description/size
+- Verify the assignments are correct before applying
 
-Insert a **per-item zone fallback** block into both `resolveSectionStatic` and `resolveFloorMappingStatic`, placed between the existing profile-driven zone check (Step 2) and the drawing-based fallback (Step 4).
+## What 9524 Covers (for reference)
 
-## Verification of Dependencies
+Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
 
-- `getBuildingFromZone` — already imported from `@/utils/datasetProfiler` (line 4)
-- `suggestSectionForBuilding` — already defined in this file (derives section from building ID: "A" → "BA", "12" → "12")
+In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
 
-No new imports or functions needed.
+## Solution: Smart Assign Preview Dialog
 
-## Code Changes
+Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
 
-### `resolveSectionStatic` (after line 177, before line 179)
+### UI Design
 
-Insert:
-```ts
-// Per-item zone fallback — fires for ANY pattern when floor extraction
-// yields nothing (handles "Roof", "UG", "Crawl Space" in Pattern 1 datasets)
-// Suppressed only when profile explicitly says zone is subzone or phase
-if (
-  options?.zone &&
-  (!profile || (profile.zoneRole !== 'zone' && profile.zoneRole !== 'phase'))
-) {
-  const zoneBuilding = getBuildingFromZone(options.zone);
-  if (zoneBuilding) {
-    const m = buildingMappings.find(
-      bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-    );
-    if (m) return m.section_code;
-    return suggestSectionForBuilding(zoneBuilding);
-  }
-}
+When you click "Smart Assign", a dialog opens with:
+
+1. **Summary header** showing total items and code count
+2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
+3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
+4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
+5. **Confirm** and **Cancel** buttons at the bottom
+
+```text
++--------------------------------------------------+
+|  Smart Assign Preview                        [X]  |
+|                                                   |
+|  425 items will be assigned to 2 codes            |
+|                                                   |
+|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
+|  [Unmatched (0)]                                  |
+|                                                   |
+|  9525 - Plumbing Fixtures                         |
+|  +-----------+-------------------------+-----+    |
+|  | Qty       | Description             | $   |    |
+|  +-----------+-------------------------+-----+    |
+|  | 45        | Wall Lavatories          | 12k |    |
+|  | 32        | Urinal Wall Hung         | 8k  |    |
+|  | 28        | Water Closet             | 15k |    |
+|  | ...       | ...                      | ... |    |
+|  +-----------+-------------------------+-----+    |
+|                                                   |
+|            [Cancel]    [Apply All (425 items)]    |
++--------------------------------------------------+
 ```
 
-### `resolveFloorMappingStatic` (same position — after profile-driven zone block, before drawing fallback)
+### Technical Changes
 
-Same logic but returns `FloorMappingResult`:
-```ts
-if (
-  options?.zone &&
-  (!profile || (profile.zoneRole !== 'zone' && profile.zoneRole !== 'phase'))
-) {
-  const zoneBuilding = getBuildingFromZone(options.zone);
-  if (zoneBuilding) {
-    const m = buildingMappings.find(
-      bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-    );
-    if (m) return { section: m.section_code, activity: '0000' };
-    return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
-  }
-}
-```
+#### File: `src/components/tabs/MaterialMappingTab.tsx`
 
-## Resolution Chain (after fix)
+1. **Add state** for the preview dialog:
+   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
+   - When not null, the dialog is open
 
-1. Floor mapping exact/partial match → section + activity
-2. Profile-driven zone lookup (Pattern 2 only, confidence ≥ 0.6)
-3. **Per-item zone fallback** (any pattern, suppressed for Pattern 3/4 subzones)
-4. Drawing-based fallback
-5. Default "01" / "0000"
+2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
 
-No other files affected.
+3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
+   - Uses the existing `Dialog` component from shadcn
+   - `Tabs` component for switching between code groups
+   - Each tab aggregates items by description/size and shows counts + dollar totals
+   - A summary row at the bottom of each tab
+   - "Apply All" button calls the existing batch update logic
+
+#### File: `src/hooks/useMaterialMappingPatterns.ts`
+
+4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+
+### No database changes needed.
 
