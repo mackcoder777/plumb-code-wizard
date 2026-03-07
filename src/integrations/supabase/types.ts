@@ -227,6 +227,7 @@ export type Database = {
       estimate_projects: {
         Row: {
           created_at: string | null
+          dataset_profile_override: string | null
           file_name: string | null
           id: string
           name: string
@@ -237,6 +238,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          dataset_profile_override?: string | null
           file_name?: string | null
           id?: string
           name: string
@@ -247,6 +249,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          dataset_profile_override?: string | null
           file_name?: string | null
           id?: string
           name?: string
