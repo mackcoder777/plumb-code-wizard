@@ -23,6 +23,7 @@ export type Database = {
           project_id: string
           section_code: string
           updated_at: string | null
+          zone_pattern: string | null
         }
         Insert: {
           building_identifier: string
@@ -32,6 +33,7 @@ export type Database = {
           project_id: string
           section_code: string
           updated_at?: string | null
+          zone_pattern?: string | null
         }
         Update: {
           building_identifier?: string
@@ -41,6 +43,7 @@ export type Database = {
           project_id?: string
           section_code?: string
           updated_at?: string | null
+          zone_pattern?: string | null
         }
         Relationships: [
           {
