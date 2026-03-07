@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
+import type { EstimateItem } from '@/types/estimate';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FloorSectionMappingPanelProps {
-  estimateData: Array<{ floor?: string; costCode?: string }>;
+  estimateData: EstimateItem[];
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
   onApplySectionCodes?: (mappings: Record<string, string>) => void;
@@ -477,12 +478,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => {
+                onClick={async () => {
                   if (hasChanges) {
-                    handleSaveAll().then(() => handleApplySectionCodes());
-                  } else {
-                    handleApplySectionCodes();
+                    await handleSaveAll();
                   }
+                  handleApplySectionCodes();
                 }}
               >
                 <RefreshCw className="h-4 w-4 mr-1" />
