@@ -217,17 +217,17 @@ function suggestSection(displayName: string): string {
 
 function suggestActivity(floorName: string): string {
   const lower = floorName.toLowerCase();
-  // Extract floor-specific part after " - " if present
   const dashIdx = lower.indexOf(' - ');
   const floorPart = dashIdx > 0 ? lower.substring(dashIdx + 3).trim() : lower;
+  const clean = floorPart.replace(/\s*\(.*\)\s*$/, '').trim();
 
-  const levelMatch = floorPart.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
-  if (levelMatch) return `LVL${levelMatch[1]}`;
-  if (/basement|below\s*grade/.test(floorPart)) return 'BSMT';
-  if (/mezzanine|mezz/.test(floorPart)) return 'MEZZ';
-  if (/penthouse|pent/.test(floorPart)) return 'PENT';
-  if (/roof/.test(floorPart)) return '0000';
-  if (/crawl/.test(floorPart)) return '0000';
+  const levelMatch = clean.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
+  if (levelMatch) return `00L${levelMatch[1]}`;
+  if (/basement|below\s*grade/.test(clean)) return '00LB';
+  if (/mezzanine|mezz/.test(clean)) return '00LM';
+  if (/penthouse|pent/.test(clean)) return '00LP';
+  if (/roof/.test(clean)) return '00LR';
+  if (/crawl/.test(clean)) return '00LC';
   return '0000';
 }
 
@@ -392,30 +392,29 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const newSec: Record<string, string> = {};
     const newAct: Record<string, string> = {};
 
-    // Building groups: section from building key, activity from each floor
+    // Building groups: section from building key, activity per floor
     groups.forEach(group => {
-      const sec = localMappings[group.childFloors[0]] || suggestSection(group.buildingKey);
+      const sec = suggestSection(group.buildingKey);
       group.childFloors.forEach(floor => {
-        newSec[floor] = localMappings[floor] || sec;
-        newAct[floor] = localActivityMappings[floor] !== '0000' && localActivityMappings[floor]
-          ? localActivityMappings[floor]
-          : suggestActivity(floor);
+        newSec[floor] = sec || localMappings[floor] || '';
+        // Only suggest activity when there are multiple floors to disambiguate
+        newAct[floor] = group.childFloors.length > 1
+          ? suggestActivity(floor)
+          : '0000';
       });
     });
 
-    // Standalones: both section and activity from name
+    // Standalones: section from name, activity from name
     standalones.forEach(({ floor }) => {
-      newSec[floor] = localMappings[floor] || suggestSection(floor);
-      newAct[floor] = localActivityMappings[floor] !== '0000' && localActivityMappings[floor]
-        ? localActivityMappings[floor]
-        : suggestActivity(floor);
+      newSec[floor] = suggestSection(floor) || localMappings[floor] || '';
+      newAct[floor] = suggestActivity(floor);
     });
 
     setLocalMappings(newSec);
     setLocalActivityMappings(newAct);
     setHasChanges(true);
     toast({ title: "Auto-Suggestions Applied", description: "Review section & activity codes, then save." });
-  }, [groups, standalones, localMappings, localActivityMappings]);
+  }, [groups, standalones, localMappings]);
 
   // ── Expand/Collapse ──────────────────────────────────────────────────────
   const toggleGroup = (key: string) =>
