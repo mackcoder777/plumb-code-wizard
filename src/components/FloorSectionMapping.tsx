@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
+import type { EstimateItem } from '@/types/estimate';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FloorSectionMappingPanelProps {
-  estimateData: Array<{ floor?: string; costCode?: string }>;
+  estimateData: EstimateItem[];
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
   onApplySectionCodes?: (mappings: Record<string, string>) => void;
