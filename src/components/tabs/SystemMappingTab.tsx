@@ -490,14 +490,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
   }, [suggestions]);
 
-  // Helper to build full labor code with section prefix and activity code
-  const buildFullLaborCode = useCallback((costHead: string, floor: string, system?: string): string => {
-    const floorMap = getFloorMapping(floor, floorSectionMappings);
-    const activity = floorMap.activity !== '0000'
-      ? floorMap.activity
-      : (system ? getActivityFromSystem(system, systemActivityMappings) : '0000');
-    return `${floorMap.section} ${activity} ${costHead}`;
-  }, [floorSectionMappings, systemActivityMappings]);
+  // Helper to build full labor code with zone-aware section resolution
+  const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string }): string => {
+    const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
+    const activity = resolved.activity !== '0000'
+      ? resolved.activity
+      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings) : '0000');
+    return `${resolved.section} ${activity} ${costHead}`;
+  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile]);
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
@@ -519,14 +519,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         costHead = categoryLaborCode;
       }
       
-      // Get new section and activity from floor mapping using the consistent helper function
-      const floorMap = getFloorMapping(item.floor || '', floorSectionMappings);
+      // Get new section and activity from zone-aware resolver
+      const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
-      const activityCode = floorMap.activity !== '0000'
-        ? floorMap.activity
+      const activityCode = resolved.activity !== '0000'
+        ? resolved.activity
         : getActivityFromSystem(item.system, systemActivityMappings);
-      const newFullCode = `${floorMap.section} ${activityCode} ${costHead}`;
+      const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
@@ -565,7 +565,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, floorSectionMappings, systemActivityMappings, onDataUpdate]);
+  }, [data, categoryMappings, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
