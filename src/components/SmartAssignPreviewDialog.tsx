@@ -26,10 +26,8 @@ interface GroupedRow {
   matchedKeyword?: string;
 }
 
-const formatDollars = (val: number) => {
-  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
-  return `$${val.toFixed(0)}`;
-};
+const formatDollars = (val: number) =>
+  '$' + Math.round(val).toLocaleString('en-US');
 
 const findMatchedKeyword = (description: string): string | undefined => {
   const text = description.toLowerCase();
@@ -107,7 +105,7 @@ export const SmartAssignPreviewDialog: React.FC<SmartAssignPreviewDialogProps> =
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue={defaultTab} className="flex-1 min-h-0 flex flex-col">
+        <Tabs key={defaultTab} defaultValue={defaultTab} className="flex-1 min-h-0 flex flex-col">
           <TabsList className="w-full flex-wrap h-auto gap-1 p-1">
             {codes.map(code => (
               <TabsTrigger key={code} value={code} className="text-xs gap-1">
