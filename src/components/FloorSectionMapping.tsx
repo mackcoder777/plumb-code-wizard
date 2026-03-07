@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info, Shuffle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   useFloorSectionMappings,
@@ -274,6 +274,190 @@ function groupFloors(
   return { groups, standalones };
 }
 
+// ─── Standalone floor classification ──────────────────────────────────────────
+interface StandaloneFloorInfo {
+  type: 'single' | 'dominant' | 'multi' | 'unknown';
+  primaryBuilding: string | null;
+  primaryPct: number;
+  breakdown: Array<{ label: string; count: number; pct: number }>;
+}
+
+function classifyStandaloneFloor(
+  _floor: string,
+  zoneBreakdown: Record<string, number> | undefined
+): StandaloneFloorInfo {
+  if (!zoneBreakdown || Object.keys(zoneBreakdown).length === 0) {
+    return { type: 'unknown', primaryBuilding: null, primaryPct: 0, breakdown: [] };
+  }
+
+  const total = Object.values(zoneBreakdown).reduce((s, n) => s + n, 0);
+  const sorted = Object.entries(zoneBreakdown)
+    .map(([zone, count]) => ({
+      label: zone,
+      count,
+      pct: Math.round((count / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const top = sorted[0];
+  const topPct = (top.count / total) * 100;
+
+  const bldgMatch = top.label.match(/BLDG\s*[-–]\s*([A-Z0-9]+)/i);
+  const primaryBuilding = bldgMatch ? bldgMatch[1].toUpperCase() : null;
+
+  if (topPct === 100) {
+    return { type: 'single', primaryBuilding, primaryPct: 100, breakdown: sorted };
+  }
+  if (topPct >= 80) {
+    return { type: 'dominant', primaryBuilding, primaryPct: Math.round(topPct), breakdown: sorted };
+  }
+  return { type: 'multi', primaryBuilding: null, primaryPct: Math.round(topPct), breakdown: sorted };
+}
+
+// ─── StandaloneFloorRow component ─────────────────────────────────────────────
+interface StandaloneFloorRowProps {
+  floor: string;
+  count: number;
+  sectionCode: string;
+  activityCode: string;
+  zoneBreakdown: Record<string, number> | undefined;
+  onSectionChange: (floors: string[], section: string) => void;
+  onActivityChange: (floor: string, activity: string) => void;
+  gridCols: string;
+  customCodes: Array<{ value: string; label: string }>;
+}
+
+const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
+  floor,
+  count,
+  sectionCode,
+  activityCode,
+  zoneBreakdown,
+  onSectionChange,
+  onActivityChange,
+  gridCols,
+  customCodes,
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const info = classifyStandaloneFloor(floor, zoneBreakdown);
+
+  return (
+    <div className="border-b last:border-b-0">
+      {/* Main row */}
+      <div className={cn(gridCols, "px-3 py-2 hover:bg-muted/20 transition-colors")}>
+        {/* Floor label + resolution badge */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium">{floor}</span>
+
+          {info.type === 'multi' && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 hover:bg-amber-100 transition-colors flex-shrink-0"
+              title="This floor spans multiple buildings. Each item resolves to its building via zone at assembly time."
+            >
+              <Shuffle className="h-3 w-3" />
+              Per-item ({info.breakdown.length} zones)
+              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+          )}
+
+          {info.type === 'single' && (
+            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+              → {info.breakdown[0]?.label}
+            </Badge>
+          )}
+
+          {info.type === 'dominant' && (
+            <button
+              onClick={() => setExpanded(v => !v)}
+              className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-100 transition-colors flex-shrink-0"
+              title={`${info.primaryPct}% of items resolve to ${info.breakdown[0]?.label}`}
+            >
+              ~{info.primaryPct}% → Bldg {info.primaryBuilding}
+              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+          )}
+
+          {info.type === 'unknown' && (
+            <span className="text-xs text-muted-foreground">(no zone data)</span>
+          )}
+        </div>
+
+        {/* Section code — fallback */}
+        <div className="flex items-center gap-1.5">
+          <SectionCodeInput
+            value={sectionCode}
+            onChange={(val) => onSectionChange([floor], val)}
+            customCodes={customCodes}
+            className="h-8"
+          />
+          {info.type === 'multi' && sectionCode && (
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">fallback only</span>
+          )}
+        </div>
+
+        {/* Activity */}
+        <Input
+          value={activityCode}
+          onChange={(e) => onActivityChange(floor, e.target.value.toUpperCase().slice(0, 8))}
+          className="h-7 font-mono text-sm w-24"
+          placeholder="0000"
+          maxLength={8}
+        />
+
+        {/* Count */}
+        <div className="text-right">
+          <Badge variant="secondary">{count.toLocaleString()} items</Badge>
+        </div>
+      </div>
+
+      {/* Expanded zone breakdown */}
+      {expanded && info.breakdown.length > 0 && (
+        <div className="mx-3 mb-3 p-3 bg-muted/30 rounded-lg border border-dashed text-sm">
+          <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+            <Layers className="h-3.5 w-3.5" />
+            At assembly time, each item resolves its section from its zone value:
+          </div>
+
+          <div className="space-y-1.5">
+            {info.breakdown.map(({ label, count: bCount, pct }) => {
+              const bldgMatch = label.match(/BLDG\s*[-–]\s*([A-Z0-9]+)/i);
+              const bldgId = bldgMatch ? bldgMatch[1].toUpperCase() : label;
+              const suggestedSection = bldgMatch
+                ? (isNaN(Number(bldgId)) ? `B${bldgId}` : bldgId)
+                : null;
+
+              return (
+                <div key={label} className="flex items-center gap-2 text-xs">
+                  {/* Progress bar */}
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden flex-shrink-0">
+                    <div
+                      className="h-full bg-primary/60 rounded-full"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="w-8 text-right font-mono text-muted-foreground">{pct}%</span>
+                  <span className="truncate">{label}</span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="font-mono font-medium">{suggestedSection ?? '?'}</span>
+                  <span className="text-muted-foreground">({bCount.toLocaleString()} items)</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-xs text-muted-foreground mt-2">
+            The section code above is only used as a fallback when zone resolution yields no match.
+            {info.type === 'multi'
+              ? ' For this floor, most items will resolve to their own building section.'
+              : ` ${info.primaryPct}% will resolve to Bldg ${info.primaryBuilding}.`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> = ({
   estimateData,
@@ -293,14 +477,27 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const batchSave = useBatchSaveFloorSectionMappings();
 
   // Floor counts
-  const floorCounts = useMemo(() => {
+  const floorData = useMemo(() => {
     const counts: Record<string, number> = {};
+    const zoneBreakdown: Record<string, Record<string, number>> = {};
+
     estimateData.forEach(item => {
       const f = (item.floor || '').trim();
-      if (f) counts[f] = (counts[f] || 0) + 1;
+      if (!f) return;
+      counts[f] = (counts[f] || 0) + 1;
+
+      const z = (item.zone || '').trim();
+      if (z) {
+        if (!zoneBreakdown[f]) zoneBreakdown[f] = {};
+        zoneBreakdown[f][z] = (zoneBreakdown[f][z] || 0) + 1;
+      }
     });
-    return counts;
+
+    return { counts, zoneBreakdown };
   }, [estimateData]);
+
+  const floorCounts = floorData.counts;
+  const floorZoneBreakdown = floorData.zoneBreakdown;
 
   const { groups, standalones } = useMemo(() => groupFloors(floorCounts), [floorCounts]);
 
@@ -672,28 +869,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
             {/* Standalone rows (Roof, Crawl Space, UG, etc.) */}
             {standalones.map(({ floor, count }) => (
-              <div key={floor} className={cn(gridCols, "px-3 py-2 border-b last:border-b-0 hover:bg-muted/20 transition-colors")}>
-                <div className="font-medium">{floor}</div>
-
-                <SectionCodeInput
-                  value={localMappings[floor] || ''}
-                  onChange={(val) => handleSectionChangeForFloors([floor], val)}
-                  customCodes={customCodes}
-                  className="h-8"
-                />
-
-                <Input
-                  value={localActivityMappings[floor] || '0000'}
-                  onChange={(e) => handleActivityChangeForFloor(floor, e.target.value.toUpperCase().slice(0, 8))}
-                  className="h-7 font-mono text-sm w-24"
-                  placeholder="0000"
-                  maxLength={8}
-                />
-
-                <div className="text-right">
-                  <Badge variant="secondary">{count.toLocaleString()} items</Badge>
-                </div>
-              </div>
+              <StandaloneFloorRow
+                key={floor}
+                floor={floor}
+                count={count}
+                sectionCode={localMappings[floor] || ''}
+                activityCode={localActivityMappings[floor] || '0000'}
+                zoneBreakdown={floorZoneBreakdown[floor]}
+                onSectionChange={handleSectionChangeForFloors}
+                onActivityChange={handleActivityChangeForFloor}
+                gridCols={gridCols}
+                customCodes={customCodes}
+              />
             ))}
           </>
         )}
