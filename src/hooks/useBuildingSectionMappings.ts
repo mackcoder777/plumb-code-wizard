@@ -137,19 +137,46 @@ export function getSectionFromFloorNullable(
   return result ? result.section : null;
 }
 
+/** Options for zone-aware resolution */
+export interface ResolutionOptions {
+  zone?: string;
+  datasetProfile?: DatasetProfile | null;
+}
+
 /**
  * Pure static function for resolving section from floor + drawing + mappings.
- * Can be called anywhere (no React hooks).
+ * Optionally uses zone-based resolution when the dataset profile indicates
+ * zone contains the building identifier (Pattern 2).
  */
 export function resolveSectionStatic(
   floor: string,
   drawing: string,
   floorMappings: FloorSectionMapping[],
-  buildingMappings: BuildingSectionMapping[]
+  buildingMappings: BuildingSectionMapping[],
+  options?: ResolutionOptions
 ): string {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
   if (fromFloor) return fromFloor.section;
 
+  // Zone-based building resolution (only when profile says zone = building and confidence >= 0.6)
+  const profile = options?.datasetProfile;
+  if (
+    profile &&
+    profile.buildingSource === 'zone' &&
+    profile.confidence >= 0.6 &&
+    options?.zone
+  ) {
+    const zoneBuilding = getBuildingFromZone(options.zone);
+    if (zoneBuilding) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
+      );
+      if (m) return m.section_code;
+      return suggestSectionForBuilding(zoneBuilding);
+    }
+  }
+
+  // Drawing-based fallback (existing behavior)
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
     const m = buildingMappings.find(
@@ -170,12 +197,31 @@ export function resolveFloorMappingStatic(
   floor: string,
   drawing: string,
   floorMappings: FloorSectionMapping[],
-  buildingMappings: BuildingSectionMapping[]
+  buildingMappings: BuildingSectionMapping[],
+  options?: ResolutionOptions
 ): FloorMappingResult {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
   if (fromFloor) return fromFloor;
 
-  // Floor didn't match — try building fallback for section, activity stays default
+  // Zone-based building fallback for section, activity stays default
+  const profile = options?.datasetProfile;
+  if (
+    profile &&
+    profile.buildingSource === 'zone' &&
+    profile.confidence >= 0.6 &&
+    options?.zone
+  ) {
+    const zoneBuilding = getBuildingFromZone(options.zone);
+    if (zoneBuilding) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
+      );
+      if (m) return { section: m.section_code, activity: '0000' };
+      return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
+    }
+  }
+
+  // Drawing-based fallback
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
     const m = buildingMappings.find(
