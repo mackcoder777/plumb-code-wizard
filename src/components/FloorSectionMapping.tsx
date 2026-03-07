@@ -459,24 +459,24 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const handleAutoSuggestAll = useCallback(() => {
     const newMappings: Record<string, string> = {};
+    const newActivityMappings: Record<string, string> = {};
     floorData.forEach(({ displayName, childFloors }) => {
-      const suggested = suggestSection(displayName);
+      const suggestedSection = suggestSection(displayName);
+      const suggestedActivity = suggestActivity(displayName);
       childFloors.forEach(floor => {
-        if (!localMappings[floor]) {
-          newMappings[floor] = suggested;
-        } else {
-          newMappings[floor] = localMappings[floor];
-        }
+        newMappings[floor] = localMappings[floor] || suggestedSection;
+        newActivityMappings[floor] = localActivityMappings[floor] || suggestedActivity;
       });
     });
     setLocalMappings(newMappings);
+    setLocalActivityMappings(newActivityMappings);
     setHasChanges(true);
     
     toast({
       title: "Auto-Suggestions Applied",
-      description: "Section codes have been suggested based on floor names. Review and save when ready.",
+      description: "Section and activity codes have been suggested based on floor names. Review and save when ready.",
     });
-  }, [floorData, localMappings]);
+  }, [floorData, localMappings, localActivityMappings]);
 
   if (floorData.length === 0) {
     return (
