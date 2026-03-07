@@ -2477,6 +2477,15 @@ const EnhancedCostCodeManager = () => {
                 projectId={currentProject?.id}
                 floorSectionMappings={dbFloorMappings}
                 systemActivityMappings={dbActivityMappings}
+                datasetProfile={datasetProfile}
+                onProfileOverride={(override) => {
+                  if (override) {
+                    setDatasetProfile(getProfileFromOverride(override));
+                  } else {
+                    // Re-run auto-detection
+                    setDatasetProfile(profileDataset(estimateData));
+                  }
+                }}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
