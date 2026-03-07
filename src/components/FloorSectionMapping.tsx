@@ -6,29 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   useFloorSectionMappings,
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
 
-interface FloorData {
-  displayName: string;
-  childFloors: string[];
-  itemCount: number;
-  isGroup: boolean;
-}
-
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface FloorSectionMappingPanelProps {
   estimateData: Array<{ floor?: string; costCode?: string }>;
   projectId: string | null;
@@ -36,7 +22,14 @@ interface FloorSectionMappingPanelProps {
   onApplySectionCodes?: (mappings: Record<string, string>) => void;
 }
 
-// Common section code suggestions
+interface BuildingGroup {
+  buildingKey: string;
+  childFloors: string[];
+  floorCounts: Record<string, number>;
+  totalCount: number;
+}
+
+// ─── Common section codes ─────────────────────────────────────────────────────
 const COMMON_SECTION_CODES = [
   { value: '01', label: 'Section 1' },
   { value: '02', label: 'Section 2' },
@@ -53,60 +46,56 @@ const COMMON_SECTION_CODES = [
   { value: 'P2', label: 'Parking 2' },
 ];
 
-// Section code input component with custom entry support
+// ─── Section Code Input (combobox with custom entry) ──────────────────────────
 interface SectionCodeInputProps {
   value: string;
   onChange: (value: string) => void;
   customCodes: Array<{ value: string; label: string }>;
+  className?: string;
 }
 
-const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, customCodes }) => {
+const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, customCodes, className }) => {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [customLabel, setCustomLabel] = useState('');
   const codeInputRef = useRef<HTMLInputElement>(null);
-  
-  // All available codes: common + custom
+
   const allCodes = useMemo(() => {
     const combined = [...COMMON_SECTION_CODES];
     customCodes.forEach(cc => {
-      if (!combined.find(c => c.value === cc.value)) {
-        combined.push(cc);
-      }
+      if (!combined.find(c => c.value === cc.value)) combined.push(cc);
     });
     return combined;
   }, [customCodes]);
-  
-  // Find display label for current value
+
   const displayLabel = useMemo(() => {
     const found = allCodes.find(c => c.value === value);
     return found ? `${found.value} - ${found.label}` : value || 'Select section...';
   }, [value, allCodes]);
-  
+
   const handleSelect = (selectedValue: string) => {
     onChange(selectedValue);
     setOpen(false);
     setInputValue('');
   };
-  
+
   const handleAddCustom = () => {
     if (customCode.trim().length >= 1 && customCode.trim().length <= 3) {
-      const code = customCode.trim().toUpperCase();
-      onChange(code);
+      onChange(customCode.trim().toUpperCase());
       setCustomCode('');
       setCustomLabel('');
       setIsAddingCustom(false);
       setOpen(false);
     }
   };
-  
-  const filteredCodes = allCodes.filter(code => 
+
+  const filteredCodes = allCodes.filter(code =>
     code.value.toLowerCase().includes(inputValue.toLowerCase()) ||
     code.label.toLowerCase().includes(inputValue.toLowerCase())
   );
-  
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -114,7 +103,7 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, cu
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-[200px] justify-between font-normal"
+          className={cn("w-[200px] justify-between font-normal", className)}
         >
           <span className="truncate">{displayLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -147,31 +136,17 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, cu
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setIsAddingCustom(false)}
-              >
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => setIsAddingCustom(false)}>
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                className="flex-1"
-                onClick={handleAddCustom}
-                disabled={!customCode.trim()}
-              >
+              <Button size="sm" className="flex-1" onClick={handleAddCustom} disabled={!customCode.trim()}>
                 Add
               </Button>
             </div>
           </div>
         ) : (
           <Command>
-            <CommandInput 
-              placeholder="Search or type code..." 
-              value={inputValue}
-              onValueChange={setInputValue}
-            />
+            <CommandInput placeholder="Search or type code..." value={inputValue} onValueChange={setInputValue} />
             <CommandList>
               <CommandEmpty>
                 <div className="py-2 text-center">
@@ -196,12 +171,7 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, cu
                     value={`${code.value} ${code.label}`}
                     onSelect={() => handleSelect(code.value)}
                   >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        value === code.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
+                    <Check className={cn("mr-2 h-4 w-4", value === code.value ? "opacity-100" : "opacity-0")} />
                     <span className="font-mono mr-2">{code.value}</span>
                     <span className="text-muted-foreground">- {code.label}</span>
                   </CommandItem>
@@ -209,10 +179,7 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, cu
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup>
-                <CommandItem
-                  onSelect={() => setIsAddingCustom(true)}
-                  className="text-primary"
-                >
+                <CommandItem onSelect={() => setIsAddingCustom(true)} className="text-primary">
                   <Plus className="mr-2 h-4 w-4" />
                   Add custom code...
                 </CommandItem>
@@ -225,260 +192,243 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, cu
   );
 };
 
+// ─── Auto-suggest helpers ─────────────────────────────────────────────────────
+function suggestSection(displayName: string): string {
+  const bldgMatch = displayName.match(/^bldg\s*(\w+)/i);
+  if (bldgMatch) {
+    const num = bldgMatch[1];
+    if (!isNaN(Number(num))) return Number(num) >= 10 ? num : `B${num}`;
+    return `B${num.toUpperCase()}`;
+  }
+  const lower = displayName.toLowerCase();
+  if (lower.includes('basement') || lower.includes('below') || lower === 'bg' || lower === 'ug') return 'BG';
+  if (lower.includes('roof') || lower === 'rf') return 'RF';
+  if (lower.includes('crawl')) return 'CS';
+  if (lower.includes('mezzanine') || lower.includes('mezz')) return 'MZ';
+  if (lower.includes('parking') || lower.startsWith('p')) {
+    if (lower.includes('1') || lower === 'p1') return 'P1';
+    if (lower.includes('2') || lower === 'p2') return 'P2';
+    if (lower.includes('3') || lower === 'p3') return 'P3';
+  }
+  const levelMatch = lower.match(/(?:level|floor|l|f)\s*(\d+)/i);
+  if (levelMatch) return `L${levelMatch[1]}`;
+  return '';
+}
+
+function suggestActivity(floorName: string): string {
+  const lower = floorName.toLowerCase();
+  // Extract floor-specific part after " - " if present
+  const dashIdx = lower.indexOf(' - ');
+  const floorPart = dashIdx > 0 ? lower.substring(dashIdx + 3).trim() : lower;
+
+  const levelMatch = floorPart.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
+  if (levelMatch) return `LVL${levelMatch[1]}`;
+  if (/basement|below\s*grade/.test(floorPart)) return 'BSMT';
+  if (/mezzanine|mezz/.test(floorPart)) return 'MEZZ';
+  if (/penthouse|pent/.test(floorPart)) return 'PENT';
+  if (/roof/.test(floorPart)) return '0000';
+  if (/crawl/.test(floorPart)) return '0000';
+  return '0000';
+}
+
+// ─── Grouping logic ───────────────────────────────────────────────────────────
+function groupFloors(
+  floorCounts: Record<string, number>
+): { groups: BuildingGroup[]; standalones: Array<{ floor: string; count: number }> } {
+  const groupMap = new Map<string, { floors: string[]; counts: Record<string, number>; total: number }>();
+  const standalones: Array<{ floor: string; count: number }> = [];
+
+  Object.entries(floorCounts).forEach(([floor, count]) => {
+    const sep = floor.indexOf(' - ');
+    if (sep > 0) {
+      const key = floor.substring(0, sep);
+      if (!groupMap.has(key)) groupMap.set(key, { floors: [], counts: {}, total: 0 });
+      const g = groupMap.get(key)!;
+      g.floors.push(floor);
+      g.counts[floor] = count;
+      g.total += count;
+    } else {
+      standalones.push({ floor, count });
+    }
+  });
+
+  const groups: BuildingGroup[] = [];
+  groupMap.forEach((val, buildingKey) => {
+    groups.push({
+      buildingKey,
+      childFloors: val.floors.sort((a, b) => (val.counts[b] || 0) - (val.counts[a] || 0)),
+      floorCounts: val.counts,
+      totalCount: val.total,
+    });
+  });
+
+  groups.sort((a, b) => b.totalCount - a.totalCount);
+  standalones.sort((a, b) => b.count - a.count);
+  return { groups, standalones };
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> = ({
   estimateData,
   projectId,
   onMappingsChange,
   onApplySectionCodes,
 }) => {
-  // Local state for unsaved changes
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  // Database hooks
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
 
-  // Extract unique floors from estimate data, grouping by building
-  const floorData = useMemo<FloorData[]>(() => {
-    const floorCounts: Record<string, number> = {};
+  // Floor counts
+  const floorCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
     estimateData.forEach(item => {
       const f = (item.floor || '').trim();
-      if (f) floorCounts[f] = (floorCounts[f] || 0) + 1;
+      if (f) counts[f] = (counts[f] || 0) + 1;
     });
-
-    const buildingGroups: Record<string, { displayName: string; childFloors: string[]; itemCount: number }> = {};
-    const standaloneFloors: { floor: string; itemCount: number }[] = [];
-
-    Object.keys(floorCounts).forEach(floor => {
-      const bldgMatch = floor.match(/^bldg\s*(\w+)/i);
-      if (bldgMatch) {
-        const bldgKey = `Bldg ${bldgMatch[1]}`;
-        if (!buildingGroups[bldgKey]) {
-          buildingGroups[bldgKey] = { displayName: bldgKey, childFloors: [], itemCount: 0 };
-        }
-        buildingGroups[bldgKey].childFloors.push(floor);
-        buildingGroups[bldgKey].itemCount += floorCounts[floor];
-      } else {
-        standaloneFloors.push({ floor, itemCount: floorCounts[floor] });
-      }
-    });
-
-    const grouped = Object.entries(buildingGroups).map(([, group]) => ({
-      displayName: group.displayName,
-      childFloors: group.childFloors,
-      itemCount: group.itemCount,
-      isGroup: true,
-    }));
-
-    const standalone = standaloneFloors.map(({ floor, itemCount }) => ({
-      displayName: floor,
-      childFloors: [floor],
-      itemCount,
-      isGroup: false,
-    }));
-
-    return [...grouped, ...standalone].sort((a, b) => b.itemCount - a.itemCount);
+    return counts;
   }, [estimateData]);
 
-  // Extract custom codes from existing mappings (codes not in common list)
+  const { groups, standalones } = useMemo(() => groupFloors(floorCounts), [floorCounts]);
+
+  // Custom codes from current mappings
   const customCodes = useMemo(() => {
     const commonValues = new Set(COMMON_SECTION_CODES.map(c => c.value));
     const custom: Array<{ value: string; label: string }> = [];
-    
     Object.values(localMappings).forEach(code => {
       if (code && !commonValues.has(code) && !custom.find(c => c.value === code)) {
         custom.push({ value: code, label: 'Custom' });
       }
     });
-    
     return custom;
   }, [localMappings]);
 
-  // Initialize local mappings from database
-
-  // Initialize local mappings from database
+  // Init from DB
   useEffect(() => {
     if (dbMappings.length > 0) {
-      const mappingsFromDb: Record<string, string> = {};
-      const activityFromDb: Record<string, string> = {};
+      const sec: Record<string, string> = {};
+      const act: Record<string, string> = {};
       dbMappings.forEach(m => {
-        mappingsFromDb[m.floor_pattern] = m.section_code;
-        activityFromDb[m.floor_pattern] = m.activity_code || '0000';
+        sec[m.floor_pattern] = m.section_code;
+        act[m.floor_pattern] = m.activity_code || '0000';
       });
-      setLocalMappings(mappingsFromDb);
-      setLocalActivityMappings(activityFromDb);
+      setLocalMappings(sec);
+      setLocalActivityMappings(act);
       setHasChanges(false);
     }
   }, [dbMappings]);
 
-  // Notify parent of mapping changes
   useEffect(() => {
     onMappingsChange?.(localMappings);
   }, [localMappings, onMappingsChange]);
 
-  const handleSectionChange = useCallback((childFloors: string[], sectionCode: string) => {
-    setLocalMappings(prev => {
-      const next = { ...prev };
-      childFloors.forEach(floor => {
-        next[floor] = sectionCode;
-      });
-      return next;
-    });
-    setHasChanges(true);
-  }, []);
-
-  const handleActivityChange = useCallback((childFloors: string[], activityCode: string) => {
-    setLocalActivityMappings(prev => {
-      const next = { ...prev };
-      childFloors.forEach(floor => {
-        next[floor] = activityCode;
-      });
-      return next;
-    });
-    setHasChanges(true);
-  }, []);
-
-  const handleSaveAll = useCallback(async () => {
-    if (!projectId) {
-      toast({
-        title: "No Project Selected",
-        description: "Please select a project to save floor mappings.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const mappingsToSave = Object.entries(localMappings).map(([floorPattern, sectionCode]) => ({
-      floorPattern,
-      sectionCode,
-      activityCode: localActivityMappings[floorPattern] || '0000',
-    }));
-
-    try {
-      await batchSave.mutateAsync({
-        projectId,
-        mappings: mappingsToSave,
-      });
-      
-      setHasChanges(false);
-      toast({
-        title: "Mappings Saved",
-        description: `Saved ${mappingsToSave.length} floor-to-section mappings.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Save Failed",
-        description: "Failed to save floor mappings. Please try again.",
-        variant: "destructive",
-      });
-    }
-  }, [projectId, localMappings, batchSave]);
-
-  // Count all items and items that have labor codes
+  // Item counts
   const itemCounts = useMemo(() => {
     const withCodes = estimateData.filter(item => item.costCode && item.costCode.trim()).length;
     const totalWithFloor = estimateData.filter(item => item.floor && item.floor.trim()).length;
     return { withCodes, totalWithFloor, total: estimateData.length };
   }, [estimateData]);
 
-  // Apply section codes to all items with labor codes
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleSectionChangeForFloors = useCallback((childFloors: string[], sectionCode: string) => {
+    setLocalMappings(prev => {
+      const next = { ...prev };
+      childFloors.forEach(f => { next[f] = sectionCode; });
+      return next;
+    });
+    setHasChanges(true);
+  }, []);
+
+  const handleActivityChangeForFloor = useCallback((floor: string, activityCode: string) => {
+    setLocalActivityMappings(prev => ({ ...prev, [floor]: activityCode }));
+    setHasChanges(true);
+  }, []);
+
+  const handleSaveAll = useCallback(async () => {
+    if (!projectId) {
+      toast({ title: "No Project Selected", description: "Please select a project to save floor mappings.", variant: "destructive" });
+      return;
+    }
+    const mappingsToSave = Object.entries(localMappings).map(([floorPattern, sectionCode]) => ({
+      floorPattern,
+      sectionCode,
+      activityCode: localActivityMappings[floorPattern] || '0000',
+    }));
+    try {
+      await batchSave.mutateAsync({ projectId, mappings: mappingsToSave });
+      setHasChanges(false);
+      toast({ title: "Mappings Saved", description: `Saved ${mappingsToSave.length} floor-to-section mappings.` });
+    } catch {
+      toast({ title: "Save Failed", description: "Failed to save floor mappings. Please try again.", variant: "destructive" });
+    }
+  }, [projectId, localMappings, localActivityMappings, batchSave]);
+
   const handleApplySectionCodes = useCallback(() => {
     if (onApplySectionCodes) {
       onApplySectionCodes(localMappings);
       toast({
         title: "Section Codes Applied",
-        description: `Updated section codes on ${itemCounts.withCodes} items with labor codes (${itemCounts.totalWithFloor} total items have floor values).`,
+        description: `Updated section codes on ${itemCounts.withCodes} items with labor codes.`,
       });
     }
   }, [localMappings, onApplySectionCodes, itemCounts]);
 
   const handleReset = useCallback(() => {
-    const mappingsFromDb: Record<string, string> = {};
-    const activityFromDb: Record<string, string> = {};
+    const sec: Record<string, string> = {};
+    const act: Record<string, string> = {};
     dbMappings.forEach(m => {
-      mappingsFromDb[m.floor_pattern] = m.section_code;
-      activityFromDb[m.floor_pattern] = m.activity_code || '0000';
+      sec[m.floor_pattern] = m.section_code;
+      act[m.floor_pattern] = m.activity_code || '0000';
     });
-    setLocalMappings(mappingsFromDb);
-    setLocalActivityMappings(activityFromDb);
+    setLocalMappings(sec);
+    setLocalActivityMappings(act);
     setHasChanges(false);
   }, [dbMappings]);
 
-  // Auto-suggest section based on floor/building name
-  const suggestSection = (displayName: string): string => {
-    const bldgMatch = displayName.match(/^bldg\s*(\w+)/i);
-    if (bldgMatch) {
-      const num = bldgMatch[1];
-      // Numeric buildings: single-digit get B prefix (Bldg 3 → B3), double-digit stay as-is (Bldg 12 → 12)
-      if (!isNaN(Number(num))) {
-        return Number(num) >= 10 ? num : `B${num}`;
-      }
-      // Letter buildings get B prefix (Bldg A → BA)
-      return `B${num.toUpperCase()}`;
-    }
-
-    const lower = displayName.toLowerCase();
-    if (lower.includes('basement') || lower.includes('below') || lower === 'bg' || lower === 'ug') return 'BG';
-    if (lower.includes('roof') || lower === 'rf') return 'RF';
-    if (lower.includes('crawl')) return 'CS';
-    if (lower.includes('mezzanine') || lower.includes('mezz')) return 'MZ';
-    if (lower.includes('parking') || lower.startsWith('p')) {
-      if (lower.includes('1') || lower === 'p1') return 'P1';
-      if (lower.includes('2') || lower === 'p2') return 'P2';
-      if (lower.includes('3') || lower === 'p3') return 'P3';
-    }
-    const levelMatch = lower.match(/(?:level|floor|l|f)\s*(\d+)/i);
-    if (levelMatch) {
-      return `L${levelMatch[1]}`;
-    }
-    return '';
-  };
-
-  // Auto-suggest activity based on floor/building name
-  const suggestActivity = (displayName: string): string => {
-    const lower = displayName.toLowerCase();
-    
-    // Building-prefixed floors like "Bldg 1 - Level 2"
-    const bldgLevelMatch = lower.match(/bldg\s*\w+\s*[-–]\s*(?:level|lvl|l)\s*(\d+)/i);
-    if (bldgLevelMatch) return `LVL${bldgLevelMatch[1]}`;
-    
-    // Standalone level/floor patterns
-    const levelMatch = lower.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
-    if (levelMatch) return `LVL${levelMatch[1]}`;
-    
-    if (lower.includes('basement') || lower.includes('below grade')) return 'BSMT';
-    if (lower.includes('mezzanine') || lower.includes('mezz')) return 'MEZZ';
-    if (lower.includes('penthouse') || lower.includes('pent')) return 'PENT';
-    if (lower.includes('roof')) return '0000';
-    if (lower.includes('crawl')) return '0000';
-    
-    return '0000';
-  };
-
   const handleAutoSuggestAll = useCallback(() => {
-    const newMappings: Record<string, string> = {};
-    const newActivityMappings: Record<string, string> = {};
-    floorData.forEach(({ displayName, childFloors }) => {
-      const suggestedSection = suggestSection(displayName);
-      const suggestedActivity = suggestActivity(displayName);
-      childFloors.forEach(floor => {
-        newMappings[floor] = localMappings[floor] || suggestedSection;
-        newActivityMappings[floor] = localActivityMappings[floor] || suggestedActivity;
+    const newSec: Record<string, string> = {};
+    const newAct: Record<string, string> = {};
+
+    // Building groups: section from building key, activity from each floor
+    groups.forEach(group => {
+      const sec = localMappings[group.childFloors[0]] || suggestSection(group.buildingKey);
+      group.childFloors.forEach(floor => {
+        newSec[floor] = localMappings[floor] || sec;
+        newAct[floor] = localActivityMappings[floor] !== '0000' && localActivityMappings[floor]
+          ? localActivityMappings[floor]
+          : suggestActivity(floor);
       });
     });
-    setLocalMappings(newMappings);
-    setLocalActivityMappings(newActivityMappings);
-    setHasChanges(true);
-    
-    toast({
-      title: "Auto-Suggestions Applied",
-      description: "Section and activity codes have been suggested based on floor names. Review and save when ready.",
-    });
-  }, [floorData, localMappings, localActivityMappings]);
 
-  if (floorData.length === 0) {
+    // Standalones: both section and activity from name
+    standalones.forEach(({ floor }) => {
+      newSec[floor] = localMappings[floor] || suggestSection(floor);
+      newAct[floor] = localActivityMappings[floor] !== '0000' && localActivityMappings[floor]
+        ? localActivityMappings[floor]
+        : suggestActivity(floor);
+    });
+
+    setLocalMappings(newSec);
+    setLocalActivityMappings(newAct);
+    setHasChanges(true);
+    toast({ title: "Auto-Suggestions Applied", description: "Review section & activity codes, then save." });
+  }, [groups, standalones, localMappings, localActivityMappings]);
+
+  // ── Expand/Collapse ──────────────────────────────────────────────────────
+  const toggleGroup = (key: string) =>
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  const isExpanded = (key: string) => !collapsed.has(key);
+
+  // ── Empty state ──────────────────────────────────────────────────────────
+  if (Object.keys(floorCounts).length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -494,6 +444,9 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     );
   }
 
+  // ── Grid column layout ───────────────────────────────────────────────────
+  const gridCols = 'grid grid-cols-[1fr_220px_160px_130px] items-center';
+
   return (
     <Card>
       <CardHeader>
@@ -504,16 +457,12 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
               Floor to Section Mapping
             </CardTitle>
             <CardDescription>
-              Map floor values to labor code sections (e.g., Club Level → 02, Seating Bowl → 03)
+              Map buildings to section codes and floors to activity codes
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAutoSuggestAll}
-              disabled={isLoading}
-            >
+            <Button variant="outline" size="sm" onClick={handleAutoSuggestAll} disabled={isLoading}>
+              <Wand2 className="h-4 w-4 mr-1" />
               Auto-Suggest
             </Button>
             {itemCounts.withCodes > 0 && onApplySectionCodes && (
@@ -527,27 +476,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                     handleApplySectionCodes();
                   }
                 }}
-                title={`${itemCounts.withCodes} items have labor codes. ${itemCounts.totalWithFloor} total items have floor values.`}
               >
                 <RefreshCw className="h-4 w-4 mr-1" />
-                Re-apply Sections ({itemCounts.withCodes} items)
+                Re-apply Sections ({itemCounts.withCodes.toLocaleString()} items)
               </Button>
             )}
             {hasChanges && (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReset}
-                >
+                <Button variant="outline" size="sm" onClick={handleReset}>
                   <RotateCcw className="h-4 w-4 mr-1" />
                   Reset
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveAll}
-                  disabled={batchSave.isPending}
-                >
+                <Button size="sm" onClick={handleSaveAll} disabled={batchSave.isPending}>
                   {batchSave.isPending ? (
                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                   ) : (
@@ -560,6 +500,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           </div>
         </div>
       </CardHeader>
+
       <CardContent>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -567,82 +508,148 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           </div>
         ) : (
           <>
-            {/* Audit Summary */}
+            {/* Summary bar */}
             <div className="mb-4 p-4 bg-muted/50 rounded-lg border">
               <div className="text-sm font-medium mb-2">Item Summary</div>
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Total Items:</span>
-                  <span className="ml-2 font-semibold">{itemCounts.total}</span>
+                  <span className="ml-2 font-semibold">{itemCounts.total.toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">With Floor Value:</span>
-                  <span className="ml-2 font-semibold">{itemCounts.totalWithFloor}</span>
+                  <span className="ml-2 font-semibold">{itemCounts.totalWithFloor.toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">With Labor Code:</span>
-                  <span className="ml-2 font-semibold text-green-600">{itemCounts.withCodes}</span>
-                  <span className="text-xs text-muted-foreground ml-1">
-                    ({itemCounts.total - itemCounts.withCodes} uncoded)
-                  </span>
+                  <span className="ml-2 font-semibold text-green-600">{itemCounts.withCodes.toLocaleString()}</span>
+                  {itemCounts.total - itemCounts.withCodes > 0 && (
+                    <span className="text-xs text-muted-foreground ml-1">
+                      ({(itemCounts.total - itemCounts.withCodes).toLocaleString()} uncoded)
+                    </span>
+                  )}
                 </div>
               </div>
               {itemCounts.withCodes < itemCounts.totalWithFloor && (
                 <p className="text-xs text-amber-600 mt-2">
-                  ⚠️ {itemCounts.totalWithFloor - itemCounts.withCodes} items have floor values but no labor code yet. 
-                  Apply system mappings first to assign labor codes, then floor mappings will update their section prefix.
+                  ⚠️ {(itemCounts.totalWithFloor - itemCounts.withCodes).toLocaleString()} items have floor values but no labor code yet.
                 </p>
               )}
             </div>
-            
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[35%]">Floor Value</TableHead>
-                  <TableHead className="w-[25%]">Section Code</TableHead>
-                  <TableHead className="w-[20%]">Activity Code</TableHead>
-                  <TableHead className="w-[20%] text-right">Item Count</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {floorData.map(({ displayName, childFloors, itemCount, isGroup }) => (
-                  <TableRow key={displayName}>
-                    <TableCell>
-                      <span className="font-medium">{displayName}</span>
-                      {isGroup && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          ({childFloors.length} floor{childFloors.length > 1 ? 's' : ''})
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <SectionCodeInput
-                        value={localMappings[childFloors[0]] || ''}
-                        onChange={(value) => handleSectionChange(childFloors, value)}
-                        customCodes={customCodes}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={localActivityMappings[childFloors[0]] || '0000'}
-                        onChange={(e) => handleActivityChange(childFloors, e.target.value.toUpperCase().slice(0, 4))}
-                        placeholder="0000"
-                        className="w-20 h-8 font-mono text-sm"
-                        maxLength={4}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">
-                        {itemCount.toLocaleString()} items
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+
+            {/* Column headers */}
+            <div className={cn(gridCols, "px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b")}>
+              <div>Floor Value</div>
+              <div>Section Code</div>
+              <div>Activity Code</div>
+              <div className="text-right">Item Count</div>
+            </div>
+
+            {/* Building groups */}
+            {groups.map(group => {
+              const expanded = isExpanded(group.buildingKey);
+              const buildingSection = localMappings[group.childFloors[0]] || '';
+
+              return (
+                <div key={group.buildingKey} className="border-b last:border-b-0">
+                  {/* Parent row — building level */}
+                  <div className={cn(gridCols, "px-3 py-2 bg-muted/30 hover:bg-muted/50 transition-colors")}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleGroup(group.buildingKey)}
+                        className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                        aria-label={expanded ? 'Collapse' : 'Expand'}
+                      >
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </button>
+                      <span className="font-medium">{group.buildingKey}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({group.childFloors.length} floor{group.childFloors.length !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+
+                    {/* Section — applies to all children */}
+                    <SectionCodeInput
+                      value={buildingSection}
+                      onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
+                      customCodes={customCodes}
+                      className="h-8"
+                    />
+
+                    {/* Activity — varies per child, show dash */}
+                    <div className="text-sm text-muted-foreground pl-2">—</div>
+
+                    {/* Total count */}
+                    <div className="text-right">
+                      <Badge variant="secondary">{group.totalCount.toLocaleString()} items</Badge>
+                    </div>
+                  </div>
+
+                  {/* Child floor rows */}
+                  {expanded && group.childFloors.map(floor => {
+                    const floorLabel = floor.substring(group.buildingKey.length + 3);
+                    const count = group.floorCounts[floor] || 0;
+                    return (
+                      <div key={floor} className={cn(gridCols, "px-3 py-1.5 pl-10 border-t border-dashed border-border/50 hover:bg-muted/20 transition-colors")}>
+                        {/* Indented floor label */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-1 h-4 bg-border rounded-full flex-shrink-0" />
+                          <span className="text-sm">{floorLabel || floor}</span>
+                        </div>
+
+                        {/* Section — inherited, read-only */}
+                        <div className="text-sm font-mono text-muted-foreground pl-2">
+                          {localMappings[floor] || '—'}
+                        </div>
+
+                        {/* Activity — per-floor input */}
+                        <Input
+                          value={localActivityMappings[floor] || '0000'}
+                          onChange={(e) => handleActivityChangeForFloor(floor, e.target.value.toUpperCase().slice(0, 8))}
+                          className="h-7 font-mono text-sm w-24"
+                          placeholder="0000"
+                          maxLength={8}
+                        />
+
+                        {/* Per-floor count */}
+                        <div className="text-right">
+                          <span className="text-xs text-muted-foreground">{count.toLocaleString()} items</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            {/* Standalone rows (Roof, Crawl Space, UG, etc.) */}
+            {standalones.map(({ floor, count }) => (
+              <div key={floor} className={cn(gridCols, "px-3 py-2 border-b last:border-b-0 hover:bg-muted/20 transition-colors")}>
+                <div className="font-medium">{floor}</div>
+
+                <SectionCodeInput
+                  value={localMappings[floor] || ''}
+                  onChange={(val) => handleSectionChangeForFloors([floor], val)}
+                  customCodes={customCodes}
+                  className="h-8"
+                />
+
+                <Input
+                  value={localActivityMappings[floor] || '0000'}
+                  onChange={(e) => handleActivityChangeForFloor(floor, e.target.value.toUpperCase().slice(0, 8))}
+                  className="h-7 font-mono text-sm w-24"
+                  placeholder="0000"
+                  maxLength={8}
+                />
+
+                <div className="text-right">
+                  <Badge variant="secondary">{count.toLocaleString()} items</Badge>
+                </div>
+              </div>
+            ))}
           </>
         )}
-        
+
         {hasChanges && (
           <div className="mt-4 p-3 bg-muted rounded-lg text-sm text-muted-foreground">
             You have unsaved changes. Click "Save All" to persist floor-to-section mappings.
