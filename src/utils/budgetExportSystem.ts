@@ -5,8 +5,9 @@
 
 import * as XLSX from 'xlsx';
 import { BudgetAdjustments } from '../components/BudgetAdjustmentsPanel';
-import { BuildingSectionMapping, resolveSectionStatic, getSectionFromFloorNullable } from '@/hooks/useBuildingSectionMappings';
+import { BuildingSectionMapping, resolveSectionStatic, getSectionFromFloorNullable, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
 import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
+import { DatasetProfile } from '@/utils/datasetProfiler';
 
 // ============================================
 // TYPES
@@ -97,13 +98,15 @@ function getSectionFromFloor(
   floorMappings: FloorSectionMap, 
   drawing?: string,
   buildingMappings?: BuildingSectionMapping[],
-  dbFloorMappings?: FloorSectionMapping[]
+  dbFloorMappings?: FloorSectionMapping[],
+  zone?: string,
+  datasetProfile?: DatasetProfile | null
 ): string {
   if (!floor) return '01';
   
   // If we have structured mappings, use the building-aware resolver
   if (buildingMappings && buildingMappings.length > 0 && dbFloorMappings) {
-    return resolveSectionStatic(floor, drawing || '', dbFloorMappings, buildingMappings);
+    return resolveSectionStatic(floor, drawing || '', dbFloorMappings, buildingMappings, { zone, datasetProfile });
   }
   
   // Fallback to simple floor map
