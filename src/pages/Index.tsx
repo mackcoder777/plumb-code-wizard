@@ -640,7 +640,7 @@ const EnhancedCostCodeManager = () => {
     
     // Default
     return '01';
-  }, [dbFloorMappings, dbBuildingMappings]);
+  }, [dbFloorMappings, dbBuildingMappings, datasetProfile]);
 
   // Generate cost code with audit trail - uses smart matching against database codes
   const generateCostCode = useCallback((item) => {
