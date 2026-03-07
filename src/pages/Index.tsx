@@ -813,7 +813,7 @@ const EnhancedCostCodeManager = () => {
 
       setEstimateData(transformedItems);
       setFilteredData(transformedItems);
-      setDatasetProfile(profileDataset(transformedItems));
+      // datasetProfile is now set in a separate guarded effect below
       setFileName(currentProject.file_name || '');
 
       // Batch persist newly applied codes to database (once per project load)
@@ -847,7 +847,16 @@ const EnhancedCostCodeManager = () => {
         })();
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, generateCostCode, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+
+  // One-shot effect: set datasetProfile when estimateData first populates for a project
+  const datasetProfileSetRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (estimateData.length > 0 && currentProject?.id && datasetProfileSetRef.current !== currentProject.id) {
+      datasetProfileSetRef.current = currentProject.id;
+      setDatasetProfile(profileDataset(estimateData));
+    }
+  }, [estimateData, currentProject?.id]);
 
   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
