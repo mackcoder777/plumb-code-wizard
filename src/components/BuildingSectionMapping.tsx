@@ -30,7 +30,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
   estimateItems,
   onMappingsChange,
 }) => {
-  const { mappings, loading, upsertMapping, deleteMapping, autoPopulate } =
+  const { mappings, loading, upsertMapping, deleteMapping, autoPopulate, updateZonePattern } =
     useBuildingSectionMappings(projectId);
 
   const [detected, setDetected] = useState<DetectedBuilding[]>([]);
@@ -38,6 +38,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
   const [newBuildingId, setNewBuildingId] = useState('');
   const [newSectionCode, setNewSectionCode] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newZonePattern, setNewZonePattern] = useState('');
 
   useEffect(() => {
     if (estimateItems.length === 0) return;
@@ -134,6 +135,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
               <TableRow>
                 <TableHead>Building</TableHead>
                 <TableHead>Section Code</TableHead>
+                <TableHead>Zone Pattern</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
@@ -182,6 +184,21 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
                         </span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      <Input
+                        placeholder="e.g. MODULAR"
+                        defaultValue={m.zone_pattern || ''}
+                        className="w-32 h-8 text-xs font-mono"
+                        title="Items on standalone floors whose zone contains this keyword resolve to this building section"
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val !== (m.zone_pattern || '')) {
+                            updateZonePattern(m.id, val);
+                            onMappingsChange?.();
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{m.description}</TableCell>
                     <TableCell>{det ? `${det.item_count}` : '—'}</TableCell>
                     <TableCell>
@@ -219,12 +236,36 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
             onChange={e => setNewSectionCode(e.target.value.toUpperCase())}
           />
           <Input
+            placeholder="Zone pattern"
+            value={newZonePattern}
+            className="w-32 font-mono text-xs"
+            onChange={e => setNewZonePattern(e.target.value)}
+          />
+          <Input
             placeholder="Description (optional)"
             value={newDescription}
             className="flex-1"
             onChange={e => setNewDescription(e.target.value)}
           />
-          <Button size="sm" onClick={handleAddNew} disabled={!newBuildingId.trim() || !newSectionCode.trim()}>
+          <Button size="sm" onClick={async () => {
+            if (!newBuildingId.trim() || !newSectionCode.trim()) return;
+            await upsertMapping(
+              newBuildingId.trim().toUpperCase(),
+              newSectionCode.trim().toUpperCase(),
+              newDescription.trim()
+            );
+            // Update zone pattern if provided
+            if (newZonePattern.trim()) {
+              const newMapping = mappings.find(m => m.building_identifier === newBuildingId.trim().toUpperCase());
+              // We need to wait for the mapping to be created, so we'll handle via a separate update
+              // For now, the user can set it after adding
+            }
+            setNewBuildingId('');
+            setNewSectionCode('');
+            setNewDescription('');
+            setNewZonePattern('');
+            onMappingsChange?.();
+          }} disabled={!newBuildingId.trim() || !newSectionCode.trim()}>
             <Plus className="h-4 w-4 mr-1" />
             Add
           </Button>

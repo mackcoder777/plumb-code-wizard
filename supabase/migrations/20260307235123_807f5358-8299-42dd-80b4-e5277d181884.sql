@@ -1,0 +1,1 @@
+ALTER TABLE building_section_mappings ADD COLUMN zone_pattern text;
