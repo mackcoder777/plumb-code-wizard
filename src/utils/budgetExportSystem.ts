@@ -171,10 +171,14 @@ function getLaborCodeFromCategory(reportCat: string | undefined, categoryMapping
 export function aggregateLaborByCostCode(
   items: ExportEstimateItem[],
   floorMappings: FloorSectionMap = {},
-  categoryMappings: CategoryLaborMap = {},
-  buildingMappings: BuildingSectionMapping[] = [],
-  dbFloorMappings: FloorSectionMapping[] = []
+  options: {
+    categoryMappings?: CategoryLaborMap;
+    buildingMappings?: BuildingSectionMapping[];
+    dbFloorMappings?: FloorSectionMapping[];
+    datasetProfile?: DatasetProfile | null;
+  } = {}
 ): AggregatedLabor[] {
+  const { categoryMappings = {}, buildingMappings = [], dbFloorMappings = [], datasetProfile = null } = options;
   const aggregated = new Map<string, AggregatedLabor>();
 
   items.forEach(item => {
@@ -187,7 +191,7 @@ export function aggregateLaborByCostCode(
     // Priority: explicit laborSec > floor mapping > suggested section > default
     let sec = item.laborSec || item.suggestedCode?.section;
     if (!sec && item.floor) {
-      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings);
+      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings, item.zone, datasetProfile);
     }
     sec = sec || '01';
     
