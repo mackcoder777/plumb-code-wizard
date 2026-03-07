@@ -616,8 +616,8 @@ const EnhancedCostCodeManager = () => {
   const getSectionForFloor = useCallback((floor: string, drawing?: string): string => {
     // Priority 1: Use database floor mappings if available
     if (dbFloorMappings.length > 0) {
-      const section = getSectionFromFloor(floor, dbFloorMappings);
-      if (section !== '01') return section; // Return if found non-default
+      const floorMap = getFloorMapping(floor, dbFloorMappings);
+      if (floorMap.section !== '01') return floorMap.section;
     }
     
     // Priority 2: Building from drawing name (for generic floors like Roof, Crawl Space)
@@ -643,8 +643,9 @@ const EnhancedCostCodeManager = () => {
     // Use database floor mappings for section
     const section = getSectionForFloor(item.floor || '', item.drawing || '');
 
-    // Get activity code from system-to-activity mappings
-    const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
+    // Get activity code: floor activity takes priority over system activity
+    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
+    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
     const systemLower = (item.system || '').toLowerCase().trim();
 
     // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
@@ -793,7 +794,8 @@ const EnhancedCostCodeManager = () => {
         // Build full cost code with section + activity + cost head
         if (appliedCode) {
           const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
-          const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
+          const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
+          const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
@@ -1532,7 +1534,8 @@ const EnhancedCostCodeManager = () => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
         const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
-        const activity = getActivityFromSystem(item.system || '', dbActivityMappings);
+        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings);
+        const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
@@ -2598,7 +2601,8 @@ const EnhancedCostCodeManager = () => {
                       
                       // Use existing section/activity if present, otherwise derive from floor/system
                       const section = existingSection || resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
-                      const activity = existingActivity || getActivityFromSystem(item.system, dbActivityMappings);
+                      const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings);
+                      const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings));
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
                       if (!summary[fullCode]) {
