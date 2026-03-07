@@ -1,77 +1,65 @@
 
 
-# Smart Assign Preview Dialog
+# Dataset Profile Analyzer — Intelligent Floor/Zone Field Role Detection
 
 ## Problem
+The Floor and Zone columns in estimate data serve different roles depending on the estimator and job. The current section resolution only uses Floor + Drawing for building detection. The Zone column is ignored, even though it often contains the building identifier (e.g., "BLDG - A"). A hard-coded assumption about zone's role would break other datasets where Zone means something else entirely (subzone, phase, etc.).
 
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
+## Approach
+Build a confidence-scored profiler that runs once at file upload, detects how each dataset uses Floor vs Zone, stores the result, and feeds it into all section resolution calls. The system handles 4 known patterns and falls back safely when it can't determine roles.
 
-## What 9524 Covers (for reference)
+## Changes
 
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
+### 1. New file: `src/utils/datasetProfiler.ts`
+- Define types: `FieldRole` (`'building' | 'floor' | 'zone' | 'phase' | 'building+floor' | 'building-confirm' | 'unknown'`), `DatasetProfile` (`floorRole`, `zoneRole`, `confidence`, `buildingSource`, `floorSource`)
+- Implement `profileDataset(items)` with the 4-pattern heuristics from the user's pseudocode (building prefix ratio, floor-only ratio, zone-as-building ratio, zone-as-subzone ratio, avgZonesPerFloor cross-check)
+- Implement `getBuildingFromZone(zone)` — extract building ID from strings like `"BLDG - A"`, `"Building 12"`, `"PCS - MODULAR"`
 
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
+### 2. Update `src/hooks/useBuildingSectionMappings.ts`
+- Update `resolveSectionStatic` and `resolveFloorMappingStatic` signatures to accept an optional options object as the 5th parameter:
+  ```ts
+  interface ResolutionOptions {
+    zone?: string;
+    datasetProfile?: DatasetProfile | null;
+  }
+  ```
+- After floor-mapping check fails, if `datasetProfile?.buildingSource === 'zone'` and `confidence >= 0.6`, try `getBuildingFromZone(zone)` → look up in `buildingMappings`
+- If profile is `null` or `confidence < 0.6`, skip zone-based resolution entirely — fall through to existing drawing-based logic
+- Pattern 3 (`buildingSource === 'floor'`) correctly does NOT use zone for building lookup
 
-## Solution: Smart Assign Preview Dialog
+### 3. Update `src/pages/Index.tsx`
+- Run `profileDataset(items)` after file upload/append, store in state as `datasetProfile` (initialized to `null`)
+- Update all ~6 call sites of `resolveSectionStatic` / `resolveFloorMappingStatic` (lines ~625, 647, 796-797, 1536-1537, 2582-2604) to pass `{ zone: item.zone, datasetProfile }` as the 5th argument
 
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
+### 4. Update `src/utils/budgetExportSystem.ts`
+- Change `aggregateLaborByCostCode` to use an options object for the last params (already at 5 positional params):
+  ```ts
+  aggregateLaborByCostCode(items, floorMappings, {
+    categoryMappings,
+    buildingMappings,
+    dbFloorMappings,
+    datasetProfile  // NEW
+  })
+  ```
+- Update the 3 call sites (~lines 350, 899, and the internal `getSectionFromFloor` helper) to pass profile and zone through to `resolveSectionStatic`
 
-### UI Design
+### 5. Update `src/components/FloorSectionMapping.tsx`
+- Accept `datasetProfile` as an optional prop
+- Show an informational banner at the top when profile is detected:
+  ```
+  ℹ️ Detected pattern: Floor encodes building + level, Zone confirms building. Confidence: 94%
+  [Override detection ▾]
+  ```
+- Override dropdown lets user manually select pattern (1-4), stored to `estimate_projects` metadata column via database
 
-When you click "Smart Assign", a dialog opens with:
+### 6. Database: Add `dataset_profile_override` column to `estimate_projects`
+- Migration: `ALTER TABLE estimate_projects ADD COLUMN dataset_profile_override text DEFAULT NULL;`
+- Stores the user's manual override selection (e.g., `'pattern1'`, `'pattern2'`, `'pattern3'`, `'pattern4'`) so it persists across reloads
+- When override is set, skip auto-detection and use the override pattern directly
 
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
-
-```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
-```
-
-### Technical Changes
-
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
-
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
-
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
-
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
-
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
-
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
-
-### No database changes needed.
+## Key Safety Rules
+- `datasetProfile` initializes to `null` before any file upload. All resolution functions handle `null` gracefully by skipping zone-based resolution and falling through to existing drawing-based logic.
+- When `confidence < 0.6`, zone-based resolution is skipped entirely.
+- Pattern 3 (zone = subzone) explicitly avoids using zone for building lookup.
+- No breaking changes to existing behavior — zone is purely additive in the resolution chain.
 
