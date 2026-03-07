@@ -1,18 +1,21 @@
 import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   useFloorSectionMappings,
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
+import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FloorSectionMappingPanelProps {
