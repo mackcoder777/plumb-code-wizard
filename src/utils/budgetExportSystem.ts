@@ -354,7 +354,7 @@ export function exportBudgetPacket(
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
-    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, categoryMappings, buildingMappings, dbFloorMappings);
+    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, { categoryMappings, buildingMappings, dbFloorMappings });
     validateHoursReconciliation(items, rawLaborSummary);
     laborData = rawLaborSummary.map(item => ({
       code: item.costCode,
@@ -903,7 +903,7 @@ export function exportAuditReport(
   }
 
   // Summary tab
-  const laborSummary = aggregateLaborByCostCode(items, floorMappings, {}, buildingMappings, dbFloorMappings);
+  const laborSummary = aggregateLaborByCostCode(items, floorMappings, { buildingMappings, dbFloorMappings });
   const materialSummary = aggregateMaterialByCostCode(items);
 
   const summaryData = [
