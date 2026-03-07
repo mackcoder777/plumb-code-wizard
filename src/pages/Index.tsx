@@ -1869,6 +1869,7 @@ const EnhancedCostCodeManager = () => {
     
     setEstimateData(transformedItems);
     setFilteredData(transformedItems);
+    setDatasetProfile(profileDataset(transformedItems));
     
     // Save to database using the mutation
     const itemsToSave = transformedItems.map((item, index) => ({
