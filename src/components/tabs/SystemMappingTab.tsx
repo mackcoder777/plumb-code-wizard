@@ -34,8 +34,9 @@ import { BuildingSectionMappingPanel } from '@/components/BuildingSectionMapping
 import { CategoryLaborMappingPanel } from '@/components/CategoryLaborMapping';
 import { SystemActivityMappingPanel } from '@/components/SystemActivityMapping';
 import { MappingAuditSummary } from '@/components/MappingAuditSummary';
-import { FloorSectionMapping, getFloorMapping } from '@/hooks/useFloorSectionMappings';
+import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
+import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
@@ -44,6 +45,7 @@ interface SystemMappingTabProps {
   projectId?: string | null;
   floorSectionMappings?: FloorSectionMapping[];
   systemActivityMappings?: SystemActivityMapping[];
+  buildingSectionMappings: BuildingSectionMapping[];
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -75,7 +77,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
