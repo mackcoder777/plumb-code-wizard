@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
+import { DatasetProfile, getBuildingFromZone } from '@/utils/datasetProfiler';
 
 export interface BuildingSectionMapping {
   id: string;
