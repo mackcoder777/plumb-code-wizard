@@ -278,6 +278,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   projectId,
   onMappingsChange,
   onApplySectionCodes,
+  datasetProfile,
+  onProfileOverride,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
