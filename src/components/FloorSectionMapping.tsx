@@ -23,6 +23,8 @@ interface FloorSectionMappingPanelProps {
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
   onApplySectionCodes?: (mappings: Record<string, string>) => void;
+  datasetProfile?: DatasetProfile | null;
+  onProfileOverride?: (override: PatternOverride | null) => void;
 }
 
 interface BuildingGroup {
