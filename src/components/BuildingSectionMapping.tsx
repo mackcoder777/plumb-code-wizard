@@ -30,7 +30,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
   estimateItems,
   onMappingsChange,
 }) => {
-  const { mappings, loading, upsertMapping, deleteMapping, autoPopulate } =
+  const { mappings, loading, upsertMapping, deleteMapping, autoPopulate, updateZonePattern } =
     useBuildingSectionMappings(projectId);
 
   const [detected, setDetected] = useState<DetectedBuilding[]>([]);
@@ -38,6 +38,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
   const [newBuildingId, setNewBuildingId] = useState('');
   const [newSectionCode, setNewSectionCode] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newZonePattern, setNewZonePattern] = useState('');
 
   useEffect(() => {
     if (estimateItems.length === 0) return;
@@ -134,6 +135,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
               <TableRow>
                 <TableHead>Building</TableHead>
                 <TableHead>Section Code</TableHead>
+                <TableHead>Zone Pattern</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
@@ -181,6 +183,21 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
                           {m.section_code}
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        placeholder="e.g. MODULAR"
+                        defaultValue={m.zone_pattern || ''}
+                        className="w-32 h-8 text-xs font-mono"
+                        title="Items on standalone floors whose zone contains this keyword resolve to this building section"
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val !== (m.zone_pattern || '')) {
+                            updateZonePattern(m.id, val);
+                            onMappingsChange?.();
+                          }
+                        }}
+                      />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{m.description}</TableCell>
                     <TableCell>{det ? `${det.item_count}` : '—'}</TableCell>
