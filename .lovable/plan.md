@@ -1,56 +1,34 @@
 
 
-# Fix: Standalone Floor Zone Resolution at Assembly Time
+# Fix: Standalone Floor Zone Resolution Priority
 
-## Root Cause
+## Problem
+`getFloorMappingNullable` matches standalone floors (Roof, UG, etc.) to their floor mapping rows and returns immediately. Both `resolveSectionStatic` (line 159) and `resolveFloorMappingStatic` (line 220) accept this early return, so zone-based building lookup never runs.
 
-`getFloorMappingNullable` matches "Roof" to its floor mapping row (section=RF, activity=0000) via exact match on line 109. It returns immediately. The standalone floor guard on line 126 (`/^(roof|crawl\s*space|...)$/`) never fires because the exact match already returned.
+## Fix in `src/hooks/useBuildingSectionMappings.ts`
 
-Both `resolveSectionStatic` and `resolveFloorMappingStatic` check `if (fromFloor) return fromFloor` on their first line — so zone fallback never runs for any floor that has a mapping row.
+Add a `STANDALONE_FLOORS` regex constant and restructure both functions to intercept standalone floors before accepting the floor mapping's section.
 
-## Fix
-
-The fix is in both `resolveSectionStatic` and `resolveFloorMappingStatic`. For standalone floors, zone resolution must run **before** accepting the floor mapping's section, while still preserving the floor mapping's **activity** code.
-
-### Define standalone floor set
-
+### Constant (add near top of file, after imports)
 ```ts
 const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
 ```
 
-### Change `resolveFloorMappingStatic` (primary fix)
+### `resolveSectionStatic` (lines 151-206) — new flow:
+1. `getFloorMappingNullable` → save result as `fromFloor`
+2. **NEW**: If floor matches `STANDALONE_FLOORS` AND `options?.zone` exists → `getBuildingFromZone(zone)` → building mapping lookup → return zone-derived section
+3. If `fromFloor` exists (non-standalone), return `fromFloor.section` as before
+4. Existing zone/drawing/default fallbacks unchanged
 
-```text
-Current flow:
-  1. getFloorMappingNullable → if match, return immediately
-  2. zone fallback
-  3. drawing fallback
-  4. default '01'
+### `resolveFloorMappingStatic` (lines 212-266) — new flow:
+1. `getFloorMappingNullable` → save result as `fromFloor`
+2. **NEW**: If floor matches `STANDALONE_FLOORS` AND `options?.zone` exists → `getBuildingFromZone(zone)` → building mapping lookup → return `{ section: zoneSection, activity: fromFloor?.activity || '0000' }` (preserves user's activity setting from floor mapping panel)
+3. If `fromFloor` exists (non-standalone), return `fromFloor` as before
+4. Existing zone/drawing/default fallbacks unchanged
 
-New flow:
-  1. getFloorMappingNullable → save result
-  2. IF floor is standalone AND zone is provided:
-     a. getBuildingFromZone(zone) → lookup building mapping → use as section
-     b. Use floor mapping's activity if available (e.g., 00RF), else '0000'
-     c. Return { section: zoneSection, activity: floorActivity }
-  3. IF floor mapping matched (non-standalone), return it as before
-  4. zone fallback (existing code, for non-standalone unmatched floors)
-  5. drawing fallback
-  6. default '01'
-```
+### Key detail
+The activity code comes from `fromFloor?.activity` — whatever the user configured for that standalone floor row in the Floor Mapping panel. No hardcoding.
 
-Same pattern for `resolveSectionStatic` — check standalone + zone before accepting floor mapping section.
-
-### File changed
-
-**`src/hooks/useBuildingSectionMappings.ts`** — modify `resolveSectionStatic` (~line 151-206) and `resolveFloorMappingStatic` (~line 212-268):
-
-- Move `const fromFloor = getFloorMappingNullable(...)` up but delay early return
-- Add standalone floor check: if `STANDALONE_FLOORS.test(floor.trim())` and `options?.zone` exists, try `getBuildingFromZone(options.zone)` → building mapping lookup → return zone-derived section + floor mapping's activity
-- Fall through to existing `if (fromFloor) return fromFloor` for non-standalone floors
-- No changes to zone fallback tiers 2/3 or drawing fallback — they remain as-is for floors with no mapping at all
-
-### No other files need changes
-
-The callers in `Index.tsx` and `SystemMappingTab.tsx` already pass `options: { zone }` to these functions. The bug is purely in the resolution priority within these two functions.
+### No other files change
+Callers in `Index.tsx` and `SystemMappingTab.tsx` already pass `options: { zone }`.
 
