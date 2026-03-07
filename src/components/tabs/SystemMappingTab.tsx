@@ -617,7 +617,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         if (assignmentSource === 'category') categoryAssignments++;
         if (assignmentSource === 'system') systemAssignments++;
         systemItemCounts[systemKey] = (systemItemCounts[systemKey] || 0) + 1;
-        const fullCode = buildFullLaborCode(costHead, item.floor || '', item.system);
+        const fullCode = buildFullLaborCode(costHead, { floor: item.floor || '', drawing: item.drawing, zone: item.zone, system: item.system });
         return { ...item, costCode: fullCode };
       }
       return item;
@@ -697,7 +697,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       
       if (costHead) {
         itemsAffected++;
-        const fullCode = buildFullLaborCode(costHead, item.floor || '', item.system);
+        const fullCode = buildFullLaborCode(costHead, { floor: item.floor || '', drawing: item.drawing, zone: item.zone, system: item.system });
         return { ...item, costCode: fullCode };
       }
       return item;

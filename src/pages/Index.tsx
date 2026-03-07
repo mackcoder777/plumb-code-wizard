@@ -2477,6 +2477,7 @@ const EnhancedCostCodeManager = () => {
                 projectId={currentProject?.id}
                 floorSectionMappings={dbFloorMappings}
                 systemActivityMappings={dbActivityMappings}
+                buildingSectionMappings={dbBuildingMappings}
                 datasetProfile={datasetProfile}
                 onProfileOverride={(override) => {
                   if (override) {
