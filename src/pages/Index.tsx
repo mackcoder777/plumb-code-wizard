@@ -813,7 +813,7 @@ const EnhancedCostCodeManager = () => {
 
       setEstimateData(transformedItems);
       setFilteredData(transformedItems);
-      setDatasetProfile(profileDataset(transformedItems));
+      // datasetProfile is now set in a separate guarded effect below
       setFileName(currentProject.file_name || '');
 
       // Batch persist newly applied codes to database (once per project load)
