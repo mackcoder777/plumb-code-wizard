@@ -1,32 +1,56 @@
 
 
-# Status: Everything is Already Wired Correctly
+# Fix: Standalone Floor Zone Resolution at Assembly Time
 
-## Diagnosis Complete
+## Root Cause
 
-All three wiring points are confirmed correct:
+`getFloorMappingNullable` matches "Roof" to its floor mapping row (section=RF, activity=0000) via exact match on line 109. It returns immediately. The standalone floor guard on line 126 (`/^(roof|crawl\s*space|...)$/`) never fires because the exact match already returned.
 
-1. **Zone data exists in the database** — I queried the Hamilton High estimate items directly. All 12,846 items have zone values (BLDG - A: 4,301 items, BLDG - 3: 2,105, BLDG - B: 1,618, etc.)
+Both `resolveSectionStatic` and `resolveFloorMappingStatic` check `if (fromFloor) return fromFloor` on their first line — so zone fallback never runs for any floor that has a mapping row.
 
-2. **Zone is loaded from DB on project load** — Line 1126 of `Index.tsx` maps `zone: row.zone` when loading from database
+## Fix
 
-3. **`FloorSectionMapping.tsx` is fully wired**:
-   - `floorData` useMemo builds `zoneBreakdown` from `item.zone` (line 480-497)
-   - `StandaloneFloorRow` receives `zoneBreakdown={floorZoneBreakdown[floor]}` (line 878)
-   - `classifyStandaloneFloor` classifies floors based on zone distribution (line 285-315)
-   - Badges render for `multi`, `single`, `dominant`, and `unknown` types (lines 350-383)
+The fix is in both `resolveSectionStatic` and `resolveFloorMappingStatic`. For standalone floors, zone resolution must run **before** accepting the floor mapping's section, while still preserving the floor mapping's **activity** code.
 
-## No Code Changes Needed
+### Define standalone floor set
 
-The zone breakdown badges (amber "Per-item (N zones)" for Roof/UG, green "→ Zone" for Crawl Space/Site) should be rendering already. The screenshot was likely captured before the latest code deployment that added `StandaloneFloorRow`.
+```ts
+const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
+```
 
-## Next Step
+### Change `resolveFloorMappingStatic` (primary fix)
 
-Simply reload the app in the preview. The standalone floor rows for Roof, UG, Crawl Space, Site, and Site Above Grade should now display:
-- **Roof**: amber badge — "Per-item (8 zones)" with expandable breakdown
-- **UG**: amber badge — "Per-item (11 zones)" with expandable breakdown  
-- **Crawl Space**: green badge — "→ PC1 - MODULAR SYSTEMS" (or similar single-zone)
-- **Site / Site Above Grade**: green badge — "→ Site Plumbing PKG 3"
+```text
+Current flow:
+  1. getFloorMappingNullable → if match, return immediately
+  2. zone fallback
+  3. drawing fallback
+  4. default '01'
 
-After confirming the badges appear, click **"Re-apply Sections"** to update the cost codes on all items with their per-item zone-resolved section codes.
+New flow:
+  1. getFloorMappingNullable → save result
+  2. IF floor is standalone AND zone is provided:
+     a. getBuildingFromZone(zone) → lookup building mapping → use as section
+     b. Use floor mapping's activity if available (e.g., 00RF), else '0000'
+     c. Return { section: zoneSection, activity: floorActivity }
+  3. IF floor mapping matched (non-standalone), return it as before
+  4. zone fallback (existing code, for non-standalone unmatched floors)
+  5. drawing fallback
+  6. default '01'
+```
+
+Same pattern for `resolveSectionStatic` — check standalone + zone before accepting floor mapping section.
+
+### File changed
+
+**`src/hooks/useBuildingSectionMappings.ts`** — modify `resolveSectionStatic` (~line 151-206) and `resolveFloorMappingStatic` (~line 212-268):
+
+- Move `const fromFloor = getFloorMappingNullable(...)` up but delay early return
+- Add standalone floor check: if `STANDALONE_FLOORS.test(floor.trim())` and `options?.zone` exists, try `getBuildingFromZone(options.zone)` → building mapping lookup → return zone-derived section + floor mapping's activity
+- Fall through to existing `if (fromFloor) return fromFloor` for non-standalone floors
+- No changes to zone fallback tiers 2/3 or drawing fallback — they remain as-is for floors with no mapping at all
+
+### No other files need changes
+
+The callers in `Index.tsx` and `SystemMappingTab.tsx` already pass `options: { zone }` to these functions. The bug is purely in the resolution priority within these two functions.
 
