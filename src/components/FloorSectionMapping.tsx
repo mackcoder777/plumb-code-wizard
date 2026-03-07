@@ -436,6 +436,27 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     return '';
   };
 
+  // Auto-suggest activity based on floor/building name
+  const suggestActivity = (displayName: string): string => {
+    const lower = displayName.toLowerCase();
+    
+    // Building-prefixed floors like "Bldg 1 - Level 2"
+    const bldgLevelMatch = lower.match(/bldg\s*\w+\s*[-–]\s*(?:level|lvl|l)\s*(\d+)/i);
+    if (bldgLevelMatch) return `LVL${bldgLevelMatch[1]}`;
+    
+    // Standalone level/floor patterns
+    const levelMatch = lower.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
+    if (levelMatch) return `LVL${levelMatch[1]}`;
+    
+    if (lower.includes('basement') || lower.includes('below grade')) return 'BSMT';
+    if (lower.includes('mezzanine') || lower.includes('mezz')) return 'MEZZ';
+    if (lower.includes('penthouse') || lower.includes('pent')) return 'PENT';
+    if (lower.includes('roof')) return '0000';
+    if (lower.includes('crawl')) return '0000';
+    
+    return '0000';
+  };
+
   const handleAutoSuggestAll = useCallback(() => {
     const newMappings: Record<string, string> = {};
     floorData.forEach(({ displayName, childFloors }) => {
