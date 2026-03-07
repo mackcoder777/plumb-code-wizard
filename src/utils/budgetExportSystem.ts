@@ -841,7 +841,9 @@ function prepareMaterialReportData(items: ExportEstimateItem[]): any[] {
 export function exportAuditReport(
   items: ExportEstimateItem[],
   projectInfo: ProjectInfo,
-  floorMappings: FloorSectionMap = {}
+  floorMappings: FloorSectionMap = {},
+  buildingMappings: BuildingSectionMapping[] = [],
+  dbFloorMappings: FloorSectionMapping[] = []
 ): { laborItems: number; materialItems: number; totalItems: number } {
   const wb = XLSX.utils.book_new();
 
@@ -894,7 +896,7 @@ export function exportAuditReport(
   }
 
   // Summary tab
-  const laborSummary = aggregateLaborByCostCode(items, floorMappings);
+  const laborSummary = aggregateLaborByCostCode(items, floorMappings, {}, buildingMappings, dbFloorMappings);
   const materialSummary = aggregateMaterialByCostCode(items);
 
   const summaryData = [

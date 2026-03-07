@@ -89,7 +89,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
 
   const handleExportAuditReport = () => {
     try {
-      const result = exportAuditReport(items, projectInfo, floorMappings);
+      const result = exportAuditReport(items, projectInfo, floorMappings, buildingMappings, dbFloorMappings);
       toast({
         title: "Audit Report Exported",
         description: `Exported ${result.laborItems} labor items and ${result.materialItems} material items across 3 tabs.`,
