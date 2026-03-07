@@ -175,6 +175,22 @@ export function resolveSectionStatic(
       return suggestSectionForBuilding(zoneBuilding);
     }
   }
+  // 3. Per-item zone fallback — fires for ANY pattern when floor extraction
+  //    yields nothing (handles "Roof", "UG", "Crawl Space" in Pattern 1 datasets)
+  //    Suppressed only when profile explicitly says zone is subzone or phase
+  if (
+    options?.zone &&
+    (!profile || (profile.zoneRole !== 'zone' && profile.zoneRole !== 'phase'))
+  ) {
+    const zoneBuilding = getBuildingFromZone(options.zone);
+    if (zoneBuilding) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
+      );
+      if (m) return m.section_code;
+      return suggestSectionForBuilding(zoneBuilding);
+    }
+  }
 
   // Drawing-based fallback (existing behavior)
   const buildingId = getBuildingFromDrawing(drawing);
@@ -210,6 +226,21 @@ export function resolveFloorMappingStatic(
     profile.buildingSource === 'zone' &&
     profile.confidence >= 0.6 &&
     options?.zone
+  ) {
+    const zoneBuilding = getBuildingFromZone(options.zone);
+    if (zoneBuilding) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
+      );
+      if (m) return { section: m.section_code, activity: '0000' };
+      return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
+    }
+  }
+
+  // 3. Per-item zone fallback (pattern-agnostic, suppressed for subzone/phase)
+  if (
+    options?.zone &&
+    (!profile || (profile.zoneRole !== 'zone' && profile.zoneRole !== 'phase'))
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
