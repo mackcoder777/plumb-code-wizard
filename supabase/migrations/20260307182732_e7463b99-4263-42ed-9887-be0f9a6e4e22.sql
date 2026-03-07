@@ -1,0 +1,1 @@
+ALTER TABLE public.estimate_projects ADD COLUMN dataset_profile_override text DEFAULT NULL;

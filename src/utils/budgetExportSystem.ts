@@ -5,8 +5,9 @@
 
 import * as XLSX from 'xlsx';
 import { BudgetAdjustments } from '../components/BudgetAdjustmentsPanel';
-import { BuildingSectionMapping, resolveSectionStatic, getSectionFromFloorNullable } from '@/hooks/useBuildingSectionMappings';
+import { BuildingSectionMapping, resolveSectionStatic, getSectionFromFloorNullable, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
 import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
+import { DatasetProfile } from '@/utils/datasetProfiler';
 
 // ============================================
 // TYPES
@@ -97,13 +98,15 @@ function getSectionFromFloor(
   floorMappings: FloorSectionMap, 
   drawing?: string,
   buildingMappings?: BuildingSectionMapping[],
-  dbFloorMappings?: FloorSectionMapping[]
+  dbFloorMappings?: FloorSectionMapping[],
+  zone?: string,
+  datasetProfile?: DatasetProfile | null
 ): string {
   if (!floor) return '01';
   
   // If we have structured mappings, use the building-aware resolver
   if (buildingMappings && buildingMappings.length > 0 && dbFloorMappings) {
-    return resolveSectionStatic(floor, drawing || '', dbFloorMappings, buildingMappings);
+    return resolveSectionStatic(floor, drawing || '', dbFloorMappings, buildingMappings, { zone, datasetProfile });
   }
   
   // Fallback to simple floor map
@@ -168,10 +171,14 @@ function getLaborCodeFromCategory(reportCat: string | undefined, categoryMapping
 export function aggregateLaborByCostCode(
   items: ExportEstimateItem[],
   floorMappings: FloorSectionMap = {},
-  categoryMappings: CategoryLaborMap = {},
-  buildingMappings: BuildingSectionMapping[] = [],
-  dbFloorMappings: FloorSectionMapping[] = []
+  options: {
+    categoryMappings?: CategoryLaborMap;
+    buildingMappings?: BuildingSectionMapping[];
+    dbFloorMappings?: FloorSectionMapping[];
+    datasetProfile?: DatasetProfile | null;
+  } = {}
 ): AggregatedLabor[] {
+  const { categoryMappings = {}, buildingMappings = [], dbFloorMappings = [], datasetProfile = null } = options;
   const aggregated = new Map<string, AggregatedLabor>();
 
   items.forEach(item => {
@@ -184,7 +191,7 @@ export function aggregateLaborByCostCode(
     // Priority: explicit laborSec > floor mapping > suggested section > default
     let sec = item.laborSec || item.suggestedCode?.section;
     if (!sec && item.floor) {
-      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings);
+      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings, item.zone, datasetProfile);
     }
     sec = sec || '01';
     
@@ -347,7 +354,7 @@ export function exportBudgetPacket(
     totalMaterialDollars = budgetAdjustments.totalMaterialWithTax || 0;
   } else {
     // FALLBACK: Use raw item aggregation (no adjustments)
-    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, categoryMappings, buildingMappings, dbFloorMappings);
+    const rawLaborSummary = aggregateLaborByCostCode(items, floorMappings, { categoryMappings, buildingMappings, dbFloorMappings });
     validateHoursReconciliation(items, rawLaborSummary);
     laborData = rawLaborSummary.map(item => ({
       code: item.costCode,
@@ -896,7 +903,7 @@ export function exportAuditReport(
   }
 
   // Summary tab
-  const laborSummary = aggregateLaborByCostCode(items, floorMappings, {}, buildingMappings, dbFloorMappings);
+  const laborSummary = aggregateLaborByCostCode(items, floorMappings, { buildingMappings, dbFloorMappings });
   const materialSummary = aggregateMaterialByCostCode(items);
 
   const summaryData = [

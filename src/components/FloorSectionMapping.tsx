@@ -1,18 +1,21 @@
 import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2 } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   useFloorSectionMappings,
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
+import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface FloorSectionMappingPanelProps {
@@ -20,6 +23,8 @@ interface FloorSectionMappingPanelProps {
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
   onApplySectionCodes?: (mappings: Record<string, string>) => void;
+  datasetProfile?: DatasetProfile | null;
+  onProfileOverride?: (override: PatternOverride | null) => void;
 }
 
 interface BuildingGroup {
@@ -273,6 +278,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   projectId,
   onMappingsChange,
   onApplySectionCodes,
+  datasetProfile,
+  onProfileOverride,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
@@ -499,6 +506,38 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           </div>
         </div>
       </CardHeader>
+
+      {datasetProfile && datasetProfile.confidence > 0 && (
+        <div className="px-6 pb-2">
+          <Alert className="bg-muted/50 border-border">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between gap-4">
+              <span className="text-sm">
+                <strong>Detected pattern:</strong> {describeProfile(datasetProfile)}.{' '}
+                <span className="text-muted-foreground">
+                  Confidence: {Math.round(datasetProfile.confidence * 100)}%
+                </span>
+              </span>
+              {onProfileOverride && (
+                <Select
+                  onValueChange={(val) => onProfileOverride(val === 'auto' ? null : val as PatternOverride)}
+                >
+                  <SelectTrigger className="w-[220px] h-8 text-xs">
+                    <SelectValue placeholder="Override detection ▾" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto-detect</SelectItem>
+                    <SelectItem value="pattern1">{getPatternLabel('pattern1')}</SelectItem>
+                    <SelectItem value="pattern2">{getPatternLabel('pattern2')}</SelectItem>
+                    <SelectItem value="pattern3">{getPatternLabel('pattern3')}</SelectItem>
+                    <SelectItem value="pattern4">{getPatternLabel('pattern4')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       <CardContent>
         {isLoading ? (
