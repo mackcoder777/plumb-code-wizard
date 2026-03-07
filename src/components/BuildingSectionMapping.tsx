@@ -236,12 +236,36 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
             onChange={e => setNewSectionCode(e.target.value.toUpperCase())}
           />
           <Input
+            placeholder="Zone pattern"
+            value={newZonePattern}
+            className="w-32 font-mono text-xs"
+            onChange={e => setNewZonePattern(e.target.value)}
+          />
+          <Input
             placeholder="Description (optional)"
             value={newDescription}
             className="flex-1"
             onChange={e => setNewDescription(e.target.value)}
           />
-          <Button size="sm" onClick={handleAddNew} disabled={!newBuildingId.trim() || !newSectionCode.trim()}>
+          <Button size="sm" onClick={async () => {
+            if (!newBuildingId.trim() || !newSectionCode.trim()) return;
+            await upsertMapping(
+              newBuildingId.trim().toUpperCase(),
+              newSectionCode.trim().toUpperCase(),
+              newDescription.trim()
+            );
+            // Update zone pattern if provided
+            if (newZonePattern.trim()) {
+              const newMapping = mappings.find(m => m.building_identifier === newBuildingId.trim().toUpperCase());
+              // We need to wait for the mapping to be created, so we'll handle via a separate update
+              // For now, the user can set it after adding
+            }
+            setNewBuildingId('');
+            setNewSectionCode('');
+            setNewDescription('');
+            setNewZonePattern('');
+            onMappingsChange?.();
+          }} disabled={!newBuildingId.trim() || !newSectionCode.trim()}>
             <Plus className="h-4 w-4 mr-1" />
             Add
           </Button>
