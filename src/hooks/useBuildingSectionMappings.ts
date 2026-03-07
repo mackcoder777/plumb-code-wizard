@@ -163,6 +163,7 @@ export function resolveSectionStatic(
 
   // Standalone floors: zone-based section takes priority over floor mapping's section
   if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
+    // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
       const m = buildingMappings.find(
@@ -170,6 +171,14 @@ export function resolveSectionStatic(
       );
       if (m) return m.section_code;
       return suggestSectionForBuilding(zoneBuilding);
+    }
+    // Priority 2: User-configured zone patterns
+    const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
+    if (zonePatternMatch) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zonePatternMatch.building_identifier.toUpperCase()
+      );
+      if (m) return m.section_code;
     }
   }
 
@@ -237,6 +246,7 @@ export function resolveFloorMappingStatic(
 
   // Standalone floors: zone-based section takes priority, preserve floor's activity
   if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
+    // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
       const m = buildingMappings.find(
@@ -244,6 +254,23 @@ export function resolveFloorMappingStatic(
       );
       if (m) return { section: m.section_code, activity: floorActivity };
       return { section: suggestSectionForBuilding(zoneBuilding), activity: floorActivity };
+    }
+    // Priority 2: User-configured zone patterns with activity extraction from zone prefix
+    const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
+    if (zonePatternMatch) {
+      const m = buildingMappings.find(
+        bm => bm.building_identifier.toUpperCase() === zonePatternMatch.building_identifier.toUpperCase()
+      );
+      if (m) {
+        // Try to extract activity code from zone prefix (e.g. "PC1 - MODULAR" → "0PC1", "PC10 - ..." → "PC10")
+        const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
+        if (prefixMatch) {
+          const prefix = prefixMatch[1].toUpperCase();
+          const activity = prefix.length <= 3 ? '0' + prefix : prefix;
+          return { section: m.section_code, activity };
+        }
+        return { section: m.section_code, activity: floorActivity };
+      }
     }
   }
 
@@ -395,6 +422,21 @@ export function useBuildingSectionMappings(projectId: string | null) {
     [mappings]
   );
 
+  const updateZonePattern = useCallback(
+    async (id: string, zonePattern: string) => {
+      const { error } = await (supabase as any)
+        .from('building_section_mappings')
+        .update({ zone_pattern: zonePattern || null, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (!error) {
+        setMappings(prev =>
+          prev.map(m => (m.id === id ? { ...m, zone_pattern: zonePattern || null } : m))
+        );
+      }
+    },
+    []
+  );
+
   return {
     mappings,
     loading,
@@ -403,5 +445,6 @@ export function useBuildingSectionMappings(projectId: string | null) {
     deleteMapping,
     autoPopulate,
     getSectionForItem,
+    updateZonePattern,
   };
 }
