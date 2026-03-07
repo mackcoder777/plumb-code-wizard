@@ -761,8 +761,20 @@ const EnhancedCostCodeManager = () => {
           })
         };
 
-        // Priority 1: Existing DB code — keep as-is
+        // Priority 1: Existing DB code — re-resolve section using zone-aware logic
         if (item.cost_code) {
+          const parts = item.cost_code.trim().split(/\s+/);
+          if (parts.length >= 3) {
+            const costHead = parts.slice(2).join(' ');
+            const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            const activity = floorMap.activity !== '0000' ? floorMap.activity : parts[1];
+            const newCode = `${section} ${activity} ${costHead}`;
+            if (newCode !== item.cost_code) {
+              baseItem.costCode = newCode;
+              itemsNeedingPersist.push({ row_number: item.row_number, cost_code: newCode });
+            }
+          }
           return baseItem;
         }
 
@@ -816,8 +828,9 @@ const EnhancedCostCodeManager = () => {
       // datasetProfile is now set in a separate guarded effect below
       setFileName(currentProject.file_name || '');
 
-      // Batch persist newly applied codes to database (once per project load)
-      if (newlyApplied > 0 && hasAutoAppliedRef.current !== currentProject.id) {
+      // Batch persist newly applied or re-resolved codes to database
+      // Guard: diff-based — re-resolved items only persist when section actually changed
+      if (newlyApplied > 0) {
         hasAutoAppliedRef.current = currentProject.id;
         console.log(`[AutoApply] Persisting ${newlyApplied} labor codes to database...`);
 
@@ -856,9 +869,22 @@ const EnhancedCostCodeManager = () => {
       datasetProfileSetRef.current = currentProject.id;
       setDatasetProfile(profileDataset(estimateData));
     }
-  }, [estimateData, currentProject?.id]);
+   }, [estimateData, currentProject?.id]);
 
-  // Web Worker for Excel parsing (off main thread)
+  // One-shot effect: auto-populate building section mappings from detected drawings
+  const buildingsPopulatedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (estimateData.length > 0 && dbBuildingMappings.length === 0 
+        && currentProject?.id && buildingsPopulatedRef.current !== currentProject.id) {
+      buildingsPopulatedRef.current = currentProject.id;
+      const detected = detectBuildingsFromDrawings(estimateData);
+      if (detected.length > 0) {
+        autoPopulateBuildings(detected);
+      }
+    }
+  }, [estimateData.length, dbBuildingMappings.length, currentProject?.id]);
+
+   // Web Worker for Excel parsing (off main thread)
   const handleFileUpload = useCallback((file: File | undefined) => {
     if (!file) return;
     
