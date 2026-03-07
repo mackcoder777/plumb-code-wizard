@@ -6,8 +6,14 @@ export interface FloorSectionMapping {
   project_id: string;
   floor_pattern: string;
   section_code: string;
+  activity_code: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface FloorMappingResult {
+  section: string;
+  activity: string;
 }
 
 export function useFloorSectionMappings(projectId: string | null) {
@@ -37,10 +43,12 @@ export function useSaveFloorSectionMapping() {
       projectId,
       floorPattern,
       sectionCode,
+      activityCode = '0000',
     }: {
       projectId: string;
       floorPattern: string;
       sectionCode: string;
+      activityCode?: string;
     }) => {
       const { data, error } = await supabase
         .from('floor_section_mappings')
@@ -49,6 +57,7 @@ export function useSaveFloorSectionMapping() {
             project_id: projectId,
             floor_pattern: floorPattern,
             section_code: sectionCode,
+            activity_code: activityCode,
             updated_at: new Date().toISOString(),
           },
           {
@@ -76,12 +85,13 @@ export function useBatchSaveFloorSectionMappings() {
       mappings,
     }: {
       projectId: string;
-      mappings: Array<{ floorPattern: string; sectionCode: string }>;
+      mappings: Array<{ floorPattern: string; sectionCode: string; activityCode?: string }>;
     }) => {
       const records = mappings.map(m => ({
         project_id: projectId,
         floor_pattern: m.floorPattern,
         section_code: m.sectionCode,
+        activity_code: m.activityCode || '0000',
         updated_at: new Date().toISOString(),
       }));
       
@@ -125,15 +135,14 @@ export function useDeleteFloorSectionMapping() {
 }
 
 /**
- * Utility function to get section code from floor value using mappings
- * Matches against the Floor column values (e.g., "Club Level", "UG"), NOT drawing names
+ * Returns { section, activity } for a floor value using mappings.
  * Priority: exact match > case-insensitive match > contains match
  */
-export function getSectionFromFloor(
+export function getFloorMapping(
   floor: string,
   mappings: FloorSectionMapping[]
-): string {
-  if (!floor || mappings.length === 0) return '01';
+): FloorMappingResult {
+  if (!floor || mappings.length === 0) return { section: '01', activity: '0000' };
   
   const normalizedFloor = floor.toLowerCase().trim();
   
@@ -141,25 +150,21 @@ export function getSectionFromFloor(
   const exactMatch = mappings.find(
     m => m.floor_pattern.toLowerCase().trim() === normalizedFloor
   );
-  if (exactMatch) return exactMatch.section_code;
+  if (exactMatch) return { section: exactMatch.section_code, activity: exactMatch.activity_code || '0000' };
   
   // 2. Try partial match where pattern is contained in floor value
-  // e.g., pattern "Club" matches floor "Club Level"
   const containsMatch = mappings.find(m => {
     const pattern = m.floor_pattern.toLowerCase().trim();
-    // Pattern must be at least 2 chars to avoid false positives
     return pattern.length >= 2 && normalizedFloor.includes(pattern);
   });
-  if (containsMatch) return containsMatch.section_code;
+  if (containsMatch) return { section: containsMatch.section_code, activity: containsMatch.activity_code || '0000' };
   
   // 3. Try reverse partial match where floor is contained in pattern
-  // e.g., floor "UG" matches pattern "Underground/UG"
   const reverseMatch = mappings.find(m => {
     const pattern = m.floor_pattern.toLowerCase().trim();
-    // Floor must be at least 2 chars to avoid false positives
     return normalizedFloor.length >= 2 && pattern.includes(normalizedFloor);
   });
-  if (reverseMatch) return reverseMatch.section_code;
+  if (reverseMatch) return { section: reverseMatch.section_code, activity: reverseMatch.activity_code || '0000' };
   
-  return '01'; // Default section
+  return { section: '01', activity: '0000' }; // Default
 }

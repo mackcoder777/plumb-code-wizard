@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
+import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
 
 export interface BuildingSectionMapping {
   id: string;
@@ -90,13 +90,13 @@ export function detectBuildingsFromDrawings(
 }
 
 /**
- * Nullable floor section resolver — returns null when floor can't be resolved,
+ * Nullable floor mapping resolver — returns null when floor can't be resolved,
  * allowing building-based fallback.
  */
-export function getSectionFromFloorNullable(
+export function getFloorMappingNullable(
   floor: string,
   floorMappings: FloorSectionMapping[]
-): string | null {
+): FloorMappingResult | null {
   if (!floor || floorMappings.length === 0) return null;
 
   const normalizedFloor = floor.toLowerCase().trim();
@@ -105,26 +105,35 @@ export function getSectionFromFloorNullable(
   const exactMatch = floorMappings.find(
     m => m.floor_pattern.toLowerCase().trim() === normalizedFloor
   );
-  if (exactMatch) return exactMatch.section_code;
+  if (exactMatch) return { section: exactMatch.section_code, activity: exactMatch.activity_code || '0000' };
 
   // 2. Partial match: pattern contained in floor value
   const containsMatch = floorMappings.find(m => {
     const pattern = m.floor_pattern.toLowerCase().trim();
     return pattern.length >= 2 && normalizedFloor.includes(pattern);
   });
-  if (containsMatch) return containsMatch.section_code;
+  if (containsMatch) return { section: containsMatch.section_code, activity: containsMatch.activity_code || '0000' };
 
   // 3. Reverse partial match: floor contained in pattern
   const reverseMatch = floorMappings.find(m => {
     const pattern = m.floor_pattern.toLowerCase().trim();
     return normalizedFloor.length >= 2 && pattern.includes(normalizedFloor);
   });
-  if (reverseMatch) return reverseMatch.section_code;
+  if (reverseMatch) return { section: reverseMatch.section_code, activity: reverseMatch.activity_code || '0000' };
 
   // Generic floors that need building context — return null to trigger fallback
   if (/^(roof|crawl\s*space|site|attic|penthouse)$/i.test(normalizedFloor)) return null;
 
   return null; // Unknown — let caller decide fallback
+}
+
+/** @deprecated Use getFloorMappingNullable instead */
+export function getSectionFromFloorNullable(
+  floor: string,
+  floorMappings: FloorSectionMapping[]
+): string | null {
+  const result = getFloorMappingNullable(floor, floorMappings);
+  return result ? result.section : null;
 }
 
 /**
@@ -137,11 +146,9 @@ export function resolveSectionStatic(
   floorMappings: FloorSectionMapping[],
   buildingMappings: BuildingSectionMapping[]
 ): string {
-  // 1. Floor resolves
-  const fromFloor = getSectionFromFloorNullable(floor, floorMappings);
-  if (fromFloor) return fromFloor;
+  const fromFloor = getFloorMappingNullable(floor, floorMappings);
+  if (fromFloor) return fromFloor.section;
 
-  // 2. Fallback to drawing → building → section
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
     const m = buildingMappings.find(
@@ -152,6 +159,32 @@ export function resolveSectionStatic(
   }
 
   return '01';
+}
+
+/**
+ * Resolves full floor mapping (section + activity) with building fallback for section.
+ * Activity comes from floor mapping only (building mappings don't have activity).
+ */
+export function resolveFloorMappingStatic(
+  floor: string,
+  drawing: string,
+  floorMappings: FloorSectionMapping[],
+  buildingMappings: BuildingSectionMapping[]
+): FloorMappingResult {
+  const fromFloor = getFloorMappingNullable(floor, floorMappings);
+  if (fromFloor) return fromFloor;
+
+  // Floor didn't match — try building fallback for section, activity stays default
+  const buildingId = getBuildingFromDrawing(drawing);
+  if (buildingId) {
+    const m = buildingMappings.find(
+      bm => bm.building_identifier.toUpperCase() === buildingId.toUpperCase()
+    );
+    if (m) return { section: m.section_code, activity: '0000' };
+    return { section: suggestSectionForBuilding(buildingId), activity: '0000' };
+  }
+
+  return { section: '01', activity: '0000' };
 }
 
 export function useBuildingSectionMappings(projectId: string | null) {

@@ -259,6 +259,7 @@ export type Database = {
       }
       floor_section_mappings: {
         Row: {
+          activity_code: string
           created_at: string | null
           floor_pattern: string
           id: string
@@ -267,6 +268,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          activity_code?: string
           created_at?: string | null
           floor_pattern: string
           id?: string
@@ -275,6 +277,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          activity_code?: string
           created_at?: string | null
           floor_pattern?: string
           id?: string

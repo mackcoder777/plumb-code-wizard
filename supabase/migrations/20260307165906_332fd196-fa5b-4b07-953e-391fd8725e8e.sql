@@ -1,0 +1,1 @@
+ALTER TABLE floor_section_mappings ADD COLUMN activity_code TEXT NOT NULL DEFAULT '0000';

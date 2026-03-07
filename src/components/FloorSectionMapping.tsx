@@ -233,6 +233,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 }) => {
   // Local state for unsaved changes
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
+  const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
 
   // Database hooks
@@ -301,10 +302,13 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   useEffect(() => {
     if (dbMappings.length > 0) {
       const mappingsFromDb: Record<string, string> = {};
+      const activityFromDb: Record<string, string> = {};
       dbMappings.forEach(m => {
         mappingsFromDb[m.floor_pattern] = m.section_code;
+        activityFromDb[m.floor_pattern] = m.activity_code || '0000';
       });
       setLocalMappings(mappingsFromDb);
+      setLocalActivityMappings(activityFromDb);
       setHasChanges(false);
     }
   }, [dbMappings]);
@@ -325,6 +329,17 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     setHasChanges(true);
   }, []);
 
+  const handleActivityChange = useCallback((childFloors: string[], activityCode: string) => {
+    setLocalActivityMappings(prev => {
+      const next = { ...prev };
+      childFloors.forEach(floor => {
+        next[floor] = activityCode;
+      });
+      return next;
+    });
+    setHasChanges(true);
+  }, []);
+
   const handleSaveAll = useCallback(async () => {
     if (!projectId) {
       toast({
@@ -338,6 +353,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const mappingsToSave = Object.entries(localMappings).map(([floorPattern, sectionCode]) => ({
       floorPattern,
       sectionCode,
+      activityCode: localActivityMappings[floorPattern] || '0000',
     }));
 
     try {
@@ -380,10 +396,13 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const handleReset = useCallback(() => {
     const mappingsFromDb: Record<string, string> = {};
+    const activityFromDb: Record<string, string> = {};
     dbMappings.forEach(m => {
       mappingsFromDb[m.floor_pattern] = m.section_code;
+      activityFromDb[m.floor_pattern] = m.activity_code || '0000';
     });
     setLocalMappings(mappingsFromDb);
+    setLocalActivityMappings(activityFromDb);
     setHasChanges(false);
   }, [dbMappings]);
 
@@ -417,26 +436,47 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     return '';
   };
 
+  // Auto-suggest activity based on floor/building name
+  const suggestActivity = (displayName: string): string => {
+    const lower = displayName.toLowerCase();
+    
+    // Building-prefixed floors like "Bldg 1 - Level 2"
+    const bldgLevelMatch = lower.match(/bldg\s*\w+\s*[-–]\s*(?:level|lvl|l)\s*(\d+)/i);
+    if (bldgLevelMatch) return `LVL${bldgLevelMatch[1]}`;
+    
+    // Standalone level/floor patterns
+    const levelMatch = lower.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
+    if (levelMatch) return `LVL${levelMatch[1]}`;
+    
+    if (lower.includes('basement') || lower.includes('below grade')) return 'BSMT';
+    if (lower.includes('mezzanine') || lower.includes('mezz')) return 'MEZZ';
+    if (lower.includes('penthouse') || lower.includes('pent')) return 'PENT';
+    if (lower.includes('roof')) return '0000';
+    if (lower.includes('crawl')) return '0000';
+    
+    return '0000';
+  };
+
   const handleAutoSuggestAll = useCallback(() => {
     const newMappings: Record<string, string> = {};
+    const newActivityMappings: Record<string, string> = {};
     floorData.forEach(({ displayName, childFloors }) => {
-      const suggested = suggestSection(displayName);
+      const suggestedSection = suggestSection(displayName);
+      const suggestedActivity = suggestActivity(displayName);
       childFloors.forEach(floor => {
-        if (!localMappings[floor]) {
-          newMappings[floor] = suggested;
-        } else {
-          newMappings[floor] = localMappings[floor];
-        }
+        newMappings[floor] = localMappings[floor] || suggestedSection;
+        newActivityMappings[floor] = localActivityMappings[floor] || suggestedActivity;
       });
     });
     setLocalMappings(newMappings);
+    setLocalActivityMappings(newActivityMappings);
     setHasChanges(true);
     
     toast({
       title: "Auto-Suggestions Applied",
-      description: "Section codes have been suggested based on floor names. Review and save when ready.",
+      description: "Section and activity codes have been suggested based on floor names. Review and save when ready.",
     });
-  }, [floorData, localMappings]);
+  }, [floorData, localMappings, localActivityMappings]);
 
   if (floorData.length === 0) {
     return (
@@ -558,9 +598,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40%]">Floor Value</TableHead>
-                  <TableHead className="w-[30%]">Section Code</TableHead>
-                  <TableHead className="w-[30%] text-right">Item Count</TableHead>
+                  <TableHead className="w-[35%]">Floor Value</TableHead>
+                  <TableHead className="w-[25%]">Section Code</TableHead>
+                  <TableHead className="w-[20%]">Activity Code</TableHead>
+                  <TableHead className="w-[20%] text-right">Item Count</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -579,6 +620,15 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                         value={localMappings[childFloors[0]] || ''}
                         onChange={(value) => handleSectionChange(childFloors, value)}
                         customCodes={customCodes}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={localActivityMappings[childFloors[0]] || '0000'}
+                        onChange={(e) => handleActivityChange(childFloors, e.target.value.toUpperCase().slice(0, 4))}
+                        placeholder="0000"
+                        className="w-20 h-8 font-mono text-sm"
+                        maxLength={4}
                       />
                     </TableCell>
                     <TableCell className="text-right">
