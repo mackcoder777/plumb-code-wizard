@@ -439,6 +439,9 @@ const EnhancedCostCodeManager = () => {
   
   // Pending upload state - for showing confirmation when existing data
   const [pendingUploadItems, setPendingUploadItems] = useState<any[] | null>(null);
+  
+  // Dataset profile for intelligent floor/zone field role detection
+  const [datasetProfile, setDatasetProfile] = useState<DatasetProfile | null>(null);
   const [pendingUploadFileName, setPendingUploadFileName] = useState<string>('');
   
   // Budget adjustments state
@@ -816,6 +819,7 @@ const EnhancedCostCodeManager = () => {
 
       setEstimateData(transformedItems);
       setFilteredData(transformedItems);
+      setDatasetProfile(profileDataset(transformedItems));
       setFileName(currentProject.file_name || '');
 
       // Batch persist newly applied codes to database (once per project load)
@@ -1200,6 +1204,7 @@ const EnhancedCostCodeManager = () => {
             setMappingHistory(history);
             setEstimateData(processedData);
             setFilteredData(processedData);
+            setDatasetProfile(profileDataset(processedData));
             
             // Helper to save items to database
             const saveItemsToDb = async (projectId: string) => {
