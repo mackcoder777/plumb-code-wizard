@@ -486,9 +486,11 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   // Helper to build full labor code with section prefix and activity code
   const buildFullLaborCode = useCallback((costHead: string, floor: string, system?: string): string => {
-    const section = getSectionFromFloor(floor, floorSectionMappings);
-    const activity = system ? getActivityFromSystem(system, systemActivityMappings) : '0000';
-    return `${section} ${activity} ${costHead}`;
+    const floorMap = getFloorMapping(floor, floorSectionMappings);
+    const activity = floorMap.activity !== '0000'
+      ? floorMap.activity
+      : (system ? getActivityFromSystem(system, systemActivityMappings) : '0000');
+    return `${floorMap.section} ${activity} ${costHead}`;
   }, [floorSectionMappings, systemActivityMappings]);
 
   // Handler to apply section codes to all items that already have labor codes
@@ -511,12 +513,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         costHead = categoryLaborCode;
       }
       
-      // Get new section from floor mapping using the consistent helper function
-      const newSection = getSectionFromFloor(item.floor || '', floorSectionMappings);
+      // Get new section and activity from floor mapping using the consistent helper function
+      const floorMap = getFloorMapping(item.floor || '', floorSectionMappings);
       
-      // Build new full code with activity from system
-      const activityCode = getActivityFromSystem(item.system, systemActivityMappings);
-      const newFullCode = `${newSection} ${activityCode} ${costHead}`;
+      // Build new full code with floor activity priority over system activity
+      const activityCode = floorMap.activity !== '0000'
+        ? floorMap.activity
+        : getActivityFromSystem(item.system, systemActivityMappings);
+      const newFullCode = `${floorMap.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
