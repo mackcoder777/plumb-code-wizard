@@ -23,14 +23,56 @@ interface UseSystemIndexResult {
   getPreviewItems: (system: string) => EstimateItem[];
 }
 
+function buildIndexSync(data: EstimateItem[]): { systemIndex: SystemIndexEntry[]; processingTimeMs: number } {
+  const startTime = performance.now();
+  const systemMap = new Map<string, {
+    count: number;
+    previewItems: typeof data;
+    itemTypeCounts: Map<string, number>;
+  }>();
+
+  for (const item of data) {
+    const systemKey = item.system || 'Unknown';
+    if (!systemMap.has(systemKey)) {
+      systemMap.set(systemKey, { count: 0, previewItems: [], itemTypeCounts: new Map() });
+    }
+    const entry = systemMap.get(systemKey)!;
+    entry.count++;
+    if (entry.previewItems.length < 5) {
+      entry.previewItems.push(item);
+    }
+    const itemType = item.itemType || 'Unknown';
+    entry.itemTypeCounts.set(itemType, (entry.itemTypeCounts.get(itemType) || 0) + 1);
+  }
+
+  const systemIndex: SystemIndexEntry[] = Array.from(systemMap.entries())
+    .map(([system, entry]) => ({
+      system,
+      itemCount: entry.count,
+      previewItems: entry.previewItems.map(item => ({
+        id: String(item.id),
+        system: item.system ?? undefined,
+        itemType: item.itemType ?? undefined,
+        drawing: item.drawing ?? undefined,
+        materialDesc: item.materialDesc ?? undefined,
+        quantity: item.quantity ?? undefined,
+        hours: item.hours ?? undefined,
+      })),
+      itemTypeCounts: Object.fromEntries(entry.itemTypeCounts),
+    }))
+    .sort((a, b) => b.itemCount - a.itemCount);
+
+  return { systemIndex, processingTimeMs: performance.now() - startTime };
+}
+
 export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
   const [systemIndex, setSystemIndex] = useState<SystemIndexEntry[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingTimeMs, setProcessingTimeMs] = useState<number | null>(null);
   const workerRef = useRef<Worker | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef<EstimateItem[]>(data);
   
-  // Keep data ref updated for getPreviewItems
   dataRef.current = data;
 
   useEffect(() => {
@@ -44,55 +86,22 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
 
     // For smaller datasets, process synchronously
     if (data.length < 2000) {
-      const startTime = performance.now();
-      const systemMap = new Map<string, {
-        count: number;
-        previewItems: typeof data;
-        itemTypeCounts: Map<string, number>;
-      }>();
-
-      for (const item of data) {
-        const systemKey = item.system || 'Unknown';
-        if (!systemMap.has(systemKey)) {
-          systemMap.set(systemKey, {
-            count: 0,
-            previewItems: [],
-            itemTypeCounts: new Map(),
-          });
-        }
-        const entry = systemMap.get(systemKey)!;
-        entry.count++;
-        if (entry.previewItems.length < 5) {
-          entry.previewItems.push(item);
-        }
-        const itemType = item.itemType || 'Unknown';
-        entry.itemTypeCounts.set(itemType, (entry.itemTypeCounts.get(itemType) || 0) + 1);
-      }
-
-      const result: SystemIndexEntry[] = Array.from(systemMap.entries())
-        .map(([system, entry]) => ({
-          system,
-          itemCount: entry.count,
-          previewItems: entry.previewItems.map(item => ({
-            id: String(item.id),
-            system: item.system ?? undefined,
-            itemType: item.itemType ?? undefined,
-            drawing: item.drawing ?? undefined,
-            materialDesc: item.materialDesc ?? undefined,
-            quantity: item.quantity ?? undefined,
-            hours: item.hours ?? undefined,
-          })),
-          itemTypeCounts: Object.fromEntries(entry.itemTypeCounts),
-        }))
-        .sort((a, b) => b.itemCount - a.itemCount);
-
-      setSystemIndex(result);
-      setProcessingTimeMs(performance.now() - startTime);
+      const result = buildIndexSync(data);
+      setSystemIndex(result.systemIndex);
+      setProcessingTimeMs(result.processingTimeMs);
       setIsProcessing(false);
       return;
     }
 
-    // For large datasets, use Web Worker
+    // For large datasets, try Web Worker with sync fallback
+    const runSyncFallback = () => {
+      console.warn(`[useSystemIndex] Falling back to sync processing for ${data.length} items`);
+      const result = buildIndexSync(data);
+      setSystemIndex(result.systemIndex);
+      setProcessingTimeMs(result.processingTimeMs);
+      setIsProcessing(false);
+    };
+
     try {
       const worker = new Worker(
         new URL('../workers/systemMapper.worker.ts', import.meta.url),
@@ -100,8 +109,18 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
       );
       workerRef.current = worker;
 
+      // Configurable timeout: 10s for 10k+ items, 5s otherwise
+      const timeoutMs = data.length >= 10000 ? 10000 : 5000;
+      timeoutRef.current = setTimeout(() => {
+        console.warn(`[useSystemIndex] Worker timed out after ${timeoutMs}ms, falling back to sync`);
+        worker.terminate();
+        workerRef.current = null;
+        runSyncFallback();
+      }, timeoutMs);
+
       worker.onmessage = (e) => {
         if (e.data.type === 'INDEX_COMPLETE') {
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
           setSystemIndex(e.data.systemIndex);
           setProcessingTimeMs(e.data.processingTimeMs);
           setIsProcessing(false);
@@ -112,11 +131,12 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
 
       worker.onerror = (error) => {
         console.error('System index worker error:', error);
-        // Fallback to sync processing on worker error
-        setIsProcessing(false);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        worker.terminate();
+        workerRef.current = null;
+        runSyncFallback();
       };
 
-      // Send minimal data to worker
       const minimalData = data.map(item => ({
         id: item.id,
         system: item.system,
@@ -130,10 +150,12 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
       worker.postMessage({ type: 'BUILD_INDEX', data: minimalData });
     } catch (error) {
       console.error('Failed to create worker:', error);
-      setIsProcessing(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      runSyncFallback();
     }
 
     return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (workerRef.current) {
         workerRef.current.terminate();
         workerRef.current = null;
@@ -141,8 +163,6 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
     };
   }, [data]);
 
-  // Get preview items for a system - uses the full data array
-  // limit=0 means return all items for that system
   const getPreviewItems = useCallback((system: string, limit: number = 5): EstimateItem[] => {
     const items: EstimateItem[] = [];
     for (const item of dataRef.current) {
@@ -154,10 +174,5 @@ export function useSystemIndex(data: EstimateItem[]): UseSystemIndexResult {
     return items;
   }, []);
 
-  return {
-    systemIndex,
-    isProcessing,
-    processingTimeMs,
-    getPreviewItems,
-  };
+  return { systemIndex, isProcessing, processingTimeMs, getPreviewItems };
 }
