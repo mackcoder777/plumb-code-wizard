@@ -25,6 +25,7 @@ interface FloorSectionMappingPanelProps {
   onApplySectionCodes?: (mappings: Record<string, string>) => void;
   datasetProfile?: DatasetProfile | null;
   onProfileOverride?: (override: PatternOverride | null) => void;
+  onReanalyze?: () => void;
 }
 
 interface BuildingGroup {
@@ -280,6 +281,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   onApplySectionCodes,
   datasetProfile,
   onProfileOverride,
+  onReanalyze,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
@@ -518,22 +520,30 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                   Confidence: {Math.round(datasetProfile.confidence * 100)}%
                 </span>
               </span>
-              {onProfileOverride && (
-                <Select
-                  onValueChange={(val) => onProfileOverride(val === 'auto' ? null : val as PatternOverride)}
-                >
-                  <SelectTrigger className="w-[220px] h-8 text-xs">
-                    <SelectValue placeholder="Override detection ▾" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto-detect</SelectItem>
-                    <SelectItem value="pattern1">{getPatternLabel('pattern1')}</SelectItem>
-                    <SelectItem value="pattern2">{getPatternLabel('pattern2')}</SelectItem>
-                    <SelectItem value="pattern3">{getPatternLabel('pattern3')}</SelectItem>
-                    <SelectItem value="pattern4">{getPatternLabel('pattern4')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              <div className="flex items-center gap-2">
+                {onReanalyze && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onReanalyze}>
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Re-analyze
+                  </Button>
+                )}
+                {onProfileOverride && (
+                  <Select
+                    onValueChange={(val) => onProfileOverride(val === 'auto' ? null : val as PatternOverride)}
+                  >
+                    <SelectTrigger className="w-[220px] h-8 text-xs">
+                      <SelectValue placeholder="Override detection ▾" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-detect</SelectItem>
+                      <SelectItem value="pattern1">{getPatternLabel('pattern1')}</SelectItem>
+                      <SelectItem value="pattern2">{getPatternLabel('pattern2')}</SelectItem>
+                      <SelectItem value="pattern3">{getPatternLabel('pattern3')}</SelectItem>
+                      <SelectItem value="pattern4">{getPatternLabel('pattern4')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         </div>

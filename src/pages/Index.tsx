@@ -2486,6 +2486,7 @@ const EnhancedCostCodeManager = () => {
                     setDatasetProfile(profileDataset(estimateData));
                   }
                 }}
+                onReanalyzeProfile={() => setDatasetProfile(profileDataset(estimateData))}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
