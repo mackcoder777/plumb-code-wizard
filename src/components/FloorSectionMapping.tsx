@@ -507,6 +507,38 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         </div>
       </CardHeader>
 
+      {datasetProfile && datasetProfile.confidence > 0 && (
+        <div className="px-6 pb-2">
+          <Alert className="bg-muted/50 border-border">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between gap-4">
+              <span className="text-sm">
+                <strong>Detected pattern:</strong> {describeProfile(datasetProfile)}.{' '}
+                <span className="text-muted-foreground">
+                  Confidence: {Math.round(datasetProfile.confidence * 100)}%
+                </span>
+              </span>
+              {onProfileOverride && (
+                <Select
+                  onValueChange={(val) => onProfileOverride(val === 'auto' ? null : val as PatternOverride)}
+                >
+                  <SelectTrigger className="w-[220px] h-8 text-xs">
+                    <SelectValue placeholder="Override detection ▾" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto-detect</SelectItem>
+                    <SelectItem value="pattern1">{getPatternLabel('pattern1')}</SelectItem>
+                    <SelectItem value="pattern2">{getPatternLabel('pattern2')}</SelectItem>
+                    <SelectItem value="pattern3">{getPatternLabel('pattern3')}</SelectItem>
+                    <SelectItem value="pattern4">{getPatternLabel('pattern4')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       <CardContent>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
