@@ -1330,6 +1330,72 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                 </div>
               </div>
 
+              {/* LRCN Audit Breakdown Table */}
+              {(() => {
+                const parseRate = (rate: string) => parseFloat(rate) || 0;
+                const auditRows = [
+                  { label: 'Straight Time', hours: bidRates.straightTime.hours, bidRate: parseRate(bidRates.straightTime.rate), budgetRateVal: budgetRate },
+                  { label: 'Shift Time', hours: bidRates.shiftTime.hours, bidRate: parseRate(bidRates.shiftTime.rate), budgetRateVal: budgetRate },
+                  { label: 'Overtime', hours: bidRates.overtime.hours, bidRate: parseRate(bidRates.overtime.rate), budgetRateVal: budgetRate },
+                  { label: 'Double Time', hours: bidRates.doubleTime.hours, bidRate: parseRate(bidRates.doubleTime.rate), budgetRateVal: budgetRate },
+                  { label: 'Shop', hours: bidRates.shop.hours, bidRate: parseRate(bidRates.shop.rate), budgetRateVal: lrcnCalculations.shopRate },
+                ];
+                const totalBid = auditRows.reduce((s, r) => s + r.hours * r.bidRate, 0);
+                const totalBudget = auditRows.reduce((s, r) => s + r.hours * r.budgetRateVal, 0);
+                const totalDelta = totalBid - totalBudget;
+                const totalHours = auditRows.reduce((s, r) => s + r.hours, 0);
+                const deltaColor = (d: number) => d > 0.005 ? 'text-emerald-600 dark:text-emerald-400' : d < -0.005 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
+                const fmt = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                return (
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-foreground">LRCN Audit Breakdown</div>
+                    <div className="overflow-x-auto border rounded-lg">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="text-xs">Labor Type</TableHead>
+                            <TableHead className="text-xs text-right">Hours</TableHead>
+                            <TableHead className="text-xs text-right">Bid Rate</TableHead>
+                            <TableHead className="text-xs text-right">Bid $</TableHead>
+                            <TableHead className="text-xs text-right bg-primary/5">Budget Rate</TableHead>
+                            <TableHead className="text-xs text-right bg-primary/5">Budget $</TableHead>
+                            <TableHead className="text-xs text-right">Delta</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {auditRows.map((row) => {
+                            const bidDollars = row.hours * row.bidRate;
+                            const budgetDollars = row.hours * row.budgetRateVal;
+                            const delta = bidDollars - budgetDollars;
+                            return (
+                              <TableRow key={row.label}>
+                                <TableCell className="text-xs font-medium py-2">{row.label}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">{row.hours.toLocaleString()}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">${row.bidRate.toFixed(2)}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">{fmt(bidDollars)}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2 bg-primary/5">${row.budgetRateVal.toFixed(2)}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2 bg-primary/5">{fmt(budgetDollars)}</TableCell>
+                                <TableCell className={`text-xs text-right font-mono font-semibold py-2 ${deltaColor(delta)}`}>{fmt(delta)}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          <TableRow className="border-t-2 font-bold bg-muted/50">
+                            <TableCell className="text-xs font-bold py-2">TOTALS</TableCell>
+                            <TableCell className="text-xs text-right font-mono font-bold py-2">{totalHours.toLocaleString()}</TableCell>
+                            <TableCell className="py-2"></TableCell>
+                            <TableCell className="text-xs text-right font-mono font-bold py-2">{fmt(totalBid)}</TableCell>
+                            <TableCell className="py-2 bg-primary/5"></TableCell>
+                            <TableCell className="text-xs text-right font-mono font-bold py-2 bg-primary/5">{fmt(totalBudget)}</TableCell>
+                            <TableCell className={`text-xs text-right font-mono font-bold py-2 ${deltaColor(totalDelta)}`}>{fmt(totalDelta)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className={`rounded-lg p-4 border ${lrcnCalculations.lrcnAmount >= 0 ? 'bg-teal-50 dark:bg-teal-950 border-teal-200 dark:border-teal-800' : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'}`}>
                 <div className="flex justify-between items-center">
                   <div>
