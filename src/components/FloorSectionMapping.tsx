@@ -542,17 +542,14 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
 
-  // Merged section code suggestions from building mappings + floor mappings
+  // Only show section codes actively assigned in this project's floor mappings
   const allSectionSuggestions = useMemo(() => {
     const codes = new Map<string, string>();
-    buildingMappings?.forEach(m => {
-      codes.set(m.section_code, m.description || `Building ${m.building_identifier}`);
-    });
     Object.values(localMappings).forEach(code => {
       if (code && !codes.has(code)) codes.set(code, '');
     });
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [buildingMappings, localMappings]);
+  }, [localMappings]);
 
   // Floor counts
   const floorData = useMemo(() => {
