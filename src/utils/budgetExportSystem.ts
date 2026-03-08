@@ -589,7 +589,16 @@ export function exportBudgetPacket(
     materialRowIndex++;
   }
 
-  // ===== RIGHT-SIDE SUMMARY BOX (next to material section) =====
+  // Add Fab LRCN (Fab Labor Rate Contingency) line if enabled and has positive amount
+  if (budgetAdjustments?.fabLrcnEnabled && budgetAdjustments?.fabLrcnAmount > 0) {
+    const fabLrcnRow = MATERIAL_START_ROW + materialRowIndex;
+    ws[`B${fabLrcnRow}`] = { t: 's', v: 'MA 0FAB LRCN' };
+    ws[`D${fabLrcnRow}`] = { t: 's', v: 'FAB LABOR RATE CONTINGENCY' };
+    ws[`H${fabLrcnRow}`] = { t: 'n', v: Math.round(budgetAdjustments.fabLrcnAmount * 100) / 100, z: '#,##0.00' };
+    totalMaterialDollars += budgetAdjustments.fabLrcnAmount;
+    materialRowIndex++;
+  }
+
   const grandTotal = totalLaborDollars + totalMaterialDollars;
   const SUMMARY_BOX_ROW = MATERIAL_START_ROW + 2;
   ws[`J${SUMMARY_BOX_ROW}`] = { t: 's', v: 'TOTAL COST' };
