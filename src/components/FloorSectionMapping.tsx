@@ -1003,6 +1003,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 gridCols={gridCols}
                 customCodes={customCodes}
                 buildingMappings={buildingMappings}
+                sectionSuggestions={allSectionSuggestions}
                 onZonePatternSave={handleZonePatternSave}
               />
             ))}
