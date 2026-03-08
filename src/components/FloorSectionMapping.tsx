@@ -335,9 +335,9 @@ interface StandaloneFloorRowProps {
 
 // ─── Inline zone assignment input with datalist ──────────────────────────────
 const ZoneAssignInput: React.FC<{
-  buildingMappings?: BuildingSectionMapping[];
+  sectionSuggestions?: Array<{ code: string; description: string }>;
   onAssign: (sectionCode: string) => void;
-}> = ({ buildingMappings, onAssign }) => {
+}> = ({ sectionSuggestions, onAssign }) => {
   const [value, setValue] = useState('');
   const listId = useRef(`zone-dl-${Math.random().toString(36).slice(2, 8)}`).current;
 
@@ -362,9 +362,9 @@ const ZoneAssignInput: React.FC<{
         className="w-16 text-xs border rounded px-1 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground"
       />
       <datalist id={listId}>
-        {buildingMappings?.map(m => (
-          <option key={m.id} value={m.section_code}>
-            {m.section_code}{m.description ? ` — ${m.description}` : ''}
+        {sectionSuggestions?.map(s => (
+          <option key={s.code} value={s.code}>
+            {s.code}{s.description ? ` — ${s.description}` : ''}
           </option>
         ))}
       </datalist>
