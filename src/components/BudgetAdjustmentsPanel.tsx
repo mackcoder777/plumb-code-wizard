@@ -620,9 +620,12 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     const shopTotal = bidRates.shop.hours * parseRate(bidRates.shop.rate);
     
     const bidTotal = straightTotal + shiftTotal + overtimeTotal + doubleTimeTotal + shopTotal;
-    const totalHours = bidRates.straightTime.hours + bidRates.shiftTime.hours + 
-                       bidRates.overtime.hours + bidRates.doubleTime.hours + bidRates.shop.hours;
-    const budgetTotal = totalHours * budgetRate;
+    const fieldHours = bidRates.straightTime.hours + bidRates.shiftTime.hours +
+                       bidRates.overtime.hours + bidRates.doubleTime.hours;
+    const shopHours = bidRates.shop.hours;
+    const shopRate = parseRate(bidRates.shop.rate);
+    const totalHours = fieldHours + shopHours;
+    const budgetTotal = (fieldHours * budgetRate) + (shopHours * shopRate);
     const lrcnAmount = bidTotal - budgetTotal;
     
     return {
@@ -630,6 +633,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       budgetTotal,
       lrcnAmount,
       totalHours,
+      fieldHours,
+      shopHours,
+      shopRate,
       straightTotal,
       shiftTotal,
       overtimeTotal,
@@ -1240,7 +1246,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                   <div className="h-10 flex items-center px-3 bg-muted rounded-md border font-mono text-lg">
                     ${lrcnCalculations.budgetTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
-                  <p className="text-xs text-muted-foreground">{lrcnCalculations.totalHours.toLocaleString()} hrs × ${budgetRate.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">Field: {lrcnCalculations.fieldHours.toLocaleString()} hrs × ${budgetRate.toFixed(2)} + Shop: {lrcnCalculations.shopHours.toLocaleString()} hrs × ${lrcnCalculations.shopRate.toFixed(2)}</p>
                 </div>
               </div>
 
