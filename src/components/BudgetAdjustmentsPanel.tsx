@@ -826,9 +826,24 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       materialTaxSummary,
       totalMaterialTax,
       totalMaterialWithTax,
-      totalMaterialPreTax
+      totalMaterialPreTax,
+      generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, computedBidLaborRate, shopRate, fabCodeMap]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, computedBidLaborRate, shopRate, fabCodeMap, fabRates]);
+
+  // Fab LRCN calculations
+  const fabLrcnCalculations = useMemo(() => {
+    let fabLrcnAmount = 0;
+    const breakdown: Array<{ code: string; hours: number; bidRate: number; budgetRate: number; diff: number }> = [];
+    Object.entries(calculations.generatedFabCodes || {}).forEach(([fabCostHead, hours]) => {
+      const bidRate = parseFloat(fabRates[fabCostHead]?.bidRate) || shopRate;
+      const budgetRate = parseFloat(fabRates[fabCostHead]?.budgetRate) || bidRate;
+      const diff = (hours * bidRate) - (hours * budgetRate);
+      fabLrcnAmount += diff;
+      breakdown.push({ code: fabCostHead, hours, bidRate, budgetRate, diff });
+    });
+    return { fabLrcnAmount, breakdown };
+  }, [calculations.generatedFabCodes, fabRates, shopRate]);
 
   useEffect(() => {
     onAdjustmentsChange({
