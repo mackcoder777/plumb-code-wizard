@@ -443,9 +443,6 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
             customCodes={customCodes}
             className="h-8"
           />
-          {info.type === 'multi' && sectionCode && (
-            <span className="text-[10px] text-muted-foreground whitespace-nowrap">fallback only</span>
-          )}
         </div>
 
         {/* Activity */}
