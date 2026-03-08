@@ -333,6 +333,45 @@ interface StandaloneFloorRowProps {
   onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
 }
 
+// ─── Inline zone assignment input with datalist ──────────────────────────────
+const ZoneAssignInput: React.FC<{
+  buildingMappings?: BuildingSectionMapping[];
+  onAssign: (sectionCode: string) => void;
+}> = ({ buildingMappings, onAssign }) => {
+  const [value, setValue] = useState('');
+  const listId = useRef(`zone-dl-${Math.random().toString(36).slice(2, 8)}`).current;
+
+  const handleConfirm = () => {
+    const trimmed = value.trim().toUpperCase();
+    if (trimmed) {
+      onAssign(trimmed);
+      setValue('');
+    }
+  };
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <input
+        type="text"
+        list={listId}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }}
+        onBlur={handleConfirm}
+        placeholder="?"
+        className="w-16 text-xs border rounded px-1 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground"
+      />
+      <datalist id={listId}>
+        {buildingMappings?.map(m => (
+          <option key={m.id} value={m.section_code}>
+            {m.section_code}{m.description ? ` — ${m.description}` : ''}
+          </option>
+        ))}
+      </datalist>
+    </span>
+  );
+};
+
 const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   floor,
   count,
