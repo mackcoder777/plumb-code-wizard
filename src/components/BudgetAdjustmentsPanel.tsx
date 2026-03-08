@@ -809,7 +809,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       const fabBudgetRate = parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate;
       adjustedLaborSummary[assembledCode] = {
         code: assembledCode,
-        description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || `FABRICATION - ${fabCostHead}`,
+        description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || customFabCodes[fabCostHead] || `FABRICATION - ${fabCostHead}`,
         hours,
         rate: fabBudgetRate,
         dollars: hours * fabBudgetRate,
