@@ -891,7 +891,7 @@ export function exportAuditReport(
   const wb = XLSX.utils.book_new();
 
   // Labor Report tab (detailed line items)
-  const laborData = prepareLaborReportData(items);
+  const laborData = prepareLaborReportData(items, floorMappings, buildingMappings, dbFloorMappings);
   if (laborData.length > 0) {
     const laborWs = XLSX.utils.json_to_sheet(laborData);
     laborWs['!cols'] = [
