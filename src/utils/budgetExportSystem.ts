@@ -188,14 +188,26 @@ export function aggregateLaborByCostCode(
     // Skip zero-hour items entirely
     if (hours === 0 && laborDollars === 0) return;
 
-    // Priority: explicit laborSec > floor mapping > suggested section > default
-    let sec = item.laborSec || item.suggestedCode?.section;
-    if (!sec && item.floor) {
-      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+    // Standalone floors must always re-resolve through building-aware resolver
+    const isStandalone = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i
+      .test((item.floor || '').trim());
+
+    let sec: string;
+    let act: string;
+
+    if (isStandalone && item.floor && buildingMappings.length > 0) {
+      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+        buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+      act = item.laborAct || item.suggestedCode?.activity || '0000';
+    } else {
+      sec = item.laborSec || item.suggestedCode?.section;
+      if (!sec && item.floor) {
+        sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+          buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+      }
+      sec = sec || '01';
+      act = item.laborAct || item.suggestedCode?.activity || '0000';
     }
-    sec = sec || '01';
-    
-    const act = item.laborAct || item.suggestedCode?.activity || '0000';
     
     // LABOR CODE PRIORITY:
     // 1. Category mapping (if reportCat has assigned code)
@@ -794,27 +806,51 @@ function parseLaborCode(code: string): { section: string; activity: string; cost
 /**
  * Prepares labor report data for audit export
  */
-function prepareLaborReportData(items: ExportEstimateItem[]): any[] {
+function prepareLaborReportData(
+  items: ExportEstimateItem[],
+  floorMappings: FloorSectionMap = {},
+  buildingMappings: BuildingSectionMapping[] = [],
+  dbFloorMappings: FloorSectionMapping[] = [],
+  datasetProfile: any = null
+): any[] {
   return items
     .filter(item => item.laborCostHead || item.costCode || item.suggestedCode?.costHead)
-    .map(item => ({
-      'SEC': item.laborSec || item.suggestedCode?.section || '01',
-      'ACT': item.laborAct || item.suggestedCode?.activity || '0000',
-      'COST HEAD': item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '',
-      'DESCRIPTION': item.laborDescription || item.suggestedCode?.description || '',
-      'Drawing': item.drawing || '',
-      'System': item.system || '',
-      'Floor': item.floor || '',
-      'Zone': item.zone || '',
-      'Material Spec': item.materialSpec || '',
-      'Item Type': item.itemType || '',
-      'Material Description': item.materialDesc || item.materialDescription || '',
-      'Item Name': item.itemName || '',
-      'Size': item.size || '',
-      'Quantity': item.quantity || 0,
-      'Hours': item.hours || 0,
-      'Labor Dollars': item.laborDollars || 0
-    }));
+    .map(item => {
+      const isStandalone = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i
+        .test((item.floor || '').trim());
+
+      let sec: string;
+      if (isStandalone && item.floor && buildingMappings.length > 0) {
+        sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+          buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+      } else {
+        sec = item.laborSec || item.suggestedCode?.section;
+        if (!sec && item.floor) {
+          sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+            buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+        }
+        sec = sec || '01';
+      }
+
+      return {
+        'SEC': sec,
+        'ACT': item.laborAct || item.suggestedCode?.activity || '0000',
+        'COST HEAD': item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '',
+        'DESCRIPTION': item.laborDescription || item.suggestedCode?.description || '',
+        'Drawing': item.drawing || '',
+        'System': item.system || '',
+        'Floor': item.floor || '',
+        'Zone': item.zone || '',
+        'Material Spec': item.materialSpec || '',
+        'Item Type': item.itemType || '',
+        'Material Description': item.materialDesc || item.materialDescription || '',
+        'Item Name': item.itemName || '',
+        'Size': item.size || '',
+        'Quantity': item.quantity || 0,
+        'Hours': item.hours || 0,
+        'Labor Dollars': item.laborDollars || 0
+      };
+    });
 }
 
 /**
@@ -855,7 +891,7 @@ export function exportAuditReport(
   const wb = XLSX.utils.book_new();
 
   // Labor Report tab (detailed line items)
-  const laborData = prepareLaborReportData(items);
+  const laborData = prepareLaborReportData(items, floorMappings, buildingMappings, dbFloorMappings);
   if (laborData.length > 0) {
     const laborWs = XLSX.utils.json_to_sheet(laborData);
     laborWs['!cols'] = [
