@@ -333,6 +333,45 @@ interface StandaloneFloorRowProps {
   onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
 }
 
+// ─── Inline zone assignment input with datalist ──────────────────────────────
+const ZoneAssignInput: React.FC<{
+  buildingMappings?: BuildingSectionMapping[];
+  onAssign: (sectionCode: string) => void;
+}> = ({ buildingMappings, onAssign }) => {
+  const [value, setValue] = useState('');
+  const listId = useRef(`zone-dl-${Math.random().toString(36).slice(2, 8)}`).current;
+
+  const handleConfirm = () => {
+    const trimmed = value.trim().toUpperCase();
+    if (trimmed) {
+      onAssign(trimmed);
+      setValue('');
+    }
+  };
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <input
+        type="text"
+        list={listId}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }}
+        onBlur={handleConfirm}
+        placeholder="?"
+        className="w-16 text-xs border rounded px-1 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground"
+      />
+      <datalist id={listId}>
+        {buildingMappings?.map(m => (
+          <option key={m.id} value={m.section_code}>
+            {m.section_code}{m.description ? ` — ${m.description}` : ''}
+          </option>
+        ))}
+      </datalist>
+    </span>
+  );
+};
+
 const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   floor,
   count,
@@ -456,23 +495,11 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                     if (patternMatch) {
                       return <span className="font-mono font-medium">{patternMatch.section_code}</span>;
                     }
-                    return buildingMappings && buildingMappings.length > 0 ? (
-                      <select
-                        className="text-xs border rounded px-1 py-0.5 w-24 font-mono bg-background"
-                        defaultValue=""
-                        onChange={(e) => {
-                          if (e.target.value) onZonePatternSave?.(label, e.target.value);
-                        }}
-                      >
-                        <option value="">? assign</option>
-                        {buildingMappings.map(m => (
-                          <option key={m.id} value={m.section_code}>
-                            {m.section_code}{m.description ? ` — ${m.description}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="font-mono font-medium text-muted-foreground">?</span>
+                    return (
+                      <ZoneAssignInput
+                        buildingMappings={buildingMappings}
+                        onAssign={(sectionCode) => onZonePatternSave?.(label, sectionCode)}
+                      />
                     );
                   })()}
                   <span className="text-muted-foreground">({bCount.toLocaleString()} items)</span>
@@ -592,11 +619,36 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   }, []);
 
   const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
-    const mapping = buildingMappings?.find(m => m.section_code === sectionCode);
-    if (!mapping) return;
+    if (!sectionCode.trim()) return;
+    const code = sectionCode.trim().toUpperCase();
+    const mapping = buildingMappings?.find(m => m.section_code.toUpperCase() === code);
+
+    if (!mapping) {
+      // Auto-create a new building mapping row with the zone pattern
+      if (!projectId) return;
+      const { error } = await (supabase as any)
+        .from('building_section_mappings')
+        .upsert({
+          project_id: projectId,
+          building_identifier: code,
+          section_code: code,
+          description: `Building ${code}`,
+          zone_pattern: zoneLabel,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'project_id,building_identifier' });
+
+      if (error) {
+        toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (created)` });
+      onBuildingMappingsChanged?.();
+      return;
+    }
+
     if (mapping.zone_pattern) return; // don't overwrite existing pattern
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('building_section_mappings')
       .update({ zone_pattern: zoneLabel, updated_at: new Date().toISOString() })
       .eq('id', mapping.id);
@@ -606,9 +658,9 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       return;
     }
 
-    toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${sectionCode}` });
+    toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code}` });
     onBuildingMappingsChanged?.();
-  }, [buildingMappings, onBuildingMappingsChanged]);
+  }, [buildingMappings, projectId, onBuildingMappingsChanged]);
 
   const handleSaveAll = useCallback(async () => {
     if (!projectId) {

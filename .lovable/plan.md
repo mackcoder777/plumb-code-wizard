@@ -1,82 +1,77 @@
 
 
-# Fix: Populate Zone Assignment Dropdown With All Available Section Codes
+# Smart Assign Preview Dialog
 
 ## Problem
-The `? assign` dropdown in standalone floor zone breakdowns only shows entries from `buildingMappings` (the `building_section_mappings` table). Since the user never used the Building Section panel to create an "MD" entry, MD doesn't exist in that table and therefore doesn't appear as a dropdown option for UG (or any other standalone floor).
 
-## Root Cause
-Line 459-471 in `FloorSectionMapping.tsx`: the `<select>` is populated exclusively from `buildingMappings`. If the array is empty or doesn't contain MD, the user can't assign it.
+When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
+- See WHICH items go to which code
+- Understand the high-level breakdown by description/size
+- Verify the assignments are correct before applying
 
-## Solution
-Allow the user to type a **free-text section code** instead of picking from a limited dropdown. Replace the `<select>` with a small text `<Input>` + confirm button (or an inline combobox). When the user types "MD" and confirms:
+## What 9524 Covers (for reference)
 
-1. **Auto-create** a `building_section_mappings` row for that section code (with `building_identifier` derived from the section code, and the zone label as `zone_pattern`)
-2. Update the UI immediately to show `→ MD`
+Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
 
-This way the user doesn't need to visit the Building Section panel first.
+In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
 
-### Alternative (simpler): Combine existing building mappings dropdown WITH a free-text "custom" option
-- Show existing building mappings as `<option>` entries
-- Add a final option "Custom..." that, when selected, shows a small text input
-- On submit, create the building mapping row and save the zone pattern in one step
+## Solution: Smart Assign Preview Dialog
 
-### Recommended approach: Inline input with datalist
-Replace the `<select>` with an `<input>` that has a `<datalist>` of existing building mapping section codes. The user can either pick an existing one or type a new code like "MD". On blur/enter, save it.
+Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
 
-## Changes
+### UI Design
 
-### `src/components/FloorSectionMapping.tsx`
+When you click "Smart Assign", a dialog opens with:
 
-**Lines 459-479** (the `<select>` block): Replace with:
-```tsx
-<ZoneAssignInput
-  buildingMappings={buildingMappings}
-  onAssign={(sectionCode) => onZonePatternSave?.(label, sectionCode)}
-/>
+1. **Summary header** showing total items and code count
+2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
+3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
+4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
+5. **Confirm** and **Cancel** buttons at the bottom
+
+```text
++--------------------------------------------------+
+|  Smart Assign Preview                        [X]  |
+|                                                   |
+|  425 items will be assigned to 2 codes            |
+|                                                   |
+|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
+|  [Unmatched (0)]                                  |
+|                                                   |
+|  9525 - Plumbing Fixtures                         |
+|  +-----------+-------------------------+-----+    |
+|  | Qty       | Description             | $   |    |
+|  +-----------+-------------------------+-----+    |
+|  | 45        | Wall Lavatories          | 12k |    |
+|  | 32        | Urinal Wall Hung         | 8k  |    |
+|  | 28        | Water Closet             | 15k |    |
+|  | ...       | ...                      | ... |    |
+|  +-----------+-------------------------+-----+    |
+|                                                   |
+|            [Cancel]    [Apply All (425 items)]    |
++--------------------------------------------------+
 ```
 
-**New small component `ZoneAssignInput`** (inline in same file):
-- Renders a tiny `<input>` with placeholder "?" and a `<datalist>` of existing section codes
-- Width ~16-20 chars, mono font, same styling as current select
-- On Enter or blur with a value: calls `onAssign(value)`
+### Technical Changes
 
-**`handleZonePatternSave`** (line 594): Update to handle the case where no existing building mapping matches `sectionCode`:
-```ts
-const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
-  let mapping = buildingMappings?.find(m => m.section_code === sectionCode);
-  
-  if (!mapping) {
-    // Auto-create a new building mapping row
-    const { data } = await supabase
-      .from('building_section_mappings')
-      .upsert({
-        project_id: projectId,
-        building_identifier: sectionCode,
-        section_code: sectionCode,
-        description: `Building ${sectionCode}`,
-        zone_pattern: zoneLabel,
-      }, { onConflict: 'project_id,building_identifier' })
-      .select()
-      .single();
-    if (data) onBuildingMappingsChanged?.();
-    return;
-  }
-  
-  if (mapping.zone_pattern) return;
-  // ... existing save logic
-}, [buildingMappings, projectId, onBuildingMappingsChanged]);
-```
+#### File: `src/components/tabs/MaterialMappingTab.tsx`
 
-## Files Changed
+1. **Add state** for the preview dialog:
+   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
+   - When not null, the dialog is open
 
-| File | Change |
-|---|---|
-| `src/components/FloorSectionMapping.tsx` | Replace `<select>` with input+datalist, update `handleZonePatternSave` to auto-create building mapping if missing |
+2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
 
-## Expected Result
-- UG zone breakdown shows a small text input with "?" placeholder for unresolved zones
-- Typing "MD" and pressing Enter creates the building mapping AND saves the zone pattern in one step
-- Existing building mappings appear as autocomplete suggestions via datalist
-- After assignment, shows `→ MD` immediately
+3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
+   - Uses the existing `Dialog` component from shadcn
+   - `Tabs` component for switching between code groups
+   - Each tab aggregates items by description/size and shows counts + dollar totals
+   - A summary row at the bottom of each tab
+   - "Apply All" button calls the existing batch update logic
+
+#### File: `src/hooks/useMaterialMappingPatterns.ts`
+
+4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+
+### No database changes needed.
 
