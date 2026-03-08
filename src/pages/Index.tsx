@@ -478,7 +478,7 @@ const EnhancedCostCodeManager = () => {
   const { data: dbCategoryMappings = [] } = useCategoryMappings(currentProject?.id || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
-  const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings } = useBuildingSectionMappings(currentProject?.id || null);
+  const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(currentProject?.id || null);
   
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
