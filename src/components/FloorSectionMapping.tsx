@@ -330,14 +330,15 @@ interface StandaloneFloorRowProps {
   gridCols: string;
   customCodes: Array<{ value: string; label: string }>;
   buildingMappings?: BuildingSectionMapping[];
+  sectionSuggestions?: Array<{ code: string; description: string }>;
   onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
 }
 
 // ─── Inline zone assignment input with datalist ──────────────────────────────
 const ZoneAssignInput: React.FC<{
-  buildingMappings?: BuildingSectionMapping[];
+  sectionSuggestions?: Array<{ code: string; description: string }>;
   onAssign: (sectionCode: string) => void;
-}> = ({ buildingMappings, onAssign }) => {
+}> = ({ sectionSuggestions, onAssign }) => {
   const [value, setValue] = useState('');
   const listId = useRef(`zone-dl-${Math.random().toString(36).slice(2, 8)}`).current;
 
@@ -362,9 +363,9 @@ const ZoneAssignInput: React.FC<{
         className="w-16 text-xs border rounded px-1 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground"
       />
       <datalist id={listId}>
-        {buildingMappings?.map(m => (
-          <option key={m.id} value={m.section_code}>
-            {m.section_code}{m.description ? ` — ${m.description}` : ''}
+        {sectionSuggestions?.map(s => (
+          <option key={s.code} value={s.code}>
+            {s.code}{s.description ? ` — ${s.description}` : ''}
           </option>
         ))}
       </datalist>
@@ -383,6 +384,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   gridCols,
   customCodes,
   buildingMappings,
+  sectionSuggestions,
   onZonePatternSave,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -497,7 +499,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                     }
                     return (
                       <ZoneAssignInput
-                        buildingMappings={buildingMappings}
+                        sectionSuggestions={sectionSuggestions}
                         onAssign={(sectionCode) => onZonePatternSave?.(label, sectionCode)}
                       />
                     );
@@ -539,6 +541,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
+
+  // Merged section code suggestions from building mappings + floor mappings
+  const allSectionSuggestions = useMemo(() => {
+    const codes = new Map<string, string>();
+    buildingMappings?.forEach(m => {
+      codes.set(m.section_code, m.description || `Building ${m.building_identifier}`);
+    });
+    Object.values(localMappings).forEach(code => {
+      if (code && !codes.has(code)) codes.set(code, '');
+    });
+    return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
+  }, [buildingMappings, localMappings]);
 
   // Floor counts
   const floorData = useMemo(() => {
@@ -989,6 +1003,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 gridCols={gridCols}
                 customCodes={customCodes}
                 buildingMappings={buildingMappings}
+                sectionSuggestions={allSectionSuggestions}
                 onZonePatternSave={handleZonePatternSave}
               />
             ))}
