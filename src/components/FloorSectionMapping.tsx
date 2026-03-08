@@ -542,11 +542,16 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
 
+  // Standalone floor codes that are fallback values, not real building sections
+  const STANDALONE_SECTION_CODES = new Set(['RF', 'UG', 'CS', 'ST']);
+
   // Only show section codes actively assigned in this project's floor mappings
   const allSectionSuggestions = useMemo(() => {
     const codes = new Map<string, string>();
     Object.values(localMappings).forEach(code => {
-      if (code && !codes.has(code)) codes.set(code, '');
+      if (code && !codes.has(code) && !STANDALONE_SECTION_CODES.has(code.toUpperCase())) {
+        codes.set(code, '');
+      }
     });
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
   }, [localMappings]);
