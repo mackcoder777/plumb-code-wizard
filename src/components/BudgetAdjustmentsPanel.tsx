@@ -436,6 +436,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return saved ? parseFloat(saved) : 85;
   });
 
+  const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
+  }, [customFabCodes, projectId]);
+
+  const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
+
   // Track previous projectId to detect changes
   const [prevProjectId, setPrevProjectId] = useState(projectId);
 
