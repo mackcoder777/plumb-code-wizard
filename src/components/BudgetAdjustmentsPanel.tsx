@@ -1525,9 +1525,13 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                             <TableCell>
                               <select
                                 value={currentFabCostHead}
-                                onChange={(e) =>
-                                  setFabCodeMap(prev => ({ ...prev, [costHead]: e.target.value }))
-                                }
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomFabEntry({ costHead, code: '', desc: '' });
+                                  } else {
+                                    setFabCodeMap(prev => ({ ...prev, [costHead]: e.target.value }));
+                                  }
+                                }}
                                 className="bg-background border border-border rounded px-2 py-1 text-sm font-mono w-full"
                               >
                                 <option value="">-- No Fab Code --</option>
@@ -1539,7 +1543,31 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 <option value="PLST">FP 0000 PLST — Plastic / CPVC</option>
                                 <option value="BRAZ">FP 0000 BRAZ — Brazed</option>
                                 <option value="HFBS">FP 0000 HFBS — Hanger Fab Sheets</option>
+                                {Object.entries(customFabCodes).map(([code, desc]) => (
+                                  <option key={code} value={code}>FP 0000 {code} — {desc}</option>
+                                ))}
+                                <option value="__custom__">+ Add Custom Code...</option>
                               </select>
+                              {customFabEntry?.costHead === costHead && (
+                                <div className="flex gap-2 mt-2 items-center">
+                                  <Input placeholder="Code (4 chars)" maxLength={4}
+                                    value={customFabEntry?.code || ''}
+                                    onChange={e => setCustomFabEntry(prev => prev ? { ...prev, code: e.target.value.toUpperCase() } : null)}
+                                    className="w-[90px] h-8 font-mono text-sm" />
+                                  <Input placeholder="Description"
+                                    value={customFabEntry?.desc || ''}
+                                    onChange={e => setCustomFabEntry(prev => prev ? { ...prev, desc: e.target.value } : null)}
+                                    className="w-[200px] h-8 text-sm" />
+                                  <Button size="sm" onClick={() => {
+                                    if (customFabEntry?.code?.length === 4 && customFabEntry.desc) {
+                                      setCustomFabCodes(prev => ({ ...prev, [customFabEntry.code]: customFabEntry.desc.toUpperCase() }));
+                                      setFabCodeMap(prev => ({ ...prev, [customFabEntry.costHead]: customFabEntry.code }));
+                                      setCustomFabEntry(null);
+                                    }
+                                  }}>Add</Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setCustomFabEntry(null)}>Cancel</Button>
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <Input
