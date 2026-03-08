@@ -386,6 +386,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return saved ? JSON.parse(saved) : {};
   });
 
+  // Per-fab-code bid/budget rates
+  const [fabRates, setFabRates] = useState<Record<string, { bidRate: string; budgetRate: string }>>(() => {
+    try {
+      const stored = localStorage.getItem(`budget_fab_rates_${projectId}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+
   // Fab code routing map: field cost head → fab material cost head
   const [fabCodeMap, setFabCodeMap] = useState<Record<string, string>>(() => {
     try {
