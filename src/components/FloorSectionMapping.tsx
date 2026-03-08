@@ -15,7 +15,7 @@ import {
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
-import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
+import { BuildingSectionMapping, deriveStandaloneActivity } from '@/hooks/useBuildingSectionMappings';
 import { supabase } from '@/integrations/supabase/client';
 import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -237,8 +237,11 @@ function suggestActivity(floorName: string): string {
   if (/basement|below\s*grade/.test(clean)) return '00LB';
   if (/mezzanine|mezz/.test(clean)) return '00LM';
   if (/penthouse|pent/.test(clean)) return '00LP';
-  if (/roof/.test(clean)) return '00LR';
-  if (/crawl/.test(clean)) return '00LC';
+  if (/^roof$/i.test(clean)) return '00RF';
+  if (/^crawl/i.test(clean)) return '00CS';
+  if (/^ug$/i.test(clean)) return '00UG';
+  if (/^site$/i.test(clean)) return '00ST';
+  if (/^site\s+above\s+grade$/i.test(clean)) return '00AG';
   return '0000';
 }
 
@@ -446,6 +449,8 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
         </div>
 
         {/* Activity */}
+        <div className="flex items-center gap-1">
+        <span className="text-xs text-muted-foreground font-medium">ACT</span>
         <Input
           value={activityCode}
           onChange={(e) => onActivityChange(floor, e.target.value.toUpperCase().slice(0, 8))}
@@ -453,6 +458,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
           placeholder="0000"
           maxLength={8}
         />
+        </div>
 
         {/* Count */}
         <div className="text-right">
@@ -602,7 +608,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       const act: Record<string, string> = {};
       dbMappings.forEach(m => {
         sec[m.floor_pattern] = m.section_code;
-        act[m.floor_pattern] = m.activity_code || '0000';
+        const storedAct = m.activity_code || '0000';
+        act[m.floor_pattern] = storedAct === '0000' ? deriveStandaloneActivity(m.floor_pattern) : storedAct;
       });
       setLocalMappings(sec);
       setLocalActivityMappings(act);
@@ -733,7 +740,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const act: Record<string, string> = {};
     dbMappings.forEach(m => {
       sec[m.floor_pattern] = m.section_code;
-      act[m.floor_pattern] = m.activity_code || '0000';
+      const storedAct = m.activity_code || '0000';
+      act[m.floor_pattern] = storedAct === '0000' ? deriveStandaloneActivity(m.floor_pattern) : storedAct;
     });
     setLocalMappings(sec);
     setLocalActivityMappings(act);

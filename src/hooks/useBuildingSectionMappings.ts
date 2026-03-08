@@ -6,6 +6,17 @@ import { DatasetProfile, getBuildingFromZone, getZonePatternMatch } from '@/util
 /** Floors that exist across multiple buildings and need zone-based section resolution */
 const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
 
+/** Derives a sensible default activity code for standalone floors */
+export function deriveStandaloneActivity(floor: string): string {
+  const clean = floor.toLowerCase().trim();
+  if (/^roof$/i.test(clean)) return '00RF';
+  if (/^ug$/i.test(clean)) return '00UG';
+  if (/^site$/i.test(clean)) return '00ST';
+  if (/^site\s+above\s+grade$/i.test(clean)) return '00AG';
+  if (/^crawl\s*space$/i.test(clean)) return '00CS';
+  return '0000';
+}
+
 export interface BuildingSectionMapping {
   id: string;
   project_id: string;
@@ -242,7 +253,9 @@ export function resolveFloorMappingStatic(
   options?: ResolutionOptions
 ): FloorMappingResult {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
-  const floorActivity = fromFloor?.activity || '0000';
+  const floorActivity = (fromFloor?.activity && fromFloor.activity !== '0000')
+    ? fromFloor.activity
+    : deriveStandaloneActivity(floor);
 
   // Standalone floors: zone-based section takes priority, preserve floor's activity
   if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
