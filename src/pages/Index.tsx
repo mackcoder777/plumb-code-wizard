@@ -2507,6 +2507,7 @@ const EnhancedCostCodeManager = () => {
                 floorSectionMappings={dbFloorMappings}
                 systemActivityMappings={dbActivityMappings}
                 buildingSectionMappings={dbBuildingMappings}
+                onBuildingMappingsChanged={refetchBuildingMappings}
                 datasetProfile={datasetProfile}
                 onProfileOverride={(override) => {
                   if (override) {
