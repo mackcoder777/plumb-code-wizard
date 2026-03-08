@@ -492,7 +492,9 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                     <span className="font-mono font-medium">{suggestedSection}</span>
                   ) : (() => {
                     const patternMatch = buildingMappings?.find(
-                      m => m.zone_pattern && label.toLowerCase().includes(m.zone_pattern.toLowerCase())
+                      m => m.zone_pattern && m.zone_pattern.split(',').some(
+                        p => label.toLowerCase().includes(p.trim().toLowerCase())
+                      )
                     );
                     if (patternMatch) {
                       return <span className="font-mono font-medium">{patternMatch.section_code}</span>;
@@ -662,7 +664,26 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       return;
     }
 
-    if (mapping.zone_pattern) return; // don't overwrite existing pattern
+    if (mapping.zone_pattern) {
+      // Check if this zone is already included
+      const existingPatterns = mapping.zone_pattern.split(',').map(p => p.trim().toLowerCase());
+      if (existingPatterns.includes(zoneLabel.toLowerCase())) return; // already saved
+
+      // Append the new pattern
+      const updatedPattern = `${mapping.zone_pattern},${zoneLabel}`;
+      const { error } = await (supabase as any)
+        .from('building_section_mappings')
+        .update({ zone_pattern: updatedPattern, updated_at: new Date().toISOString() })
+        .eq('id', mapping.id);
+
+      if (error) {
+        toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (appended)` });
+      onBuildingMappingsChanged?.();
+      return;
+    }
 
     const { error } = await (supabase as any)
       .from('building_section_mappings')

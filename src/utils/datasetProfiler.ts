@@ -219,7 +219,9 @@ export function getZonePatternMatch(
 ): { building_identifier: string } | null {
   if (!zone) return null;
   for (const m of buildingMappings) {
-    if (m.zone_pattern && zone.toLowerCase().includes(m.zone_pattern.toLowerCase())) {
+    if (m.zone_pattern && m.zone_pattern.split(',').some(
+      p => zone.toLowerCase().includes(p.trim().toLowerCase())
+    )) {
       return { building_identifier: m.building_identifier };
     }
   }
