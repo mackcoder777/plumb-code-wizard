@@ -872,11 +872,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       bidTotal: lrcnCalculations.bidTotal,
       budgetTotal: lrcnCalculations.budgetTotal,
       lrcnAmount: lrcnCalculations.lrcnAmount,
+      // Fab LRCN fields
+      fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || shopRate, budgetRate: parseFloat(v.budgetRate) || shopRate }])),
+      fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
+      fabLrcnEnabled,
       // Computed rates
       computedBidLaborRate,
       shopRate,
     });
-  }, [calculations, lrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, onAdjustmentsChange]);
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
