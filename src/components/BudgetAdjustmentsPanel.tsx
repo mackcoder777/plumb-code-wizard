@@ -386,6 +386,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return saved ? JSON.parse(saved) : {};
   });
 
+  // Per-fab-code bid/budget rates
+  const [fabRates, setFabRates] = useState<Record<string, { bidRate: string; budgetRate: string }>>(() => {
+    try {
+      const stored = localStorage.getItem(`budget_fab_rates_${projectId}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+
   // Fab code routing map: field cost head → fab material cost head
   const [fabCodeMap, setFabCodeMap] = useState<Record<string, string>>(() => {
     try {
@@ -468,6 +476,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       // Reload fab code map
       const savedFabCodeMap = localStorage.getItem(`budget_fab_code_map_${projectId}`);
       setFabCodeMap(savedFabCodeMap ? { ...DEFAULT_FAB_CODE_MAP, ...JSON.parse(savedFabCodeMap) } : { ...DEFAULT_FAB_CODE_MAP });
+
+      // Reload fab rates
+      const savedFabRates = localStorage.getItem(`budget_fab_rates_${projectId}`);
+      setFabRates(savedFabRates ? JSON.parse(savedFabRates) : {});
       
       setPrevProjectId(projectId);
     }
@@ -539,6 +551,13 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       localStorage.setItem(`budget_fab_code_map_${projectId}`, JSON.stringify(fabCodeMap));
     }
   }, [fabCodeMap, projectId]);
+
+  // Persist fabRates
+  useEffect(() => {
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_fab_rates_${projectId}`, JSON.stringify(fabRates));
+    }
+  }, [fabRates, projectId]);
 
   // One-time migration: convert full-code keys (e.g. "BA 0000 DWTR") to cost-head-only keys ("DWTR")
   useEffect(() => {
@@ -1411,6 +1430,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                       <TableHead>Description</TableHead>
                       <TableHead className="text-right">Fab Hrs Stripped</TableHead>
                       <TableHead>Routes To</TableHead>
+                      <TableHead className="text-right">Bid Rate ($/hr)</TableHead>
+                      <TableHead className="text-right">Budget Rate ($/hr)</TableHead>
                       <TableHead className="text-center w-16">Reset</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1460,6 +1481,42 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 <option value="HFBS">FP 0000 HFBS — Hanger Fab Sheets</option>
                               </select>
                             </TableCell>
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="w-24 text-right font-mono text-sm h-8 ml-auto"
+                                value={fabRates[currentFabCostHead]?.bidRate ?? shopRate.toFixed(2)}
+                                onChange={(e) =>
+                                  setFabRates(prev => ({
+                                    ...prev,
+                                    [currentFabCostHead]: {
+                                      ...prev[currentFabCostHead],
+                                      bidRate: e.target.value,
+                                      budgetRate: prev[currentFabCostHead]?.budgetRate ?? e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="w-24 text-right font-mono text-sm h-8 ml-auto"
+                                value={fabRates[currentFabCostHead]?.budgetRate ?? fabRates[currentFabCostHead]?.bidRate ?? shopRate.toFixed(2)}
+                                onChange={(e) =>
+                                  setFabRates(prev => ({
+                                    ...prev,
+                                    [currentFabCostHead]: {
+                                      ...prev[currentFabCostHead],
+                                      bidRate: prev[currentFabCostHead]?.bidRate ?? shopRate.toFixed(2),
+                                      budgetRate: e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </TableCell>
                             <TableCell className="text-center">
                               <button
                                 onClick={() =>
@@ -1505,7 +1562,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                         {FAB_SECTION} {FAB_ACTIVITY} {fabCostHead}
                       </span>
                       <span className="ml-2 text-muted-foreground text-xs">
-                        {(hours).toFixed(1)} hrs
+                        {(hours).toFixed(1)} hrs @ ${(parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate).toFixed(2)}/hr
                       </span>
                       <span className="ml-1 text-muted-foreground text-xs">
                         — {FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || fabCostHead}
