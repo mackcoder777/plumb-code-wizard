@@ -295,6 +295,10 @@ export interface BudgetAdjustments {
   bidTotal: number;
   budgetTotal: number;
   lrcnAmount: number;
+  // Fab LRCN
+  fabRates: Record<string, { bidRate: number; budgetRate: number }>;
+  fabLrcnAmount: number;
+  fabLrcnEnabled: boolean;
   // Computed rates
   computedBidLaborRate: number;
   shopRate: number;
