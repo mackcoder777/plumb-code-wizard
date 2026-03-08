@@ -749,10 +749,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       const sec = suggestSection(group.buildingKey);
       group.childFloors.forEach(floor => {
         newSec[floor] = sec || localMappings[floor] || '';
-        // Only suggest activity when there are multiple floors to disambiguate
-        newAct[floor] = group.childFloors.length > 1
-          ? suggestActivity(floor)
-          : '0000';
+        newAct[floor] = suggestActivity(floor);
       });
     });
 
