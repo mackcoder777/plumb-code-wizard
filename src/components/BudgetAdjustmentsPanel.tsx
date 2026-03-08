@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -436,6 +437,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return saved ? parseFloat(saved) : 85;
   });
 
+  const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
+  }, [customFabCodes, projectId]);
+
+  const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
+
   // Track previous projectId to detect changes
   const [prevProjectId, setPrevProjectId] = useState(projectId);
 
@@ -494,6 +508,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       // Reload fab rates
       const savedFabRates = localStorage.getItem(`budget_fab_rates_${projectId}`);
       setFabRates(savedFabRates ? JSON.parse(savedFabRates) : {});
+
+      // Reload custom fab codes
+      const savedCustomFabCodes = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
+      setCustomFabCodes(savedCustomFabCodes ? JSON.parse(savedCustomFabCodes) : {});
       
       setPrevProjectId(projectId);
     }
@@ -792,7 +810,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       const fabBudgetRate = parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate;
       adjustedLaborSummary[assembledCode] = {
         code: assembledCode,
-        description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || `FABRICATION - ${fabCostHead}`,
+        description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || customFabCodes[fabCostHead] || `FABRICATION - ${fabCostHead}`,
         hours,
         rate: fabBudgetRate,
         dollars: hours * fabBudgetRate,
@@ -1508,9 +1526,13 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                             <TableCell>
                               <select
                                 value={currentFabCostHead}
-                                onChange={(e) =>
-                                  setFabCodeMap(prev => ({ ...prev, [costHead]: e.target.value }))
-                                }
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomFabEntry({ costHead, code: '', desc: '' });
+                                  } else {
+                                    setFabCodeMap(prev => ({ ...prev, [costHead]: e.target.value }));
+                                  }
+                                }}
                                 className="bg-background border border-border rounded px-2 py-1 text-sm font-mono w-full"
                               >
                                 <option value="">-- No Fab Code --</option>
@@ -1522,7 +1544,31 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 <option value="PLST">FP 0000 PLST — Plastic / CPVC</option>
                                 <option value="BRAZ">FP 0000 BRAZ — Brazed</option>
                                 <option value="HFBS">FP 0000 HFBS — Hanger Fab Sheets</option>
+                                {Object.entries(customFabCodes).map(([code, desc]) => (
+                                  <option key={code} value={code}>FP 0000 {code} — {desc}</option>
+                                ))}
+                                <option value="__custom__">+ Add Custom Code...</option>
                               </select>
+                              {customFabEntry?.costHead === costHead && (
+                                <div className="flex gap-2 mt-2 items-center">
+                                  <Input placeholder="Code (4 chars)" maxLength={4}
+                                    value={customFabEntry?.code || ''}
+                                    onChange={e => setCustomFabEntry(prev => prev ? { ...prev, code: e.target.value.toUpperCase() } : null)}
+                                    className="w-[90px] h-8 font-mono text-sm" />
+                                  <Input placeholder="Description"
+                                    value={customFabEntry?.desc || ''}
+                                    onChange={e => setCustomFabEntry(prev => prev ? { ...prev, desc: e.target.value } : null)}
+                                    className="w-[200px] h-8 text-sm" />
+                                  <Button size="sm" onClick={() => {
+                                    if (customFabEntry?.code?.length === 4 && customFabEntry.desc) {
+                                      setCustomFabCodes(prev => ({ ...prev, [customFabEntry.code]: customFabEntry.desc.toUpperCase() }));
+                                      setFabCodeMap(prev => ({ ...prev, [customFabEntry.costHead]: customFabEntry.code }));
+                                      setCustomFabEntry(null);
+                                    }
+                                  }}>Add</Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setCustomFabEntry(null)}>Cancel</Button>
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <Input
@@ -1608,7 +1654,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                         {(hours).toFixed(1)} hrs @ ${(parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate).toFixed(2)}/hr
                       </span>
                       <span className="ml-1 text-muted-foreground text-xs">
-                        — {FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || fabCostHead}
+                        — {FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || customFabCodes[fabCostHead] || fabCostHead}
                       </span>
                     </div>
                   ))}
