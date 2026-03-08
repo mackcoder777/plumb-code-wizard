@@ -46,6 +46,7 @@ interface SystemMappingTabProps {
   floorSectionMappings?: FloorSectionMapping[];
   systemActivityMappings?: SystemActivityMapping[];
   buildingSectionMappings: BuildingSectionMapping[];
+  onBuildingMappingsChanged?: () => void;
   importedCostCodes?: Array<{
     code: string;
     description: string;
