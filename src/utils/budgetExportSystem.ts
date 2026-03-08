@@ -806,27 +806,51 @@ function parseLaborCode(code: string): { section: string; activity: string; cost
 /**
  * Prepares labor report data for audit export
  */
-function prepareLaborReportData(items: ExportEstimateItem[]): any[] {
+function prepareLaborReportData(
+  items: ExportEstimateItem[],
+  floorMappings: FloorSectionMap = {},
+  buildingMappings: BuildingSectionMapping[] = [],
+  dbFloorMappings: FloorSectionMapping[] = [],
+  datasetProfile: any = null
+): any[] {
   return items
     .filter(item => item.laborCostHead || item.costCode || item.suggestedCode?.costHead)
-    .map(item => ({
-      'SEC': item.laborSec || item.suggestedCode?.section || '01',
-      'ACT': item.laborAct || item.suggestedCode?.activity || '0000',
-      'COST HEAD': item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '',
-      'DESCRIPTION': item.laborDescription || item.suggestedCode?.description || '',
-      'Drawing': item.drawing || '',
-      'System': item.system || '',
-      'Floor': item.floor || '',
-      'Zone': item.zone || '',
-      'Material Spec': item.materialSpec || '',
-      'Item Type': item.itemType || '',
-      'Material Description': item.materialDesc || item.materialDescription || '',
-      'Item Name': item.itemName || '',
-      'Size': item.size || '',
-      'Quantity': item.quantity || 0,
-      'Hours': item.hours || 0,
-      'Labor Dollars': item.laborDollars || 0
-    }));
+    .map(item => {
+      const isStandalone = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i
+        .test((item.floor || '').trim());
+
+      let sec: string;
+      if (isStandalone && item.floor && buildingMappings.length > 0) {
+        sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+          buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+      } else {
+        sec = item.laborSec || item.suggestedCode?.section;
+        if (!sec && item.floor) {
+          sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+            buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+        }
+        sec = sec || '01';
+      }
+
+      return {
+        'SEC': sec,
+        'ACT': item.laborAct || item.suggestedCode?.activity || '0000',
+        'COST HEAD': item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '',
+        'DESCRIPTION': item.laborDescription || item.suggestedCode?.description || '',
+        'Drawing': item.drawing || '',
+        'System': item.system || '',
+        'Floor': item.floor || '',
+        'Zone': item.zone || '',
+        'Material Spec': item.materialSpec || '',
+        'Item Type': item.itemType || '',
+        'Material Description': item.materialDesc || item.materialDescription || '',
+        'Item Name': item.itemName || '',
+        'Size': item.size || '',
+        'Quantity': item.quantity || 0,
+        'Hours': item.hours || 0,
+        'Labor Dollars': item.laborDollars || 0
+      };
+    });
 }
 
 /**
