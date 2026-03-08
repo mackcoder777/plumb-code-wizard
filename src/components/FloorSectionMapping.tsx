@@ -330,6 +330,7 @@ interface StandaloneFloorRowProps {
   gridCols: string;
   customCodes: Array<{ value: string; label: string }>;
   buildingMappings?: BuildingSectionMapping[];
+  sectionSuggestions?: Array<{ code: string; description: string }>;
   onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
 }
 
@@ -383,6 +384,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   gridCols,
   customCodes,
   buildingMappings,
+  sectionSuggestions,
   onZonePatternSave,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -497,7 +499,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                     }
                     return (
                       <ZoneAssignInput
-                        buildingMappings={buildingMappings}
+                        sectionSuggestions={sectionSuggestions}
                         onAssign={(sectionCode) => onZonePatternSave?.(label, sectionCode)}
                       />
                     );
