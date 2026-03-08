@@ -1555,7 +1555,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                         {FAB_SECTION} {FAB_ACTIVITY} {fabCostHead}
                       </span>
                       <span className="ml-2 text-muted-foreground text-xs">
-                        {(hours).toFixed(1)} hrs
+                        {(hours).toFixed(1)} hrs @ ${(parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate).toFixed(2)}/hr
                       </span>
                       <span className="ml-1 text-muted-foreground text-xs">
                         — {FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || fabCostHead}
