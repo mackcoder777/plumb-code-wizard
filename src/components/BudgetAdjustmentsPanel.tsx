@@ -1246,7 +1246,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                   <div className="h-10 flex items-center px-3 bg-muted rounded-md border font-mono text-lg">
                     ${lrcnCalculations.budgetTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
-                  <p className="text-xs text-muted-foreground">{lrcnCalculations.totalHours.toLocaleString()} hrs × ${budgetRate.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">Field: {lrcnCalculations.fieldHours.toLocaleString()} hrs × ${budgetRate.toFixed(2)} + Shop: {lrcnCalculations.shopHours.toLocaleString()} hrs × ${lrcnCalculations.shopRate.toFixed(2)}</p>
                 </div>
               </div>
 
