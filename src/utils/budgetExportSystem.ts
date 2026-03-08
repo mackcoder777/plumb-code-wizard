@@ -188,14 +188,26 @@ export function aggregateLaborByCostCode(
     // Skip zero-hour items entirely
     if (hours === 0 && laborDollars === 0) return;
 
-    // Priority: explicit laborSec > floor mapping > suggested section > default
-    let sec = item.laborSec || item.suggestedCode?.section;
-    if (!sec && item.floor) {
-      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing, buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+    // Standalone floors must always re-resolve through building-aware resolver
+    const isStandalone = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i
+      .test((item.floor || '').trim());
+
+    let sec: string;
+    let act: string;
+
+    if (isStandalone && item.floor && buildingMappings.length > 0) {
+      sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+        buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+      act = item.laborAct || item.suggestedCode?.activity || '0000';
+    } else {
+      sec = item.laborSec || item.suggestedCode?.section;
+      if (!sec && item.floor) {
+        sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
+          buildingMappings, dbFloorMappings, item.zone, datasetProfile);
+      }
+      sec = sec || '01';
+      act = item.laborAct || item.suggestedCode?.activity || '0000';
     }
-    sec = sec || '01';
-    
-    const act = item.laborAct || item.suggestedCode?.activity || '0000';
     
     // LABOR CODE PRIORITY:
     // 1. Category mapping (if reportCat has assigned code)
