@@ -46,6 +46,7 @@ interface SystemMappingTabProps {
   floorSectionMappings?: FloorSectionMapping[];
   systemActivityMappings?: SystemActivityMapping[];
   buildingSectionMappings: BuildingSectionMapping[];
+  onBuildingMappingsChanged?: () => void;
   importedCostCodes?: Array<{
     code: string;
     description: string;
@@ -77,7 +78,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -843,6 +844,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             datasetProfile={datasetProfile}
             onProfileOverride={onProfileOverride}
             onReanalyze={onReanalyzeProfile}
+            buildingMappings={buildingSectionMappings}
+            onBuildingMappingsChanged={onBuildingMappingsChanged}
           />
         </CollapsibleContent>
       </Collapsible>

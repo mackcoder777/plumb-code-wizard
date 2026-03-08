@@ -1,111 +1,77 @@
 
 
-# Make `→ ?` Interactive in Floor Section Mapping Panel
+# Smart Assign Preview Dialog
 
-## Summary
-Replace static `?` text in standalone floor zone breakdown rows with a `<select>` dropdown of available building section codes. On selection, save the full zone label as `zone_pattern` on the chosen building mapping via direct supabase call. No prop threading needed.
+## Problem
 
-## Changes
+When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
+- See WHICH items go to which code
+- Understand the high-level breakdown by description/size
+- Verify the assignments are correct before applying
 
-### 1. `src/components/FloorSectionMapping.tsx`
+## What 9524 Covers (for reference)
 
-**Props**: Add `buildingMappings` to both `FloorSectionMappingPanelProps` and `StandaloneFloorRowProps`:
-```ts
-buildingMappings?: BuildingSectionMapping[];
+Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
+
+In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
+
+## Solution: Smart Assign Preview Dialog
+
+Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
+
+### UI Design
+
+When you click "Smart Assign", a dialog opens with:
+
+1. **Summary header** showing total items and code count
+2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
+3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
+4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
+5. **Confirm** and **Cancel** buttons at the bottom
+
+```text
++--------------------------------------------------+
+|  Smart Assign Preview                        [X]  |
+|                                                   |
+|  425 items will be assigned to 2 codes            |
+|                                                   |
+|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
+|  [Unmatched (0)]                                  |
+|                                                   |
+|  9525 - Plumbing Fixtures                         |
+|  +-----------+-------------------------+-----+    |
+|  | Qty       | Description             | $   |    |
+|  +-----------+-------------------------+-----+    |
+|  | 45        | Wall Lavatories          | 12k |    |
+|  | 32        | Urinal Wall Hung         | 8k  |    |
+|  | 28        | Water Closet             | 15k |    |
+|  | ...       | ...                      | ... |    |
+|  +-----------+-------------------------+-----+    |
+|                                                   |
+|            [Cancel]    [Apply All (425 items)]    |
++--------------------------------------------------+
 ```
 
-Import `BuildingSectionMapping` from `@/hooks/useBuildingSectionMappings` and `supabase` (already available via hooks).
+### Technical Changes
 
-**StandaloneFloorRow zone breakdown** (lines 422-446): Replace the `{suggestedSection ?? '?'}` span. When `suggestedSection` is null:
-- Also check if any `buildingMappings` entry has a `zone_pattern` that matches the zone label (contains-match). If so, show the resolved section code.
-- Otherwise, render a `<select>` dropdown with options from `buildingMappings` formatted as `section_code — description`.
-- On selection, call supabase directly to update `zone_pattern` on the selected building mapping row (set `zone_pattern = full zone label`). Update local state via a callback.
+#### File: `src/components/tabs/MaterialMappingTab.tsx`
 
-```tsx
-// Where suggestedSection is null:
-{suggestedSection === null ? (
-  (() => {
-    // Check zone_pattern matches from buildingMappings
-    const patternMatch = buildingMappings?.find(
-      m => m.zone_pattern && label.toLowerCase().includes(m.zone_pattern.toLowerCase())
-    );
-    if (patternMatch) {
-      return <span className="font-mono font-medium">{patternMatch.section_code}</span>;
-    }
-    return (
-      <select
-        className="text-xs border rounded px-1 py-0.5 w-24 font-mono bg-background"
-        defaultValue=""
-        onChange={(e) => {
-          if (e.target.value) onZonePatternSave?.(label, e.target.value);
-        }}
-      >
-        <option value="">? assign</option>
-        {buildingMappings?.map(m => (
-          <option key={m.id} value={m.section_code}>
-            {m.section_code}{m.description ? ` — ${m.description}` : ''}
-          </option>
-        ))}
-      </select>
-    );
-  })()
-) : (
-  <span className="font-mono font-medium">{suggestedSection}</span>
-)}
-```
+1. **Add state** for the preview dialog:
+   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
+   - When not null, the dialog is open
 
-**Add `onZonePatternSave` prop** to `StandaloneFloorRowProps`:
-```ts
-onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
-```
+2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
 
-**In `FloorSectionMappingPanel`**: Implement `handleZonePatternSave` that calls supabase directly:
-```ts
-const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
-  const mapping = buildingMappings?.find(m => m.section_code === sectionCode);
-  if (!mapping) return;
-  if (mapping.zone_pattern) return; // don't overwrite existing pattern
-  
-  await supabase
-    .from('building_section_mappings')
-    .update({ zone_pattern: zoneLabel, updated_at: new Date().toISOString() })
-    .eq('id', mapping.id);
-  
-  // Force re-render by updating local ref or triggering parent refresh
-}, [buildingMappings]);
-```
+3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
+   - Uses the existing `Dialog` component from shadcn
+   - `Tabs` component for switching between code groups
+   - Each tab aggregates items by description/size and shows counts + dollar totals
+   - A summary row at the bottom of each tab
+   - "Apply All" button calls the existing batch update logic
 
-Since `FloorSectionMappingPanel` doesn't own the `buildingMappings` state, after saving we need the parent to refetch. Add an optional `onBuildingMappingsChanged?: () => void` callback prop that calls `fetchMappings` in `Index.tsx`.
+#### File: `src/hooks/useMaterialMappingPatterns.ts`
 
-### 2. `src/components/tabs/SystemMappingTab.tsx`
+4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
 
-Pass `buildingMappings` and callbacks to `FloorSectionMappingPanel` (line 838):
-```tsx
-<FloorSectionMappingPanel
-  // ...existing props
-  buildingMappings={buildingSectionMappings}
-  onBuildingMappingsChanged={onBuildingMappingsChanged}
-/>
-```
-
-Add `onBuildingMappingsChanged?: () => void` to `SystemMappingTabProps`.
-
-### 3. `src/pages/Index.tsx`
-
-Pass `fetchMappings` (from `useBuildingSectionMappings`) as `onBuildingMappingsChanged` to `SystemMappingTab`.
-
-## Files Changed
-
-| File | Change |
-|---|---|
-| `src/components/FloorSectionMapping.tsx` | Add `buildingMappings` prop, interactive select for `?` zones, `handleZonePatternSave` with direct supabase call |
-| `src/components/tabs/SystemMappingTab.tsx` | Pass `buildingSectionMappings` + refresh callback to `FloorSectionMappingPanel` |
-| `src/pages/Index.tsx` | Pass `fetchMappings` as `onBuildingMappingsChanged` |
-
-## Expected Result
-- Unresolved zones show dropdown with `MD — Modular Buildings`, `BA — Building A`, etc.
-- User selects MD → saves `zone_pattern = "PC1 - MODULAR SYSTEMS"` on the MD building mapping row
-- UI updates to show `→ MD` instead of `→ ?`
-- Re-apply Sections resolves via `getZonePatternMatch` automatically
-- Priority 1 (BLDG regex) zones unaffected
+### No database changes needed.
 
