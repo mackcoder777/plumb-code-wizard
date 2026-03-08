@@ -1474,6 +1474,42 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 <option value="HFBS">FP 0000 HFBS — Hanger Fab Sheets</option>
                               </select>
                             </TableCell>
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="w-24 text-right font-mono text-sm h-8 ml-auto"
+                                value={fabRates[currentFabCostHead]?.bidRate ?? shopRate.toFixed(2)}
+                                onChange={(e) =>
+                                  setFabRates(prev => ({
+                                    ...prev,
+                                    [currentFabCostHead]: {
+                                      ...prev[currentFabCostHead],
+                                      bidRate: e.target.value,
+                                      budgetRate: prev[currentFabCostHead]?.budgetRate ?? e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="w-24 text-right font-mono text-sm h-8 ml-auto"
+                                value={fabRates[currentFabCostHead]?.budgetRate ?? fabRates[currentFabCostHead]?.bidRate ?? shopRate.toFixed(2)}
+                                onChange={(e) =>
+                                  setFabRates(prev => ({
+                                    ...prev,
+                                    [currentFabCostHead]: {
+                                      ...prev[currentFabCostHead],
+                                      bidRate: prev[currentFabCostHead]?.bidRate ?? shopRate.toFixed(2),
+                                      budgetRate: e.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </TableCell>
                             <TableCell className="text-center">
                               <button
                                 onClick={() =>
