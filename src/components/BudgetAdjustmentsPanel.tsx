@@ -573,6 +573,13 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     }
   }, [fabRates, projectId]);
 
+  // Persist fabLrcnEnabled
+  useEffect(() => {
+    if (projectId !== 'default') {
+      localStorage.setItem(`budget_fab_lrcn_enabled_${projectId}`, fabLrcnEnabled.toString());
+    }
+  }, [fabLrcnEnabled, projectId]);
+
   // One-time migration: convert full-code keys (e.g. "BA 0000 DWTR") to cost-head-only keys ("DWTR")
   useEffect(() => {
     const migrateStorageKey = (storageKey: string) => {
