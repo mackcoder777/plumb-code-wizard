@@ -769,16 +769,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
     // Insert one properly assembled fab code per material type
     // e.g. "FP 0000 COPR", "FP 0000 CSTF", "FP 0000 HFBS"
+    const generatedFabCodes: Record<string, number> = {};
     Object.entries(fabAccumulator).forEach(([fabCostHead, { hours }]) => {
       const assembledCode = `${FAB_SECTION} ${FAB_ACTIVITY} ${fabCostHead}`;
+      const fabBudgetRate = parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate;
       adjustedLaborSummary[assembledCode] = {
         code: assembledCode,
         description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || `FABRICATION - ${fabCostHead}`,
         hours,
-        rate: shopRate,
-        dollars: hours * shopRate,
+        rate: fabBudgetRate,
+        dollars: hours * fabBudgetRate,
         type: 'fab',
       };
+      generatedFabCodes[fabCostHead] = hours;
     });
 
     // Note: FCNT (Foreman Contingency) is now a MATERIAL line item, not labor
