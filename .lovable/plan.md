@@ -1,77 +1,51 @@
 
 
-# Smart Assign Preview Dialog
+# Fix: Include All Known Section Codes in Zone Assignment Dropdown
 
 ## Problem
+MD exists as a section code in `floor_section_mappings` (used across Crawl Space, Roof, etc.) but not in `building_section_mappings`. The `ZoneAssignInput` datalist only pulls from `building_section_mappings`, so MD doesn't appear as a suggestion. The user has to type it manually despite it being a well-known code in their project.
 
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
+## Database State
+- `floor_section_mappings` has these section codes: 12, 13, 14, B1, B2, B3, B9, BA, BB, BC, BD, CS, **MD**, RF, ST, UG
+- `building_section_mappings` has: 1, 2, 3, 9, 12, 13, 14, BA, BB, BC, BD, C1, C5 — **no MD**
 
-## What 9524 Covers (for reference)
+## Solution
+Merge section code suggestions from both sources. In `FloorSectionMappingPanel`, compute a deduplicated list of all known section codes from:
+1. `buildingMappings` (building_section_mappings table)
+2. `localMappings` values (floor_section_mappings, already in component state)
 
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
+Pass this merged list to `StandaloneFloorRow` and `ZoneAssignInput`.
 
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
+### Changes in `src/components/FloorSectionMapping.tsx`
 
-## Solution: Smart Assign Preview Dialog
-
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
-
-### UI Design
-
-When you click "Smart Assign", a dialog opens with:
-
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
-
-```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
+1. **Compute merged section codes** in `FloorSectionMappingPanel`:
+```ts
+const allSectionCodes = useMemo(() => {
+  const codes = new Map<string, string>(); // code → description
+  // From building mappings
+  buildingMappings?.forEach(m => {
+    codes.set(m.section_code, m.description || `Building ${m.building_identifier}`);
+  });
+  // From floor mappings (localMappings values)
+  Object.values(localMappings).forEach(code => {
+    if (code && !codes.has(code)) codes.set(code, '');
+  });
+  return Array.from(codes.entries()).map(([code, desc]) => ({ code, description: desc }));
+}, [buildingMappings, localMappings]);
 ```
 
-### Technical Changes
+2. **Update `ZoneAssignInput` props** to accept this merged list instead of raw `buildingMappings`:
+```ts
+const ZoneAssignInput: React.FC<{
+  sectionSuggestions?: Array<{ code: string; description: string }>;
+  onAssign: (sectionCode: string) => void;
+}>
+```
 
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
+3. **Update datalist** to render from `sectionSuggestions` — MD will now appear alongside BA, BB, etc.
 
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
+4. **Pass through** `StandaloneFloorRow` → `ZoneAssignInput`.
 
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
-
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
-
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
-
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
-
-### No database changes needed.
+### No other file changes needed.
+The `handleZonePatternSave` logic already handles creating a new `building_section_mappings` row when the section code doesn't exist in that table, so typing or picking MD from the suggestions will auto-create the building mapping with the zone pattern.
 
