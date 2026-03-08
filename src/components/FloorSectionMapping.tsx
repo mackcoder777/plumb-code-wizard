@@ -15,6 +15,8 @@ import {
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
+import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
+import { supabase } from '@/integrations/supabase/client';
 import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -27,6 +29,8 @@ interface FloorSectionMappingPanelProps {
   datasetProfile?: DatasetProfile | null;
   onProfileOverride?: (override: PatternOverride | null) => void;
   onReanalyze?: () => void;
+  buildingMappings?: BuildingSectionMapping[];
+  onBuildingMappingsChanged?: () => void;
 }
 
 interface BuildingGroup {
@@ -325,6 +329,8 @@ interface StandaloneFloorRowProps {
   onActivityChange: (floor: string, activity: string) => void;
   gridCols: string;
   customCodes: Array<{ value: string; label: string }>;
+  buildingMappings?: BuildingSectionMapping[];
+  onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
 }
 
 const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
@@ -337,6 +343,8 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   onActivityChange,
   gridCols,
   customCodes,
+  buildingMappings,
+  onZonePatternSave,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const info = classifyStandaloneFloor(floor, zoneBreakdown);
@@ -439,7 +447,34 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                   <span className="w-8 text-right font-mono text-muted-foreground">{pct}%</span>
                   <span className="truncate">{label}</span>
                   <span className="text-muted-foreground">→</span>
-                  <span className="font-mono font-medium">{suggestedSection ?? '?'}</span>
+                  {suggestedSection !== null ? (
+                    <span className="font-mono font-medium">{suggestedSection}</span>
+                  ) : (() => {
+                    const patternMatch = buildingMappings?.find(
+                      m => m.zone_pattern && label.toLowerCase().includes(m.zone_pattern.toLowerCase())
+                    );
+                    if (patternMatch) {
+                      return <span className="font-mono font-medium">{patternMatch.section_code}</span>;
+                    }
+                    return buildingMappings && buildingMappings.length > 0 ? (
+                      <select
+                        className="text-xs border rounded px-1 py-0.5 w-24 font-mono bg-background"
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) onZonePatternSave?.(label, e.target.value);
+                        }}
+                      >
+                        <option value="">? assign</option>
+                        {buildingMappings.map(m => (
+                          <option key={m.id} value={m.section_code}>
+                            {m.section_code}{m.description ? ` — ${m.description}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-mono font-medium text-muted-foreground">?</span>
+                    );
+                  })()}
                   <span className="text-muted-foreground">({bCount.toLocaleString()} items)</span>
                 </div>
               );
