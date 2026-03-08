@@ -1614,6 +1614,48 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Fab LRCN Toggle & Summary */}
+              {fabLrcnCalculations.breakdown.length > 0 && (
+                <div className="mt-3 bg-orange-50 dark:bg-orange-950 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium text-orange-700 dark:text-orange-300">
+                      Fab Labor Rate Contingency (MA 0FAB LRCN)
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs text-muted-foreground">{fabLrcnEnabled ? 'Enabled' : 'Disabled'}</span>
+                      <input
+                        type="checkbox"
+                        checked={fabLrcnEnabled}
+                        onChange={(e) => setFabLrcnEnabled(e.target.checked)}
+                        className="rounded"
+                      />
+                    </label>
+                  </div>
+                  {fabLrcnEnabled && (
+                    <>
+                      <div className="space-y-1">
+                        {fabLrcnCalculations.breakdown.filter(b => b.hours > 0).map(b => (
+                          <div key={b.code} className="flex justify-between text-xs font-mono">
+                            <span className="text-muted-foreground">
+                              {b.code}: {b.hours.toFixed(1)} hrs × (${b.bidRate.toFixed(2)} - ${b.budgetRate.toFixed(2)})
+                            </span>
+                            <span className={b.diff > 0 ? 'text-green-600' : 'text-muted-foreground'}>
+                              ${b.diff.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between mt-2 pt-2 border-t border-orange-200 dark:border-orange-700 text-sm font-semibold">
+                        <span className="text-orange-700 dark:text-orange-300">Fab LRCN Total</span>
+                        <span className={fabLrcnCalculations.fabLrcnAmount > 0 ? 'text-green-600 font-mono' : 'text-muted-foreground font-mono'}>
+                          ${fabLrcnCalculations.fabLrcnAmount.toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </details>
           )}
 
