@@ -507,6 +507,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       // Reload fab rates
       const savedFabRates = localStorage.getItem(`budget_fab_rates_${projectId}`);
       setFabRates(savedFabRates ? JSON.parse(savedFabRates) : {});
+
+      // Reload custom fab codes
+      const savedCustomFabCodes = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
+      setCustomFabCodes(savedCustomFabCodes ? JSON.parse(savedCustomFabCodes) : {});
       
       setPrevProjectId(projectId);
     }
