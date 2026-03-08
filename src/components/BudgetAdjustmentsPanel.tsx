@@ -470,6 +470,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       // Reload LRCN settings
       const savedLrcnEnabled = localStorage.getItem(`budget_lrcn_enabled_${projectId}`);
       setLrcnEnabled(savedLrcnEnabled === 'true');
+
+      // Reload Fab LRCN
+      const savedFabLrcnEnabled = localStorage.getItem(`budget_fab_lrcn_enabled_${projectId}`);
+      setFabLrcnEnabled(savedFabLrcnEnabled === null ? true : savedFabLrcnEnabled === 'true');
       
       const savedBidRates = localStorage.getItem(`budget_bid_rates_${projectId}`);
       setBidRates(savedBidRates ? JSON.parse(savedBidRates) : {
