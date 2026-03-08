@@ -591,6 +591,25 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     setHasChanges(true);
   }, []);
 
+  const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
+    const mapping = buildingMappings?.find(m => m.section_code === sectionCode);
+    if (!mapping) return;
+    if (mapping.zone_pattern) return; // don't overwrite existing pattern
+
+    const { error } = await supabase
+      .from('building_section_mappings')
+      .update({ zone_pattern: zoneLabel, updated_at: new Date().toISOString() })
+      .eq('id', mapping.id);
+
+    if (error) {
+      toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${sectionCode}` });
+    onBuildingMappingsChanged?.();
+  }, [buildingMappings, onBuildingMappingsChanged]);
+
   const handleSaveAll = useCallback(async () => {
     if (!projectId) {
       toast({ title: "No Project Selected", description: "Please select a project to save floor mappings.", variant: "destructive" });
