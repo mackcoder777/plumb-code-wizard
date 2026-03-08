@@ -502,6 +502,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   datasetProfile,
   onProfileOverride,
   onReanalyze,
+  buildingMappings,
+  onBuildingMappingsChanged,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
@@ -915,6 +917,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 onActivityChange={handleActivityChangeForFloor}
                 gridCols={gridCols}
                 customCodes={customCodes}
+                buildingMappings={buildingMappings}
+                onZonePatternSave={handleZonePatternSave}
               />
             ))}
           </>

@@ -843,6 +843,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             datasetProfile={datasetProfile}
             onProfileOverride={onProfileOverride}
             onReanalyze={onReanalyzeProfile}
+            buildingMappings={buildingSectionMappings}
           />
         </CollapsibleContent>
       </Collapsible>
