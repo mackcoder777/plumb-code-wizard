@@ -830,7 +830,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           <Button variant="outline" className="w-full justify-between">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4" />
-              Floor to Section Mapping
+              Section Mapping
             </div>
             <ChevronRight className={cn("h-4 w-4 transition-transform", floorSectionOpen && "rotate-90")} />
           </Button>
@@ -850,15 +850,14 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Building to Section Mapping - Collapsible */}
-      {projectId && (
+      {/* Building to Section Mapping - Hidden (functionality covered by Section Mapping panel) */}
+      {false && projectId && (
         <Collapsible>
           <CollapsibleTrigger asChild>
             <Button variant="outline" className="w-full justify-between">
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4" />
                 Building → Section Code (Drawing-based)
-                <Badge variant="secondary" className="ml-2 text-xs">NEW</Badge>
               </div>
               <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
             </Button>
@@ -872,16 +871,18 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         </Collapsible>
       )}
 
-      {/* System to Activity Mapping - Collapsible */}
+      {/* System to Activity Mapping - Collapsible (closed by default) */}
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button variant="outline" className="w-full justify-between">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              System to Activity Mapping
-              <Badge variant="secondary" className="ml-2 text-xs">NEW</Badge>
+            <div className="flex items-center gap-2 text-left">
+              <Activity className="h-4 w-4 shrink-0" />
+              <div>
+                <span>System to Activity Mapping</span>
+                <p className="text-xs text-muted-foreground font-normal mt-0.5">Optional: override activity codes per system. Only needed when systems on the same floor require different activity codes.</p>
+              </div>
             </div>
-            <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
+            <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-4">

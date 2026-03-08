@@ -764,7 +764,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Layers className="h-5 w-5" />
-            Floor to Section Mapping
+            Section Mapping
           </CardTitle>
           <CardDescription>
             No floor data found in the estimate. Upload an estimate with floor information to configure section mappings.
@@ -784,7 +784,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           <div>
             <CardTitle className="flex items-center gap-2">
               <Layers className="h-5 w-5" />
-              Floor to Section Mapping
+              Section Mapping
             </CardTitle>
             <CardDescription>
               Map buildings to section codes and floors to activity codes
