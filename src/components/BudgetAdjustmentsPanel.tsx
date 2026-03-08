@@ -1423,6 +1423,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                       <TableHead>Description</TableHead>
                       <TableHead className="text-right">Fab Hrs Stripped</TableHead>
                       <TableHead>Routes To</TableHead>
+                      <TableHead className="text-right">Bid Rate ($/hr)</TableHead>
+                      <TableHead className="text-right">Budget Rate ($/hr)</TableHead>
                       <TableHead className="text-center w-16">Reset</TableHead>
                     </TableRow>
                   </TableHeader>
