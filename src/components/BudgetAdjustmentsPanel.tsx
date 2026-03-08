@@ -620,9 +620,12 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     const shopTotal = bidRates.shop.hours * parseRate(bidRates.shop.rate);
     
     const bidTotal = straightTotal + shiftTotal + overtimeTotal + doubleTimeTotal + shopTotal;
-    const totalHours = bidRates.straightTime.hours + bidRates.shiftTime.hours + 
-                       bidRates.overtime.hours + bidRates.doubleTime.hours + bidRates.shop.hours;
-    const budgetTotal = totalHours * budgetRate;
+    const fieldHours = bidRates.straightTime.hours + bidRates.shiftTime.hours +
+                       bidRates.overtime.hours + bidRates.doubleTime.hours;
+    const shopHours = bidRates.shop.hours;
+    const shopRate = parseRate(bidRates.shop.rate);
+    const totalHours = fieldHours + shopHours;
+    const budgetTotal = (fieldHours * budgetRate) + (shopHours * shopRate);
     const lrcnAmount = bidTotal - budgetTotal;
     
     return {
@@ -630,6 +633,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       budgetTotal,
       lrcnAmount,
       totalHours,
+      fieldHours,
+      shopHours,
+      shopRate,
       straightTotal,
       shiftTotal,
       overtimeTotal,
