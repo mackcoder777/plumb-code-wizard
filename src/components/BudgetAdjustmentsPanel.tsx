@@ -468,14 +468,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   });
 
   const saveMergeMutation = useMutation({
-    mutationFn: async (heads: string[]) => {
+    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string }>) => {
       if (!projectId || projectId === 'default') return;
       // Delete all existing merges for this project
       await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
       // Insert new ones
-      if (heads.length > 0) {
+      if (entries.length > 0) {
         const { error } = await supabase.from('project_small_code_merges').insert(
-          heads.map(head => ({ project_id: projectId, cost_head: head, merged_act: '0000' }))
+          entries.map(e => ({ project_id: projectId, cost_head: e.cost_head, sec_code: e.sec_code, merged_act: '0000' }))
         );
         if (error) console.error('Failed to save merges:', error);
       }
