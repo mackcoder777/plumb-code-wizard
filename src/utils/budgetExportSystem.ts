@@ -483,8 +483,9 @@ export function exportBudgetPacket(
       ws[`D${row}`] = { t: 's', v: item.normalizedDescription };
       ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
       
-      if (laborRate > 0) {
-        ws[`I${row}`] = { t: 'n', v: laborRate, z: '#,##0.00' };
+      const displayRate = item.rate ?? laborRate;
+      if (displayRate > 0) {
+        ws[`I${row}`] = { t: 'n', v: displayRate, z: '#,##0.00' };
       }
       
       ws[`J${row}`] = { t: 'n', v: Math.round(item.dollars * 100) / 100, z: '#,##0' };
