@@ -2078,12 +2078,11 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map(({ head, lines, combinedHours, secTotals }) => {
-                      const sec = (lines[0]?.code ?? '').trim().split(/\s+/)[0] ?? 'XX';
-                      const secTotal = Object.values(secTotals)[0] ?? 0;
-                      const isSaved = savedHeadSet.has(head);
+                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours, secTotal }) => {
+                      const mergeKey = `${sec}|${head}`;
+                      const isSaved = savedMergeKeySet.has(mergeKey);
                       return (
-                        <TableRow key={head} className={isSaved ? 'opacity-50' : ''}>
+                        <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
                           <TableCell>
                             {isSaved ? (
                               <div className="flex items-center gap-1">
@@ -2092,14 +2091,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                             ) : (
                               <input
                                 type="checkbox"
-                                checked={!!consolidations[head]}
-                                onChange={e => setConsolidations(prev => ({ ...prev, [head]: e.target.checked }))}
+                                checked={!!consolidations[mergeKey]}
+                                onChange={e => setConsolidations(prev => ({ ...prev, [mergeKey]: e.target.checked }))}
                                 className="w-4 h-4 accent-blue-500"
                               />
                             )}
                           </TableCell>
                           <TableCell className="font-mono font-bold text-blue-400">
-                            {head}
+                            SEC {sec} — {head}
                             {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
                           </TableCell>
                           <TableCell>
@@ -2127,7 +2126,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 variant="ghost"
                                 size="sm"
                                 className="h-5 px-1.5 ml-2 text-xs"
-                                onClick={() => handleUndoMerge(head)}
+                                onClick={() => handleUndoMerge(sec, head)}
                               >
                                 <Undo2 className="h-3 w-3 mr-1" /> Undo
                               </Button>
