@@ -2219,62 +2219,64 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                           </TableCell>
                           <TableCell>
                             {(consolidations[mergeKey] || isSaved) ? (
-                              <select
-                                className="text-xs bg-background border border-border rounded px-1 py-0.5"
-                                value={reassignTargets[mergeKey] ?? '__merge__'}
-                                onChange={(e) =>
-                                  setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
-                                }
-                                disabled={isSaved}
-                              >
-                                <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
-                                <option value="__redistribute__">Redistribute Hours</option>
-                                {sameSECHeads.map((p) => (
-                                  <option key={p.key} value={p.head}>
-                                    Reassign → {p.head}
-                                  </option>
-                                ))}
-                              </select>
-                              {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
-                                const adjustments = redistributeAdjustments[mergeKey] ?? {};
-                                const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
-                                const netOk = Math.abs(net) < 0.01;
-                                return (
-                                  <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
-                                    {row.lines.map((line) => {
-                                      const delta = adjustments[line.code] ?? 0;
-                                      const result = line.hours + delta;
-                                      return (
-                                        <div key={line.code} className="flex items-center gap-1 text-xs">
-                                          <span className="font-mono w-36 truncate text-muted-foreground">{line.code}</span>
-                                          <span className="font-mono w-12 text-right text-foreground">{line.hours.toFixed(1)}h</span>
-                                          <span className="text-muted-foreground px-1">→</span>
-                                          <input
-                                            type="number"
-                                            step={0.5}
-                                            value={delta === 0 ? '' : delta}
-                                            placeholder="0"
-                                            onChange={(e) => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              setRedistributeAdjustments((prev) => ({
-                                                ...prev,
-                                                [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
-                                              }));
-                                            }}
-                                            className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
-                                          />
-                                          <span className={`font-mono w-14 text-right ${result < 8 && result > 0 ? 'text-orange-400' : result <= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                            {result.toFixed(1)}h
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                    <div className={`text-xs font-semibold mt-1 ${netOk ? 'text-green-500' : 'text-red-400'}`}>
-                                      Net: {net > 0 ? '+' : ''}{net.toFixed(1)}h {netOk ? '✓ balanced' : '✗ must equal 0 to apply'}
+                              <div>
+                                <select
+                                  className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                  value={reassignTargets[mergeKey] ?? '__merge__'}
+                                  onChange={(e) =>
+                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
+                                  }
+                                  disabled={isSaved}
+                                >
+                                  <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
+                                  <option value="__redistribute__">Redistribute Hours</option>
+                                  {sameSECHeads.map((p) => (
+                                    <option key={p.key} value={p.head}>
+                                      Reassign → {p.head}
+                                    </option>
+                                  ))}
+                                </select>
+                                {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
+                                  const adjustments = redistributeAdjustments[mergeKey] ?? {};
+                                  const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+                                  const netOk = Math.abs(net) < 0.01;
+                                  return (
+                                    <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
+                                      {row.lines.map((line) => {
+                                        const delta = adjustments[line.code] ?? 0;
+                                        const result = line.hours + delta;
+                                        return (
+                                          <div key={line.code} className="flex items-center gap-1 text-xs">
+                                            <span className="font-mono w-36 truncate text-muted-foreground">{line.code}</span>
+                                            <span className="font-mono w-12 text-right text-foreground">{line.hours.toFixed(1)}h</span>
+                                            <span className="text-muted-foreground px-1">→</span>
+                                            <input
+                                              type="number"
+                                              step={0.5}
+                                              value={delta === 0 ? '' : delta}
+                                              placeholder="0"
+                                              onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                setRedistributeAdjustments((prev) => ({
+                                                  ...prev,
+                                                  [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
+                                                }));
+                                              }}
+                                              className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
+                                            />
+                                            <span className={`font-mono w-14 text-right ${result < 8 && result > 0 ? 'text-orange-400' : result <= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                              {result.toFixed(1)}h
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                      <div className={`text-xs font-semibold mt-1 ${netOk ? 'text-green-500' : 'text-red-400'}`}>
+                                        Net: {net > 0 ? '+' : ''}{net.toFixed(1)}h {netOk ? '✓ balanced' : '✗ must equal 0 to apply'}
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })()}
+                                  );
+                                })()}
+                              </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
