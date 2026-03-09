@@ -331,7 +331,7 @@ export function exportBudgetPacket(
   const ws: XLSX.WorkSheet = {};
 
   // Determine data source: use Budget Adjustments if available, otherwise raw aggregation
-  let laborData: Array<{ code: string; description: string; hours: number; dollars: number }>;
+  let laborData: Array<{ code: string; description: string; hours: number; dollars: number; rate?: number }>;
   let materialData: Array<{ code: string; description: string; amount: number }>;
   let totalLaborHours = 0;
   let totalLaborDollars = 0;
