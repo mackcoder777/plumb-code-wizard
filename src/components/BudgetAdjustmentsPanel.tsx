@@ -453,6 +453,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
   const lastCheckedIndexRef = useRef<number>(-1);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
+  const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
