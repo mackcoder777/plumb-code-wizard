@@ -969,8 +969,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setConsolidations({});
   };
 
-
-    onAdjustmentsChange({
+  useEffect(() => {
       jobsiteZipCode,
       taxRate: taxInfo.rate,
       taxJurisdiction: taxInfo.jurisdiction,
