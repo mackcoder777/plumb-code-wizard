@@ -930,15 +930,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     let result = { ...summary };
     savedMergesData.forEach(merge => {
       const head = merge.cost_head;
+      const sec = merge.sec_code;
       const matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
-        return parts.slice(2).join(' ') === head;
+        return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
       if (matchingKeys.length < 2) return;
       const group = matchingKeys.map(k => result[k]);
       const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
       const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
-      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
       const mergedCode = `${sec} ${merge.merged_act} ${head}`;
       matchingKeys.forEach(k => delete result[k]);
       result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
