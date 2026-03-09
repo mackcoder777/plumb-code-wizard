@@ -971,8 +971,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
-        const secTotal = parsed.filter(p => p.sec === sec).reduce((s, p) => s + (p.hours ?? 0), 0);
-        return { head, sec: sec!, lines, combinedHours, secTotal };
+        return { head, sec: sec!, lines, combinedHours };
       });
   }, [finalLaborSummary]);
 
@@ -2073,12 +2072,12 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                       <TableHead>Cost Head</TableHead>
                       <TableHead>Current Lines (hrs each)</TableHead>
                       <TableHead className="text-right">Combined Hrs</TableHead>
-                      <TableHead className="text-right">SEC Total</TableHead>
+                      
                       <TableHead>Will Become</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours, secTotal }) => {
+                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours }) => {
                       const mergeKey = `${sec}|${head}`;
                       const isSaved = savedMergeKeySet.has(mergeKey);
                       return (
@@ -2112,12 +2111,6 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                           </TableCell>
                           <TableCell className={`text-right font-mono font-semibold ${combinedHours < 8 ? 'text-destructive' : combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
                             {combinedHours.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            <span className={secTotal < 80 ? 'text-orange-400' : 'text-muted-foreground'}>
-                              {secTotal.toFixed(1)}
-                              {secTotal < 80 && <span className="ml-1 text-xs opacity-70">⚠ consider full SEC merge</span>}
-                            </span>
                           </TableCell>
                           <TableCell>
                             <span className="font-mono text-green-400">{sec} 0000 {head}</span>
