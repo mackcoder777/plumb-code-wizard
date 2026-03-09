@@ -470,6 +470,38 @@ export type Database = {
         }
         Relationships: []
       }
+      project_small_code_merges: {
+        Row: {
+          cost_head: string
+          created_at: string
+          id: string
+          merged_act: string
+          project_id: string
+        }
+        Insert: {
+          cost_head: string
+          created_at?: string
+          id?: string
+          merged_act?: string
+          project_id: string
+        }
+        Update: {
+          cost_head?: string
+          created_at?: string
+          id?: string
+          merged_act?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_small_code_merges_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_activity_mappings: {
         Row: {
           activity_code: string

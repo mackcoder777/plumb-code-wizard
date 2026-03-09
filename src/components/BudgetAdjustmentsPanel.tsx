@@ -12,8 +12,11 @@ import {
   Award,
   Calculator,
   Info,
-  DollarSign
+  DollarSign,
+  Undo2
 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Tooltip,
   TooltipContent,
@@ -447,6 +450,40 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
   const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
+
+  // Supabase: load saved merges for this project
+  const queryClient = useQueryClient();
+  const { data: savedMergesData } = useQuery({
+    queryKey: ['small-code-merges', projectId],
+    queryFn: async () => {
+      if (!projectId || projectId === 'default') return [];
+      const { data, error } = await supabase
+        .from('project_small_code_merges')
+        .select('*')
+        .eq('project_id', projectId);
+      if (error) { console.error('Failed to load saved merges:', error); return []; }
+      return data ?? [];
+    },
+    enabled: !!projectId && projectId !== 'default',
+  });
+
+  const saveMergeMutation = useMutation({
+    mutationFn: async (heads: string[]) => {
+      if (!projectId || projectId === 'default') return;
+      // Delete all existing merges for this project
+      await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
+      // Insert new ones
+      if (heads.length > 0) {
+        const { error } = await supabase.from('project_small_code_merges').insert(
+          heads.map(head => ({ project_id: projectId, cost_head: head, merged_act: '0000' }))
+        );
+        if (error) console.error('Failed to save merges:', error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+    },
+  });
 
   // Track previous projectId to detect changes
   const [prevProjectId, setPrevProjectId] = useState(projectId);
@@ -884,12 +921,36 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return { fabLrcnAmount, breakdown };
   }, [calculations.generatedFabCodes, fabRates, shopRate]);
 
-  // Small Code Consolidation Analysis
-  const smallCodeAnalysis = useMemo(() => {
+  // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
+  const finalLaborSummary = useMemo(() => {
     const summary = calculations.adjustedLaborSummary;
-    if (!summary || Object.keys(summary).length === 0) return [];
+    if (!summary || Object.keys(summary).length === 0) return summary;
+    if (!savedMergesData?.length) return summary;
+
+    let result = { ...summary };
+    savedMergesData.forEach(merge => {
+      const head = merge.cost_head;
+      const matchingKeys = Object.keys(result).filter(key => {
+        const parts = (result[key].code ?? '').trim().split(/\s+/);
+        return parts.slice(2).join(' ') === head;
+      });
+      if (matchingKeys.length < 2) return;
+      const group = matchingKeys.map(k => result[k]);
+      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
+      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
+      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
+      const mergedCode = `${sec} ${merge.merged_act} ${head}`;
+      matchingKeys.forEach(k => delete result[k]);
+      result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+    });
+    return result;
+  }, [calculations.adjustedLaborSummary, savedMergesData]);
+
+  // Small Code Consolidation Analysis — runs against finalLaborSummary
+  const smallCodeAnalysis = useMemo(() => {
+    if (!finalLaborSummary || Object.keys(finalLaborSummary).length === 0) return [];
     const SMALL_THRESHOLD = 8;
-    const entries = Object.values(summary);
+    const entries = Object.values(finalLaborSummary);
 
     const parsed = entries.map(item => {
       const parts = (item.code ?? '').trim().split(/\s+/);
@@ -914,64 +975,32 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         });
         return { head, lines, combinedHours, secTotals };
       });
-  }, [calculations.adjustedLaborSummary]);
+  }, [finalLaborSummary]);
+
+  // Already-saved cost heads for display
+  const savedHeadSet = useMemo(() => new Set(savedMergesData?.map(m => m.cost_head) ?? []), [savedMergesData]);
 
   const handleConsolidate = () => {
-    const summary = calculations.adjustedLaborSummary;
-    if (!summary) return;
-    let updated = { ...summary };
-    Object.entries(consolidations).forEach(([head, shouldMerge]) => {
-      if (!shouldMerge) return;
-      const matchingKeys = Object.keys(updated).filter(key => {
-        const parts = (updated[key].code ?? '').trim().split(/\s+/);
-        return parts.slice(2).join(' ') === head;
-      });
-      if (matchingKeys.length < 2) return;
-      const group = matchingKeys.map(k => updated[k]);
-      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
-      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
-      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
-      const mergedCode = `${sec} 0000 ${head}`;
-      matchingKeys.forEach(k => delete updated[k]);
-      updated[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
-    });
-    // Force recalculation by updating a state that feeds into calculations
-    // For now, trigger the onAdjustmentsChange with updated summary
-    onAdjustmentsChange({
-      jobsiteZipCode,
-      taxRate: taxInfo.rate,
-      taxJurisdiction: taxInfo.jurisdiction,
-      foremanBonusEnabled,
-      foremanBonusPercent,
-      foremanBonusHours: calculations.foremanBonusHours,
-      foremanBonusDollars: calculations.foremanBonusDollars,
-      fabricationConfigs,
-      fabricationSummary: calculations.fabricationSummary,
-      materialTaxOverrides,
-      materialTaxSummary: calculations.materialTaxSummary,
-      totalMaterialTax: calculations.totalMaterialTax,
-      adjustedLaborSummary: updated,
-      totalFieldHours: calculations.totalFieldHours,
-      totalFabHours: calculations.totalFabHours,
-      totalLaborDollars: Object.values(updated).reduce((s, i) => s + (i.dollars ?? 0), 0),
-      totalMaterialWithTax: calculations.totalMaterialWithTax,
-      totalMaterialPreTax: calculations.totalMaterialPreTax,
-      laborRateContingencyEnabled: lrcnEnabled,
-      bidRates,
-      budgetRate,
-      bidTotal: lrcnCalculations.bidTotal,
-      budgetTotal: lrcnCalculations.budgetTotal,
-      lrcnAmount: lrcnCalculations.lrcnAmount,
-      fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || 0, budgetRate: parseFloat(v.budgetRate) || 0 }])),
-      fabLrcnEnabled,
-      fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
-      computedBidLaborRate,
-      shopRate,
-    });
+    const headsToMerge = Object.entries(consolidations)
+      .filter(([, v]) => v).map(([k]) => k);
+    if (headsToMerge.length === 0) return;
+    const allHeads = [...new Set([
+      ...(savedMergesData?.map(m => m.cost_head) ?? []),
+      ...headsToMerge,
+    ])];
+    saveMergeMutation.mutate(allHeads);
     setConsolidations({});
   };
 
+  const handleUndoMerge = (head: string) => {
+    const remaining = (savedMergesData ?? [])
+      .map(m => m.cost_head)
+      .filter(h => h !== head);
+    saveMergeMutation.mutate(remaining);
+  };
+
   useEffect(() => {
+    const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
     onAdjustmentsChange({
       jobsiteZipCode,
       taxRate: taxInfo.rate,
@@ -985,28 +1014,25 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       materialTaxOverrides,
       materialTaxSummary: calculations.materialTaxSummary,
       totalMaterialTax: calculations.totalMaterialTax,
-      adjustedLaborSummary: calculations.adjustedLaborSummary,
+      adjustedLaborSummary: summary,
       totalFieldHours: calculations.totalFieldHours,
       totalFabHours: calculations.totalFabHours,
-      totalLaborDollars: calculations.totalLaborDollars,
+      totalLaborDollars: Object.values(summary).reduce((s, i) => s + (i.dollars ?? 0), 0),
       totalMaterialWithTax: calculations.totalMaterialWithTax,
       totalMaterialPreTax: calculations.totalMaterialPreTax,
-      // LRCN fields
       laborRateContingencyEnabled: lrcnEnabled,
       bidRates,
       budgetRate,
       bidTotal: lrcnCalculations.bidTotal,
       budgetTotal: lrcnCalculations.budgetTotal,
       lrcnAmount: lrcnCalculations.lrcnAmount,
-      // Fab LRCN fields
       fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || shopRate, budgetRate: parseFloat(v.budgetRate) || shopRate }])),
       fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
       fabLrcnEnabled,
-      // Computed rates
       computedBidLaborRate,
       shopRate,
     });
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange]);
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
@@ -1988,75 +2014,127 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
           </div>
 
           {/* Small Code Consolidation */}
-          {smallCodeAnalysis.length > 0 && (
+          {(smallCodeAnalysis.length > 0 || (savedMergesData?.length ?? 0) > 0) && (
             <div className="mt-8 rounded-xl border border-border bg-card p-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-orange-400 flex items-center gap-2">
                   ⚠️ Small Code Review
-                  <span className="text-xs font-normal text-muted-foreground">({smallCodeAnalysis.length} cost head{smallCodeAnalysis.length > 1 ? 's' : ''} flagged under 8 hrs)</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    ({smallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
+                  </span>
                 </h3>
                 <Button
                   onClick={handleConsolidate}
-                  disabled={!Object.values(consolidations).some(Boolean)}
+                  disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
                   size="sm"
                   className="bg-blue-600 text-white hover:bg-blue-500"
                 >
-                  ✔ Apply Selected Merges
+                  {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
               </p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8">Merge</TableHead>
-                    <TableHead>Cost Head</TableHead>
-                    <TableHead>Current Lines (hrs each)</TableHead>
-                    <TableHead className="text-right">Combined Hrs</TableHead>
-                    <TableHead className="text-right">SEC Total</TableHead>
-                    <TableHead>Will Become</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {smallCodeAnalysis.map(({ head, lines, combinedHours, secTotals }) => {
-                    const sec = (lines[0]?.code ?? '').trim().split(/\s+/)[0] ?? 'XX';
-                    const secTotal = Object.values(secTotals)[0] ?? 0;
-                    return (
-                      <TableRow key={head}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            checked={!!consolidations[head]}
-                            onChange={e => setConsolidations(prev => ({ ...prev, [head]: e.target.checked }))}
-                            className="w-4 h-4 accent-blue-500"
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono font-bold text-blue-400">{head}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {lines.map(l => (
-                              <span key={l.code} className={`px-1.5 py-0.5 rounded text-xs ${l.isSmall ? 'bg-orange-500/20 text-orange-300' : 'bg-muted text-muted-foreground'}`}>
-                                {l.code} ({(l.hours ?? 0).toFixed(1)}h)
-                              </span>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className={`text-right font-mono font-semibold ${combinedHours < 8 ? 'text-destructive' : combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
-                          {combinedHours.toFixed(1)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          <span className={secTotal < 80 ? 'text-orange-400' : 'text-muted-foreground'}>
-                            {secTotal.toFixed(1)}
-                            {secTotal < 80 && <span className="ml-1 text-xs opacity-70">⚠ consider full SEC merge</span>}
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-mono text-green-400">{sec} 0000 {head}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+
+              {/* Show saved merges that no longer appear in smallCodeAnalysis (already merged) */}
+              {savedMergesData && savedMergesData.length > 0 && (
+                <div className="mb-4 space-y-1">
+                  {savedMergesData
+                    .filter(m => !smallCodeAnalysis.some(s => s.head === m.cost_head))
+                    .map(m => (
+                      <div key={m.cost_head} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-green-500 font-medium">✓ Saved</span>
+                          <span className="font-mono font-bold text-blue-400">{m.cost_head}</span>
+                          <span className="text-muted-foreground">→ merged to {m.merged_act}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => handleUndoMerge(m.cost_head)}
+                        >
+                          <Undo2 className="h-3 w-3 mr-1" /> Undo
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {smallCodeAnalysis.length > 0 && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-8">Merge</TableHead>
+                      <TableHead>Cost Head</TableHead>
+                      <TableHead>Current Lines (hrs each)</TableHead>
+                      <TableHead className="text-right">Combined Hrs</TableHead>
+                      <TableHead className="text-right">SEC Total</TableHead>
+                      <TableHead>Will Become</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {smallCodeAnalysis.map(({ head, lines, combinedHours, secTotals }) => {
+                      const sec = (lines[0]?.code ?? '').trim().split(/\s+/)[0] ?? 'XX';
+                      const secTotal = Object.values(secTotals)[0] ?? 0;
+                      const isSaved = savedHeadSet.has(head);
+                      return (
+                        <TableRow key={head} className={isSaved ? 'opacity-50' : ''}>
+                          <TableCell>
+                            {isSaved ? (
+                              <div className="flex items-center gap-1">
+                                <input type="checkbox" checked disabled className="w-4 h-4 accent-green-500" />
+                              </div>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={!!consolidations[head]}
+                                onChange={e => setConsolidations(prev => ({ ...prev, [head]: e.target.checked }))}
+                                className="w-4 h-4 accent-blue-500"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono font-bold text-blue-400">
+                            {head}
+                            {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {lines.map(l => (
+                                <span key={l.code} className={`px-1.5 py-0.5 rounded text-xs ${l.isSmall ? 'bg-orange-500/20 text-orange-300' : 'bg-muted text-muted-foreground'}`}>
+                                  {l.code} ({(l.hours ?? 0).toFixed(1)}h)
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className={`text-right font-mono font-semibold ${combinedHours < 8 ? 'text-destructive' : combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
+                            {combinedHours.toFixed(1)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            <span className={secTotal < 80 ? 'text-orange-400' : 'text-muted-foreground'}>
+                              {secTotal.toFixed(1)}
+                              {secTotal < 80 && <span className="ml-1 text-xs opacity-70">⚠ consider full SEC merge</span>}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-green-400">{sec} 0000 {head}</span>
+                            {isSaved && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 px-1.5 ml-2 text-xs"
+                                onClick={() => handleUndoMerge(head)}
+                              >
+                                <Undo2 className="h-3 w-3 mr-1" /> Undo
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
             </div>
           )}
 
@@ -2065,7 +2143,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
           <div className="flex justify-between items-center text-xl">
             <span className="font-bold text-green-900 dark:text-green-100">GRAND TOTAL</span>
             <span className="font-mono font-bold text-green-900 dark:text-green-100">
-              ${((calculations.totalLaborDollars || 0) + (calculations.totalMaterialWithTax || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              ${((Object.values(finalLaborSummary ?? {}).reduce((s, i) => s + (i.dollars ?? 0), 0) || 0) + (calculations.totalMaterialWithTax || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
           </div>
         </CardContent>
