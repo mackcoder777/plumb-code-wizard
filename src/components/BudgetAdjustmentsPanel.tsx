@@ -445,8 +445,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   });
 
   useEffect(() => {
-    localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
-  }, [customFabCodes, projectId]);
+    if (projectId !== 'default' && projectId === prevProjectId) {
+      localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
+    }
+  }, [customFabCodes, projectId, prevProjectId]);
 
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
