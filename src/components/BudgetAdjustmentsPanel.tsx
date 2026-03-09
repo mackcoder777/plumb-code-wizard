@@ -451,6 +451,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
   const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
+  const lastCheckedIndexRef = useRef<number>(-1);
+  const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
