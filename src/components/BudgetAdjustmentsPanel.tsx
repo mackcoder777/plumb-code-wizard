@@ -976,25 +976,30 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       });
   }, [finalLaborSummary]);
 
-  // Already-saved cost heads for display
-  const savedHeadSet = useMemo(() => new Set(savedMergesData?.map(m => m.cost_head) ?? []), [savedMergesData]);
+  // Already-saved sec|head keys for display
+  const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
   const handleConsolidate = () => {
-    const headsToMerge = Object.entries(consolidations)
-      .filter(([, v]) => v).map(([k]) => k);
-    if (headsToMerge.length === 0) return;
-    const allHeads = [...new Set([
-      ...(savedMergesData?.map(m => m.cost_head) ?? []),
-      ...headsToMerge,
-    ])];
-    saveMergeMutation.mutate(allHeads);
+    // consolidations keys are "sec|head"
+    const newEntries = Object.entries(consolidations)
+      .filter(([, v]) => v)
+      .map(([key]) => {
+        const [sec, ...headParts] = key.split('|');
+        return { sec_code: sec!, cost_head: headParts.join('|') };
+      });
+    if (newEntries.length === 0) return;
+    const existingEntries = (savedMergesData ?? []).map(m => ({ sec_code: m.sec_code, cost_head: m.cost_head }));
+    // Deduplicate by sec_code+cost_head
+    const allMap = new Map<string, { sec_code: string; cost_head: string }>();
+    [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
+    saveMergeMutation.mutate([...allMap.values()]);
     setConsolidations({});
   };
 
-  const handleUndoMerge = (head: string) => {
+  const handleUndoMerge = (sec: string, head: string) => {
     const remaining = (savedMergesData ?? [])
-      .map(m => m.cost_head)
-      .filter(h => h !== head);
+      .filter(m => !(m.sec_code === sec && m.cost_head === head))
+      .map(m => ({ sec_code: m.sec_code, cost_head: m.cost_head }));
     saveMergeMutation.mutate(remaining);
   };
 
