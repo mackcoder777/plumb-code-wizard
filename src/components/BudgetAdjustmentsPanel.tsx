@@ -2112,12 +2112,6 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                           <TableCell className={`text-right font-mono font-semibold ${combinedHours < 8 ? 'text-destructive' : combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
                             {combinedHours.toFixed(1)}
                           </TableCell>
-                          <TableCell className="text-right font-mono">
-                            <span className={secTotal < 80 ? 'text-orange-400' : 'text-muted-foreground'}>
-                              {secTotal.toFixed(1)}
-                              {secTotal < 80 && <span className="ml-1 text-xs opacity-70">⚠ consider full SEC merge</span>}
-                            </span>
-                          </TableCell>
                           <TableCell>
                             <span className="font-mono text-green-400">{sec} 0000 {head}</span>
                             {isSaved && (
