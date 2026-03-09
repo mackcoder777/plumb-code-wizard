@@ -941,11 +941,32 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       const head = merge.cost_head;
       const sec = merge.sec_code;
       const reassignTo = (merge as any).reassign_to_head as string | null;
+      const redistAdj = (merge as any).redistribute_adjustments as Record<string, number> | null;
 
       const matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
         return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
+
+      // Redistribute: apply per-activity hour deltas
+      if (redistAdj && Object.keys(redistAdj).length > 0) {
+        Object.entries(redistAdj).forEach(([actCode, delta]) => {
+          if (!delta || delta === 0) return;
+          const fullCode = `${sec} ${actCode} ${head}`;
+          const matchKey = matchingKeys.find(k => (result[k].code ?? '').trim() === fullCode) ?? fullCode;
+          if (!result[matchKey]) return;
+          const rate = result[matchKey].hours > 0
+            ? result[matchKey].dollars / result[matchKey].hours
+            : 0;
+          result[matchKey] = {
+            ...result[matchKey],
+            hours: result[matchKey].hours + delta,
+            dollars: result[matchKey].dollars + delta * rate,
+          };
+          if (result[matchKey].hours <= 0.001) delete result[matchKey];
+        });
+        return; // do not fall through to merge/reassign logic
+      }
 
       if (reassignTo) {
         // Reassign: move hours/dollars to the target cost head in same SEC
