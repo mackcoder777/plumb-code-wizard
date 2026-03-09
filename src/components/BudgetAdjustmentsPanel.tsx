@@ -451,6 +451,40 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
   const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
 
+  // Supabase: load saved merges for this project
+  const queryClient = useQueryClient();
+  const { data: savedMergesData } = useQuery({
+    queryKey: ['small-code-merges', projectId],
+    queryFn: async () => {
+      if (!projectId || projectId === 'default') return [];
+      const { data, error } = await supabase
+        .from('project_small_code_merges')
+        .select('*')
+        .eq('project_id', projectId);
+      if (error) { console.error('Failed to load saved merges:', error); return []; }
+      return data ?? [];
+    },
+    enabled: !!projectId && projectId !== 'default',
+  });
+
+  const saveMergeMutation = useMutation({
+    mutationFn: async (heads: string[]) => {
+      if (!projectId || projectId === 'default') return;
+      // Delete all existing merges for this project
+      await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
+      // Insert new ones
+      if (heads.length > 0) {
+        const { error } = await supabase.from('project_small_code_merges').insert(
+          heads.map(head => ({ project_id: projectId, cost_head: head, merged_act: '0000' }))
+        );
+        if (error) console.error('Failed to save merges:', error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+    },
+  });
+
   // Track previous projectId to detect changes
   const [prevProjectId, setPrevProjectId] = useState(projectId);
 
