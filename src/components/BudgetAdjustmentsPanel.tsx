@@ -472,7 +472,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   });
 
   const saveMergeMutation = useMutation({
-    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string; reassign_to_head?: string | null }>) => {
+    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>) => {
       if (!projectId || projectId === 'default') return;
       await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
       if (entries.length > 0) {
@@ -483,6 +483,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
             sec_code: e.sec_code,
             merged_act: '0000',
             reassign_to_head: e.reassign_to_head ?? null,
+            redistribute_adjustments: e.redistribute_adjustments ?? null,
           }))
         );
         if (error) console.error('Failed to save merges:', error);
