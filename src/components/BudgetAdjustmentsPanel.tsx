@@ -1038,20 +1038,29 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
         const target = reassignTargets[key];
+        if (target === '__redistribute__') {
+          const adjustments = redistributeAdjustments[key] ?? {};
+          const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+          if (Math.abs(net) > 0.01) return null; // skip unbalanced
+          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: adjustments };
+        }
         const reassignTo = target && target !== '__merge__' ? target : null;
-        return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo };
-      });
+        return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null);
     if (newEntries.length === 0) return;
     const existingEntries = (savedMergesData ?? []).map(m => ({
       sec_code: m.sec_code,
       cost_head: m.cost_head,
       reassign_to_head: (m as any).reassign_to_head as string | null ?? null,
+      redistribute_adjustments: (m as any).redistribute_adjustments as Record<string, number> | null ?? null,
     }));
-    const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null }>();
+    const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>();
     [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
     saveMergeMutation.mutate([...allMap.values()]);
     setConsolidations({});
     setReassignTargets({});
+    setRedistributeAdjustments({});
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
