@@ -921,12 +921,36 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return { fabLrcnAmount, breakdown };
   }, [calculations.generatedFabCodes, fabRates, shopRate]);
 
-  // Small Code Consolidation Analysis
-  const smallCodeAnalysis = useMemo(() => {
+  // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
+  const finalLaborSummary = useMemo(() => {
     const summary = calculations.adjustedLaborSummary;
-    if (!summary || Object.keys(summary).length === 0) return [];
+    if (!summary || Object.keys(summary).length === 0) return summary;
+    if (!savedMergesData?.length) return summary;
+
+    let result = { ...summary };
+    savedMergesData.forEach(merge => {
+      const head = merge.cost_head;
+      const matchingKeys = Object.keys(result).filter(key => {
+        const parts = (result[key].code ?? '').trim().split(/\s+/);
+        return parts.slice(2).join(' ') === head;
+      });
+      if (matchingKeys.length < 2) return;
+      const group = matchingKeys.map(k => result[k]);
+      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
+      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
+      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
+      const mergedCode = `${sec} ${merge.merged_act} ${head}`;
+      matchingKeys.forEach(k => delete result[k]);
+      result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+    });
+    return result;
+  }, [calculations.adjustedLaborSummary, savedMergesData]);
+
+  // Small Code Consolidation Analysis — runs against finalLaborSummary
+  const smallCodeAnalysis = useMemo(() => {
+    if (!finalLaborSummary || Object.keys(finalLaborSummary).length === 0) return [];
     const SMALL_THRESHOLD = 8;
-    const entries = Object.values(summary);
+    const entries = Object.values(finalLaborSummary);
 
     const parsed = entries.map(item => {
       const parts = (item.code ?? '').trim().split(/\s+/);
@@ -951,64 +975,32 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         });
         return { head, lines, combinedHours, secTotals };
       });
-  }, [calculations.adjustedLaborSummary]);
+  }, [finalLaborSummary]);
+
+  // Already-saved cost heads for display
+  const savedHeadSet = useMemo(() => new Set(savedMergesData?.map(m => m.cost_head) ?? []), [savedMergesData]);
 
   const handleConsolidate = () => {
-    const summary = calculations.adjustedLaborSummary;
-    if (!summary) return;
-    let updated = { ...summary };
-    Object.entries(consolidations).forEach(([head, shouldMerge]) => {
-      if (!shouldMerge) return;
-      const matchingKeys = Object.keys(updated).filter(key => {
-        const parts = (updated[key].code ?? '').trim().split(/\s+/);
-        return parts.slice(2).join(' ') === head;
-      });
-      if (matchingKeys.length < 2) return;
-      const group = matchingKeys.map(k => updated[k]);
-      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
-      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
-      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
-      const mergedCode = `${sec} 0000 ${head}`;
-      matchingKeys.forEach(k => delete updated[k]);
-      updated[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
-    });
-    // Force recalculation by updating a state that feeds into calculations
-    // For now, trigger the onAdjustmentsChange with updated summary
-    onAdjustmentsChange({
-      jobsiteZipCode,
-      taxRate: taxInfo.rate,
-      taxJurisdiction: taxInfo.jurisdiction,
-      foremanBonusEnabled,
-      foremanBonusPercent,
-      foremanBonusHours: calculations.foremanBonusHours,
-      foremanBonusDollars: calculations.foremanBonusDollars,
-      fabricationConfigs,
-      fabricationSummary: calculations.fabricationSummary,
-      materialTaxOverrides,
-      materialTaxSummary: calculations.materialTaxSummary,
-      totalMaterialTax: calculations.totalMaterialTax,
-      adjustedLaborSummary: updated,
-      totalFieldHours: calculations.totalFieldHours,
-      totalFabHours: calculations.totalFabHours,
-      totalLaborDollars: Object.values(updated).reduce((s, i) => s + (i.dollars ?? 0), 0),
-      totalMaterialWithTax: calculations.totalMaterialWithTax,
-      totalMaterialPreTax: calculations.totalMaterialPreTax,
-      laborRateContingencyEnabled: lrcnEnabled,
-      bidRates,
-      budgetRate,
-      bidTotal: lrcnCalculations.bidTotal,
-      budgetTotal: lrcnCalculations.budgetTotal,
-      lrcnAmount: lrcnCalculations.lrcnAmount,
-      fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || 0, budgetRate: parseFloat(v.budgetRate) || 0 }])),
-      fabLrcnEnabled,
-      fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
-      computedBidLaborRate,
-      shopRate,
-    });
+    const headsToMerge = Object.entries(consolidations)
+      .filter(([, v]) => v).map(([k]) => k);
+    if (headsToMerge.length === 0) return;
+    const allHeads = [...new Set([
+      ...(savedMergesData?.map(m => m.cost_head) ?? []),
+      ...headsToMerge,
+    ])];
+    saveMergeMutation.mutate(allHeads);
     setConsolidations({});
   };
 
+  const handleUndoMerge = (head: string) => {
+    const remaining = (savedMergesData ?? [])
+      .map(m => m.cost_head)
+      .filter(h => h !== head);
+    saveMergeMutation.mutate(remaining);
+  };
+
   useEffect(() => {
+    const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
     onAdjustmentsChange({
       jobsiteZipCode,
       taxRate: taxInfo.rate,
@@ -1022,28 +1014,25 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       materialTaxOverrides,
       materialTaxSummary: calculations.materialTaxSummary,
       totalMaterialTax: calculations.totalMaterialTax,
-      adjustedLaborSummary: calculations.adjustedLaborSummary,
+      adjustedLaborSummary: summary,
       totalFieldHours: calculations.totalFieldHours,
       totalFabHours: calculations.totalFabHours,
-      totalLaborDollars: calculations.totalLaborDollars,
+      totalLaborDollars: Object.values(summary).reduce((s, i) => s + (i.dollars ?? 0), 0),
       totalMaterialWithTax: calculations.totalMaterialWithTax,
       totalMaterialPreTax: calculations.totalMaterialPreTax,
-      // LRCN fields
       laborRateContingencyEnabled: lrcnEnabled,
       bidRates,
       budgetRate,
       bidTotal: lrcnCalculations.bidTotal,
       budgetTotal: lrcnCalculations.budgetTotal,
       lrcnAmount: lrcnCalculations.lrcnAmount,
-      // Fab LRCN fields
       fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || shopRate, budgetRate: parseFloat(v.budgetRate) || shopRate }])),
       fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
       fabLrcnEnabled,
-      // Computed rates
       computedBidLaborRate,
       shopRate,
     });
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange]);
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
