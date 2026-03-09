@@ -1,0 +1,1 @@
+ALTER TABLE public.project_small_code_merges ADD COLUMN sec_code text NOT NULL DEFAULT '';

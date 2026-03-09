@@ -1,47 +1,77 @@
 
 
-## Bug: Small Code Consolidation Groups Across Different SECs
+# Smart Assign Preview Dialog
 
-**Problem**: The `smallCodeAnalysis` logic groups codes by cost head alone (`byHead[item.head]`), ignoring which SEC they belong to. This means `12 00L1 TRAP` and `14 00L2 TRAP` get lumped together and the UI shows they'll all merge into `12 0000 TRAP` — which is wrong.
+## Problem
 
-**Correct behavior**: Only codes with the **same SEC and same cost head** should be merge candidates. `12 00L1 TRAP` + `12 00L2 TRAP` → `12 0000 TRAP`. A TRAP code in SEC 14 is a separate group.
+When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
+- See WHICH items go to which code
+- Understand the high-level breakdown by description/size
+- Verify the assignments are correct before applying
 
----
+## What 9524 Covers (for reference)
 
-### Changes (all in `src/components/BudgetAdjustmentsPanel.tsx`)
+Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
 
-**1. Fix `smallCodeAnalysis` grouping key** (~line 960-965)
+In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
 
-Change the grouping from `byHead[item.head]` to `bySecHead[item.sec + ' ' + item.head]`, so codes are only grouped when they share both SEC and cost head.
+## Solution: Smart Assign Preview Dialog
 
-Update the return to include the `sec` in each group result so the UI knows which SEC the group belongs to.
+Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
 
-**2. Fix `finalLaborSummary` merge logic** (~line 920-940)
+### UI Design
 
-Same issue exists here — the merge application filters by cost head alone (`parts[2] === head`). This needs to also match on SEC. The saved merge record should store SEC or the merge logic should scope by SEC when applying.
+When you click "Smart Assign", a dialog opens with:
 
-**3. Fix `handleConsolidate` / saved merge data model**
+1. **Summary header** showing total items and code count
+2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
+3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
+4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
+5. **Confirm** and **Cancel** buttons at the bottom
 
-Currently `project_small_code_merges` only stores `cost_head`. To scope merges per-SEC, either:
-- Add a `sec_code` column to `project_small_code_merges` (preferred — precise)
-- Or store a composite key like `"12|TRAP"` in `cost_head`
+```text
++--------------------------------------------------+
+|  Smart Assign Preview                        [X]  |
+|                                                   |
+|  425 items will be assigned to 2 codes            |
+|                                                   |
+|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
+|  [Unmatched (0)]                                  |
+|                                                   |
+|  9525 - Plumbing Fixtures                         |
+|  +-----------+-------------------------+-----+    |
+|  | Qty       | Description             | $   |    |
+|  +-----------+-------------------------+-----+    |
+|  | 45        | Wall Lavatories          | 12k |    |
+|  | 32        | Urinal Wall Hung         | 8k  |    |
+|  | 28        | Water Closet             | 15k |    |
+|  | ...       | ...                      | ... |    |
+|  +-----------+-------------------------+-----+    |
+|                                                   |
+|            [Cancel]    [Apply All (425 items)]    |
++--------------------------------------------------+
+```
 
-I recommend adding a `sec_code` text column via migration and updating the query/mutation/merge logic to filter on both `sec_code` and `cost_head`.
+### Technical Changes
 
-**4. Update the UI table** (~line 2077)
+#### File: `src/components/tabs/MaterialMappingTab.tsx`
 
-The table key and display already derive SEC from the first line. After fix #1, each group is guaranteed to be single-SEC, so the "Will Become" column will be correct.
+1. **Add state** for the preview dialog:
+   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
+   - When not null, the dialog is open
 
----
+2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
 
-### Summary of edits
+3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
+   - Uses the existing `Dialog` component from shadcn
+   - `Tabs` component for switching between code groups
+   - Each tab aggregates items by description/size and shows counts + dollar totals
+   - A summary row at the bottom of each tab
+   - "Apply All" button calls the existing batch update logic
 
-| Location | What changes |
-|---|---|
-| DB migration | Add `sec_code` column to `project_small_code_merges` |
-| `smallCodeAnalysis` useMemo | Group by `sec+head` instead of `head` alone |
-| `finalLaborSummary` useMemo | Match on both `sec` and `cost_head` when applying saved merges |
-| `handleConsolidate` | Include SEC in saved merge records |
-| `handleUndoMerge` | Filter by both `sec_code` and `cost_head` |
-| Query/mutation | Read and write `sec_code` alongside `cost_head` |
+#### File: `src/hooks/useMaterialMappingPatterns.ts`
+
+4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+
+### No database changes needed.
 

@@ -477,6 +477,7 @@ export type Database = {
           id: string
           merged_act: string
           project_id: string
+          sec_code: string
         }
         Insert: {
           cost_head: string
@@ -484,6 +485,7 @@ export type Database = {
           id?: string
           merged_act?: string
           project_id: string
+          sec_code?: string
         }
         Update: {
           cost_head?: string
@@ -491,6 +493,7 @@ export type Database = {
           id?: string
           merged_act?: string
           project_id?: string
+          sec_code?: string
         }
         Relationships: [
           {

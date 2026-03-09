@@ -468,14 +468,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   });
 
   const saveMergeMutation = useMutation({
-    mutationFn: async (heads: string[]) => {
+    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string }>) => {
       if (!projectId || projectId === 'default') return;
       // Delete all existing merges for this project
       await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
       // Insert new ones
-      if (heads.length > 0) {
+      if (entries.length > 0) {
         const { error } = await supabase.from('project_small_code_merges').insert(
-          heads.map(head => ({ project_id: projectId, cost_head: head, merged_act: '0000' }))
+          entries.map(e => ({ project_id: projectId, cost_head: e.cost_head, sec_code: e.sec_code, merged_act: '0000' }))
         );
         if (error) console.error('Failed to save merges:', error);
       }
@@ -930,15 +930,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     let result = { ...summary };
     savedMergesData.forEach(merge => {
       const head = merge.cost_head;
+      const sec = merge.sec_code;
       const matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
-        return parts.slice(2).join(' ') === head;
+        return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
       if (matchingKeys.length < 2) return;
       const group = matchingKeys.map(k => result[k]);
       const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
       const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
-      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
       const mergedCode = `${sec} ${merge.merged_act} ${head}`;
       matchingKeys.forEach(k => delete result[k]);
       result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
@@ -957,45 +957,49 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < SMALL_THRESHOLD };
     });
 
-    const byHead: Record<string, typeof parsed> = {};
+    const bySecHead: Record<string, typeof parsed> = {};
     parsed.forEach(item => {
       if (!item.head) return;
-      if (!byHead[item.head]) byHead[item.head] = [];
-      byHead[item.head].push(item);
+      const key = `${item.sec}|${item.head}`;
+      if (!bySecHead[key]) bySecHead[key] = [];
+      bySecHead[key].push(item);
     });
 
-    return Object.entries(byHead)
+    return Object.entries(bySecHead)
       .filter(([, lines]) => lines.length > 1 && lines.some(l => l.isSmall))
-      .map(([head, lines]) => {
+      .map(([key, lines]) => {
+        const [sec, ...headParts] = key.split('|');
+        const head = headParts.join('|');
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
-        const secs = [...new Set(lines.map(l => l.sec))];
-        const secTotals: Record<string, number> = {};
-        secs.forEach(sec => {
-          secTotals[sec] = parsed.filter(p => p.sec === sec).reduce((s, p) => s + (p.hours ?? 0), 0);
-        });
-        return { head, lines, combinedHours, secTotals };
+        const secTotal = parsed.filter(p => p.sec === sec).reduce((s, p) => s + (p.hours ?? 0), 0);
+        return { head, sec: sec!, lines, combinedHours, secTotal };
       });
   }, [finalLaborSummary]);
 
-  // Already-saved cost heads for display
-  const savedHeadSet = useMemo(() => new Set(savedMergesData?.map(m => m.cost_head) ?? []), [savedMergesData]);
+  // Already-saved sec|head keys for display
+  const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
   const handleConsolidate = () => {
-    const headsToMerge = Object.entries(consolidations)
-      .filter(([, v]) => v).map(([k]) => k);
-    if (headsToMerge.length === 0) return;
-    const allHeads = [...new Set([
-      ...(savedMergesData?.map(m => m.cost_head) ?? []),
-      ...headsToMerge,
-    ])];
-    saveMergeMutation.mutate(allHeads);
+    // consolidations keys are "sec|head"
+    const newEntries = Object.entries(consolidations)
+      .filter(([, v]) => v)
+      .map(([key]) => {
+        const [sec, ...headParts] = key.split('|');
+        return { sec_code: sec!, cost_head: headParts.join('|') };
+      });
+    if (newEntries.length === 0) return;
+    const existingEntries = (savedMergesData ?? []).map(m => ({ sec_code: m.sec_code, cost_head: m.cost_head }));
+    // Deduplicate by sec_code+cost_head
+    const allMap = new Map<string, { sec_code: string; cost_head: string }>();
+    [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
+    saveMergeMutation.mutate([...allMap.values()]);
     setConsolidations({});
   };
 
-  const handleUndoMerge = (head: string) => {
+  const handleUndoMerge = (sec: string, head: string) => {
     const remaining = (savedMergesData ?? [])
-      .map(m => m.cost_head)
-      .filter(h => h !== head);
+      .filter(m => !(m.sec_code === sec && m.cost_head === head))
+      .map(m => ({ sec_code: m.sec_code, cost_head: m.cost_head }));
     saveMergeMutation.mutate(remaining);
   };
 
@@ -2040,19 +2044,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
               {savedMergesData && savedMergesData.length > 0 && (
                 <div className="mb-4 space-y-1">
                   {savedMergesData
-                    .filter(m => !smallCodeAnalysis.some(s => s.head === m.cost_head))
+                    .filter(m => !smallCodeAnalysis.some(s => s.sec === m.sec_code && s.head === m.cost_head))
                     .map(m => (
-                      <div key={m.cost_head} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
+                      <div key={`${m.sec_code}|${m.cost_head}`} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
                         <div className="flex items-center gap-2 text-xs">
                           <span className="text-green-500 font-medium">✓ Saved</span>
-                          <span className="font-mono font-bold text-blue-400">{m.cost_head}</span>
+                          <span className="font-mono font-bold text-blue-400">SEC {m.sec_code} — {m.cost_head}</span>
                           <span className="text-muted-foreground">→ merged to {m.merged_act}</span>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-6 px-2 text-xs"
-                          onClick={() => handleUndoMerge(m.cost_head)}
+                          onClick={() => handleUndoMerge(m.sec_code, m.cost_head)}
                         >
                           <Undo2 className="h-3 w-3 mr-1" /> Undo
                         </Button>
@@ -2074,12 +2078,11 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map(({ head, lines, combinedHours, secTotals }) => {
-                      const sec = (lines[0]?.code ?? '').trim().split(/\s+/)[0] ?? 'XX';
-                      const secTotal = Object.values(secTotals)[0] ?? 0;
-                      const isSaved = savedHeadSet.has(head);
+                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours, secTotal }) => {
+                      const mergeKey = `${sec}|${head}`;
+                      const isSaved = savedMergeKeySet.has(mergeKey);
                       return (
-                        <TableRow key={head} className={isSaved ? 'opacity-50' : ''}>
+                        <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
                           <TableCell>
                             {isSaved ? (
                               <div className="flex items-center gap-1">
@@ -2088,14 +2091,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                             ) : (
                               <input
                                 type="checkbox"
-                                checked={!!consolidations[head]}
-                                onChange={e => setConsolidations(prev => ({ ...prev, [head]: e.target.checked }))}
+                                checked={!!consolidations[mergeKey]}
+                                onChange={e => setConsolidations(prev => ({ ...prev, [mergeKey]: e.target.checked }))}
                                 className="w-4 h-4 accent-blue-500"
                               />
                             )}
                           </TableCell>
                           <TableCell className="font-mono font-bold text-blue-400">
-                            {head}
+                            SEC {sec} — {head}
                             {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
                           </TableCell>
                           <TableCell>
@@ -2123,7 +2126,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 variant="ghost"
                                 size="sm"
                                 className="h-5 px-1.5 ml-2 text-xs"
-                                onClick={() => handleUndoMerge(head)}
+                                onClick={() => handleUndoMerge(sec, head)}
                               >
                                 <Undo2 className="h-3 w-3 mr-1" /> Undo
                               </Button>
