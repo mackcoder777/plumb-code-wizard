@@ -1,0 +1,1 @@
+ALTER TABLE public.project_small_code_merges ADD COLUMN IF NOT EXISTS reassign_to_head text;
