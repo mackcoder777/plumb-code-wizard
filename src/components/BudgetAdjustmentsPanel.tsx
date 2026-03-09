@@ -884,7 +884,92 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     return { fabLrcnAmount, breakdown };
   }, [calculations.generatedFabCodes, fabRates, shopRate]);
 
-  useEffect(() => {
+  // Small Code Consolidation Analysis
+  const smallCodeAnalysis = useMemo(() => {
+    const summary = calculations.adjustedLaborSummary;
+    if (!summary || Object.keys(summary).length === 0) return [];
+    const SMALL_THRESHOLD = 8;
+    const entries = Object.values(summary);
+
+    const parsed = entries.map(item => {
+      const parts = (item.code ?? '').trim().split(/\s+/);
+      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < SMALL_THRESHOLD };
+    });
+
+    const byHead: Record<string, typeof parsed> = {};
+    parsed.forEach(item => {
+      if (!item.head) return;
+      if (!byHead[item.head]) byHead[item.head] = [];
+      byHead[item.head].push(item);
+    });
+
+    return Object.entries(byHead)
+      .filter(([, lines]) => lines.length > 1 && lines.some(l => l.isSmall))
+      .map(([head, lines]) => {
+        const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
+        const secs = [...new Set(lines.map(l => l.sec))];
+        const secTotals: Record<string, number> = {};
+        secs.forEach(sec => {
+          secTotals[sec] = parsed.filter(p => p.sec === sec).reduce((s, p) => s + (p.hours ?? 0), 0);
+        });
+        return { head, lines, combinedHours, secTotals };
+      });
+  }, [calculations.adjustedLaborSummary]);
+
+  const handleConsolidate = () => {
+    const summary = calculations.adjustedLaborSummary;
+    if (!summary) return;
+    let updated = { ...summary };
+    Object.entries(consolidations).forEach(([head, shouldMerge]) => {
+      if (!shouldMerge) return;
+      const matchingKeys = Object.keys(updated).filter(key => {
+        const parts = (updated[key].code ?? '').trim().split(/\s+/);
+        return parts.slice(2).join(' ') === head;
+      });
+      if (matchingKeys.length < 2) return;
+      const group = matchingKeys.map(k => updated[k]);
+      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
+      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
+      const sec = (group[0].code ?? '').trim().split(/\s+/)[0] ?? 'XX';
+      const mergedCode = `${sec} 0000 ${head}`;
+      matchingKeys.forEach(k => delete updated[k]);
+      updated[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+    });
+    // Force recalculation by updating a state that feeds into calculations
+    // For now, trigger the onAdjustmentsChange with updated summary
+    onAdjustmentsChange({
+      jobsiteZipCode,
+      taxRate: taxInfo.rate,
+      taxJurisdiction: taxInfo.jurisdiction,
+      foremanBonusEnabled,
+      foremanBonusPercent,
+      foremanBonusHours: calculations.foremanBonusHours,
+      foremanBonusDollars: calculations.foremanBonusDollars,
+      fabricationConfigs,
+      fabricationSummary: calculations.fabricationSummary,
+      materialTaxOverrides,
+      materialTaxSummary: calculations.materialTaxSummary,
+      totalMaterialTax: calculations.totalMaterialTax,
+      adjustedLaborSummary: updated,
+      totalFieldHours: calculations.totalFieldHours,
+      totalFabHours: calculations.totalFabHours,
+      totalLaborDollars: Object.values(updated).reduce((s, i) => s + (i.dollars ?? 0), 0),
+      totalMaterialWithTax: calculations.totalMaterialWithTax,
+      totalMaterialPreTax: calculations.totalMaterialPreTax,
+      laborRateContingencyEnabled: lrcnEnabled,
+      bidRates,
+      budgetRate,
+      bidTotal: lrcnCalculations.bidTotal,
+      budgetTotal: lrcnCalculations.budgetTotal,
+      lrcnAmount: lrcnCalculations.lrcnAmount,
+      fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || 0, budgetRate: parseFloat(v.budgetRate) || 0 }])),
+      fabLrcnEnabled,
+      fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
+    });
+    setConsolidations({});
+  };
+
+
     onAdjustmentsChange({
       jobsiteZipCode,
       taxRate: taxInfo.rate,
