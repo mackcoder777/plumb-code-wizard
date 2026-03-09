@@ -344,7 +344,8 @@ export function exportBudgetPacket(
         code: item.code,
         description: item.description,
         hours: item.hours,
-        dollars: item.dollars
+        dollars: item.dollars,
+        rate: item.rate
       }))
       .sort((a, b) => a.code.localeCompare(b.code));
 
