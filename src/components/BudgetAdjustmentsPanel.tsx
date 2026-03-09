@@ -2072,7 +2072,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                       <TableHead>Cost Head</TableHead>
                       <TableHead>Current Lines (hrs each)</TableHead>
                       <TableHead className="text-right">Combined Hrs</TableHead>
-                      <TableHead className="text-right">SEC Total</TableHead>
+                      
                       <TableHead>Will Become</TableHead>
                     </TableRow>
                   </TableHeader>
