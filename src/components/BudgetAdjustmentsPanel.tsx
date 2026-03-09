@@ -1001,7 +1001,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
-        return { head, sec: sec!, lines, combinedHours };
+        return { key, head, sec: sec!, lines, combinedHours };
       });
   }, [finalLaborSummary]);
 
