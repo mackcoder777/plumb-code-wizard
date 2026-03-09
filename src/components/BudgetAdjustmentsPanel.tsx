@@ -1987,6 +1987,79 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
             </div>
           </div>
 
+          {/* Small Code Consolidation */}
+          {smallCodeAnalysis.length > 0 && (
+            <div className="mt-8 rounded-xl border border-border bg-card p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-orange-400 flex items-center gap-2">
+                  ⚠️ Small Code Review
+                  <span className="text-xs font-normal text-muted-foreground">({smallCodeAnalysis.length} cost head{smallCodeAnalysis.length > 1 ? 's' : ''} flagged under 8 hrs)</span>
+                </h3>
+                <Button
+                  onClick={handleConsolidate}
+                  disabled={!Object.values(consolidations).some(Boolean)}
+                  size="sm"
+                  className="bg-blue-600 text-white hover:bg-blue-500"
+                >
+                  ✔ Apply Selected Merges
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">Merge</TableHead>
+                    <TableHead>Cost Head</TableHead>
+                    <TableHead>Current Lines (hrs each)</TableHead>
+                    <TableHead className="text-right">Combined Hrs</TableHead>
+                    <TableHead className="text-right">SEC Total</TableHead>
+                    <TableHead>Will Become</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {smallCodeAnalysis.map(({ head, lines, combinedHours, secTotals }) => {
+                    const sec = (lines[0]?.code ?? '').trim().split(/\s+/)[0] ?? 'XX';
+                    const secTotal = Object.values(secTotals)[0] ?? 0;
+                    return (
+                      <TableRow key={head}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={!!consolidations[head]}
+                            onChange={e => setConsolidations(prev => ({ ...prev, [head]: e.target.checked }))}
+                            className="w-4 h-4 accent-blue-500"
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono font-bold text-blue-400">{head}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {lines.map(l => (
+                              <span key={l.code} className={`px-1.5 py-0.5 rounded text-xs ${l.isSmall ? 'bg-orange-500/20 text-orange-300' : 'bg-muted text-muted-foreground'}`}>
+                                {l.code} ({(l.hours ?? 0).toFixed(1)}h)
+                              </span>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono font-semibold ${combinedHours < 8 ? 'text-destructive' : combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
+                          {combinedHours.toFixed(1)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <span className={secTotal < 80 ? 'text-orange-400' : 'text-muted-foreground'}>
+                            {secTotal.toFixed(1)}
+                            {secTotal < 80 && <span className="ml-1 text-xs opacity-70">⚠ consider full SEC merge</span>}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-green-400">{sec} 0000 {head}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
           <Separator className="my-4" />
 
           <div className="flex justify-between items-center text-xl">
