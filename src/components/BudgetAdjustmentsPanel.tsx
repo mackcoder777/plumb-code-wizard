@@ -965,6 +965,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       fabRates: Object.fromEntries(Object.entries(fabRates).map(([k, v]) => [k, { bidRate: parseFloat(v.bidRate) || 0, budgetRate: parseFloat(v.budgetRate) || 0 }])),
       fabLrcnEnabled,
       fabLrcnAmount: fabLrcnCalculations.fabLrcnAmount,
+      computedBidLaborRate,
+      shopRate,
     });
     setConsolidations({});
   };
