@@ -2077,7 +2077,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours, secTotal }) => {
+                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours }) => {
                       const mergeKey = `${sec}|${head}`;
                       const isSaved = savedMergeKeySet.has(mergeKey);
                       return (
