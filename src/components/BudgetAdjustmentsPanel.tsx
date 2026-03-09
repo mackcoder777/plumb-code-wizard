@@ -453,6 +453,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
   const lastCheckedIndexRef = useRef<number>(-1);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
+  const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -471,7 +472,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   });
 
   const saveMergeMutation = useMutation({
-    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string; reassign_to_head?: string | null }>) => {
+    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>) => {
       if (!projectId || projectId === 'default') return;
       await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
       if (entries.length > 0) {
@@ -482,6 +483,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
             sec_code: e.sec_code,
             merged_act: '0000',
             reassign_to_head: e.reassign_to_head ?? null,
+            redistribute_adjustments: e.redistribute_adjustments ?? null,
           }))
         );
         if (error) console.error('Failed to save merges:', error);
@@ -939,11 +941,32 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       const head = merge.cost_head;
       const sec = merge.sec_code;
       const reassignTo = (merge as any).reassign_to_head as string | null;
+      const redistAdj = (merge as any).redistribute_adjustments as Record<string, number> | null;
 
       const matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
         return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
+
+      // Redistribute: apply per-activity hour deltas
+      if (redistAdj && Object.keys(redistAdj).length > 0) {
+        Object.entries(redistAdj).forEach(([actCode, delta]) => {
+          if (!delta || delta === 0) return;
+          const fullCode = `${sec} ${actCode} ${head}`;
+          const matchKey = matchingKeys.find(k => (result[k].code ?? '').trim() === fullCode) ?? fullCode;
+          if (!result[matchKey]) return;
+          const rate = result[matchKey].hours > 0
+            ? result[matchKey].dollars / result[matchKey].hours
+            : 0;
+          result[matchKey] = {
+            ...result[matchKey],
+            hours: result[matchKey].hours + delta,
+            dollars: result[matchKey].dollars + delta * rate,
+          };
+          if (result[matchKey].hours <= 0.001) delete result[matchKey];
+        });
+        return; // do not fall through to merge/reassign logic
+      }
 
       if (reassignTo) {
         // Reassign: move hours/dollars to the target cost head in same SEC
@@ -1015,20 +1038,29 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
         const target = reassignTargets[key];
+        if (target === '__redistribute__') {
+          const adjustments = redistributeAdjustments[key] ?? {};
+          const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+          if (Math.abs(net) > 0.01) return null; // skip unbalanced
+          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: adjustments };
+        }
         const reassignTo = target && target !== '__merge__' ? target : null;
-        return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo };
-      });
+        return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null);
     if (newEntries.length === 0) return;
     const existingEntries = (savedMergesData ?? []).map(m => ({
       sec_code: m.sec_code,
       cost_head: m.cost_head,
       reassign_to_head: (m as any).reassign_to_head as string | null ?? null,
+      redistribute_adjustments: (m as any).redistribute_adjustments as Record<string, number> | null ?? null,
     }));
-    const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null }>();
+    const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>();
     [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
     saveMergeMutation.mutate([...allMap.values()]);
     setConsolidations({});
     setReassignTargets({});
+    setRedistributeAdjustments({});
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
@@ -2187,21 +2219,64 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                           </TableCell>
                           <TableCell>
                             {(consolidations[mergeKey] || isSaved) ? (
-                              <select
-                                className="text-xs bg-background border border-border rounded px-1 py-0.5"
-                                value={reassignTargets[mergeKey] ?? '__merge__'}
-                                onChange={(e) =>
-                                  setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
-                                }
-                                disabled={isSaved}
-                              >
-                                <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
-                                {sameSECHeads.map((p) => (
-                                  <option key={p.key} value={p.head}>
-                                    Reassign → {p.head}
-                                  </option>
-                                ))}
-                              </select>
+                              <div>
+                                <select
+                                  className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                  value={reassignTargets[mergeKey] ?? '__merge__'}
+                                  onChange={(e) =>
+                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
+                                  }
+                                  disabled={isSaved}
+                                >
+                                  <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
+                                  <option value="__redistribute__">Redistribute Hours</option>
+                                  {sameSECHeads.map((p) => (
+                                    <option key={p.key} value={p.head}>
+                                      Reassign → {p.head}
+                                    </option>
+                                  ))}
+                                </select>
+                                {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
+                                  const adjustments = redistributeAdjustments[mergeKey] ?? {};
+                                  const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+                                  const netOk = Math.abs(net) < 0.01;
+                                  return (
+                                    <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
+                                      {row.lines.map((line) => {
+                                        const delta = adjustments[line.code] ?? 0;
+                                        const result = line.hours + delta;
+                                        return (
+                                          <div key={line.code} className="flex items-center gap-1 text-xs">
+                                            <span className="font-mono w-36 truncate text-muted-foreground">{line.code}</span>
+                                            <span className="font-mono w-12 text-right text-foreground">{line.hours.toFixed(1)}h</span>
+                                            <span className="text-muted-foreground px-1">→</span>
+                                            <input
+                                              type="number"
+                                              step={0.5}
+                                              value={delta === 0 ? '' : delta}
+                                              placeholder="0"
+                                              onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                setRedistributeAdjustments((prev) => ({
+                                                  ...prev,
+                                                  [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
+                                                }));
+                                              }}
+                                              className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
+                                            />
+                                            <span className={`font-mono w-14 text-right ${result < 8 && result > 0 ? 'text-orange-400' : result <= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                              {result.toFixed(1)}h
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                      <div className={`text-xs font-semibold mt-1 ${netOk ? 'text-green-500' : 'text-red-400'}`}>
+                                        Net: {net > 0 ? '+' : ''}{net.toFixed(1)}h {netOk ? '✓ balanced' : '✗ must equal 0 to apply'}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
@@ -2223,7 +2298,29 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                   <Undo2 className="h-3 w-3 mr-1" /> Undo
                                 </Button>
                               </div>
-                            ) : consolidations[mergeKey] ? (
+                            ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
+                              const adjustments = redistributeAdjustments[mergeKey] ?? {};
+                              const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+                              if (Math.abs(net) > 0.01) {
+                                return <span className="text-red-400 text-xs">Unbalanced</span>;
+                              }
+                              const changed = row.lines.filter((l) => (adjustments[l.code] ?? 0) !== 0);
+                              if (changed.length === 0) return <span className="text-muted-foreground text-xs">No change</span>;
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  {changed.map((line) => {
+                                    const delta = adjustments[line.code] ?? 0;
+                                    return (
+                                      <div key={line.code} className="text-xs font-mono">
+                                        <span className={delta < 0 ? 'text-orange-400' : 'text-green-500'}>
+                                          {line.code}: {(line.hours + delta).toFixed(1)}h
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })() : consolidations[mergeKey] ? (
                               <span className="text-green-400">
                                 {reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
                                   ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
