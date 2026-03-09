@@ -477,6 +477,7 @@ export type Database = {
           id: string
           merged_act: string
           project_id: string
+          reassign_to_head: string | null
           sec_code: string
         }
         Insert: {
@@ -485,6 +486,7 @@ export type Database = {
           id?: string
           merged_act?: string
           project_id: string
+          reassign_to_head?: string | null
           sec_code?: string
         }
         Update: {
@@ -493,6 +495,7 @@ export type Database = {
           id?: string
           merged_act?: string
           project_id?: string
+          reassign_to_head?: string | null
           sec_code?: string
         }
         Relationships: [

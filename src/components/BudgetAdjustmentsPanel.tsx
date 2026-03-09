@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -450,6 +451,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
   const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
+  const lastCheckedIndexRef = useRef<number>(-1);
+  const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -468,14 +471,18 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   });
 
   const saveMergeMutation = useMutation({
-    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string }>) => {
+    mutationFn: async (entries: Array<{ sec_code: string; cost_head: string; reassign_to_head?: string | null }>) => {
       if (!projectId || projectId === 'default') return;
-      // Delete all existing merges for this project
       await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
-      // Insert new ones
       if (entries.length > 0) {
         const { error } = await supabase.from('project_small_code_merges').insert(
-          entries.map(e => ({ project_id: projectId, cost_head: e.cost_head, sec_code: e.sec_code, merged_act: '0000' }))
+          entries.map(e => ({
+            project_id: projectId,
+            cost_head: e.cost_head,
+            sec_code: e.sec_code,
+            merged_act: '0000',
+            reassign_to_head: e.reassign_to_head ?? null,
+          }))
         );
         if (error) console.error('Failed to save merges:', error);
       }
@@ -931,17 +938,40 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     savedMergesData.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
+      const reassignTo = (merge as any).reassign_to_head as string | null;
+
       const matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
         return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
-      if (matchingKeys.length < 2) return;
-      const group = matchingKeys.map(k => result[k]);
-      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
-      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
-      const mergedCode = `${sec} ${merge.merged_act} ${head}`;
-      matchingKeys.forEach(k => delete result[k]);
-      result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+
+      if (reassignTo) {
+        // Reassign: move hours/dollars to the target cost head in same SEC
+        const sourceHours = matchingKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
+        const sourceDollars = matchingKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
+        // Find target key in same SEC with the reassign_to_head cost head
+        const targetKey = Object.keys(result).find(key => {
+          const parts = (result[key].code ?? '').trim().split(/\s+/);
+          return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
+        });
+        if (targetKey && result[targetKey]) {
+          result[targetKey] = {
+            ...result[targetKey],
+            hours: result[targetKey].hours + sourceHours,
+            dollars: result[targetKey].dollars + sourceDollars,
+          };
+        }
+        matchingKeys.forEach(k => delete result[k]);
+      } else {
+        // Standard merge to 0000
+        if (matchingKeys.length < 2) return;
+        const group = matchingKeys.map(k => result[k]);
+        const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
+        const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
+        const mergedCode = `${sec} ${merge.merged_act} ${head}`;
+        matchingKeys.forEach(k => delete result[k]);
+        result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+      }
     });
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData]);
@@ -971,7 +1001,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
-        return { head, sec: sec!, lines, combinedHours };
+        return { key, head, sec: sec!, lines, combinedHours };
       });
   }, [finalLaborSummary]);
 
@@ -979,20 +1009,26 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
   const handleConsolidate = () => {
-    // consolidations keys are "sec|head"
     const newEntries = Object.entries(consolidations)
       .filter(([, v]) => v)
       .map(([key]) => {
         const [sec, ...headParts] = key.split('|');
-        return { sec_code: sec!, cost_head: headParts.join('|') };
+        const head = headParts.join('|');
+        const target = reassignTargets[key];
+        const reassignTo = target && target !== '__merge__' ? target : null;
+        return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo };
       });
     if (newEntries.length === 0) return;
-    const existingEntries = (savedMergesData ?? []).map(m => ({ sec_code: m.sec_code, cost_head: m.cost_head }));
-    // Deduplicate by sec_code+cost_head
-    const allMap = new Map<string, { sec_code: string; cost_head: string }>();
+    const existingEntries = (savedMergesData ?? []).map(m => ({
+      sec_code: m.sec_code,
+      cost_head: m.cost_head,
+      reassign_to_head: (m as any).reassign_to_head as string | null ?? null,
+    }));
+    const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null }>();
     [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
     saveMergeMutation.mutate([...allMap.values()]);
     setConsolidations({});
+    setReassignTargets({});
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
@@ -2068,61 +2104,133 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-8">Merge</TableHead>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={
+                            smallCodeAnalysis.length > 0 &&
+                            smallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
+                            smallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
+                          }
+                          onCheckedChange={(checked) => {
+                            const next: Record<string, boolean> = {};
+                            smallCodeAnalysis.forEach((row) => {
+                              if (!savedMergeKeySet.has(row.key)) {
+                                next[row.key] = !!checked;
+                              }
+                            });
+                            setConsolidations((prev) => ({ ...prev, ...next }));
+                          }}
+                        />
+                      </TableHead>
                       <TableHead>Cost Head</TableHead>
                       <TableHead>Current Lines (hrs each)</TableHead>
                       <TableHead className="text-right">Combined Hrs</TableHead>
-                      
-                      <TableHead>Will Become</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Result</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map(({ head, sec, lines, combinedHours }) => {
-                      const mergeKey = `${sec}|${head}`;
+                    {smallCodeAnalysis.map((row, rowIndex) => {
+                      const mergeKey = row.key;
                       const isSaved = savedMergeKeySet.has(mergeKey);
+                      const sameSECHeads = Object.keys(finalLaborSummary ?? {})
+                        .map((k) => {
+                          const parts = k.trim().split(/\s+/);
+                          return { key: k, sec: parts[0], act: parts[1], head: parts.slice(2).join(' ') };
+                        })
+                        .filter((p) => p.sec === row.sec && p.head !== row.head);
                       return (
                         <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
                           <TableCell>
                             {isSaved ? (
-                              <div className="flex items-center gap-1">
-                                <input type="checkbox" checked disabled className="w-4 h-4 accent-green-500" />
-                              </div>
+                              <Checkbox checked disabled />
                             ) : (
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={!!consolidations[mergeKey]}
-                                onChange={e => setConsolidations(prev => ({ ...prev, [mergeKey]: e.target.checked }))}
-                                className="w-4 h-4 accent-blue-500"
+                                onClick={(e) => {
+                                  const currentIndex = rowIndex;
+                                  const isShift = (e as React.MouseEvent).shiftKey;
+                                  if (isShift && lastCheckedIndexRef.current >= 0) {
+                                    const from = Math.min(lastCheckedIndexRef.current, currentIndex);
+                                    const to = Math.max(lastCheckedIndexRef.current, currentIndex);
+                                    const newValue = !consolidations[mergeKey];
+                                    const next: Record<string, boolean> = {};
+                                    for (let i = from; i <= to; i++) {
+                                      if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
+                                        next[smallCodeAnalysis[i].key] = newValue;
+                                      }
+                                    }
+                                    setConsolidations((prev) => ({ ...prev, ...next }));
+                                  } else {
+                                    setConsolidations((prev) => ({ ...prev, [mergeKey]: !prev[mergeKey] }));
+                                  }
+                                  lastCheckedIndexRef.current = currentIndex;
+                                }}
                               />
                             )}
                           </TableCell>
                           <TableCell className="font-mono font-bold text-blue-400">
-                            SEC {sec} — {head}
+                            SEC {row.sec} — {row.head}
                             {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
-                              {lines.map(l => (
+                              {row.lines.map(l => (
                                 <span key={l.code} className={`px-1.5 py-0.5 rounded text-xs ${l.isSmall ? 'bg-orange-500/20 text-orange-300' : 'bg-muted text-muted-foreground'}`}>
                                   {l.code} ({(l.hours ?? 0).toFixed(1)}h)
                                 </span>
                               ))}
                             </div>
                           </TableCell>
-                          <TableCell className={`text-right font-mono font-semibold ${combinedHours < 8 ? 'text-destructive' : combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
-                            {combinedHours.toFixed(1)}
+                          <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < 8 ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
+                            {row.combinedHours.toFixed(1)}
                           </TableCell>
                           <TableCell>
-                            <span className="font-mono text-green-400">{sec} 0000 {head}</span>
-                            {isSaved && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-5 px-1.5 ml-2 text-xs"
-                                onClick={() => handleUndoMerge(sec, head)}
+                            {(consolidations[mergeKey] || isSaved) ? (
+                              <select
+                                className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                value={reassignTargets[mergeKey] ?? '__merge__'}
+                                onChange={(e) =>
+                                  setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
+                                }
+                                disabled={isSaved}
                               >
-                                <Undo2 className="h-3 w-3 mr-1" /> Undo
-                              </Button>
+                                <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
+                                {sameSECHeads.map((p) => (
+                                  <option key={p.key} value={p.head}>
+                                    Reassign → {p.head}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {isSaved ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-green-400">
+                                  {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                    ? `→ ${row.sec} * ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
+                                    : `${row.sec} 0000 ${row.head}`}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-5 px-1.5 text-xs"
+                                  onClick={() => handleUndoMerge(row.sec, row.head)}
+                                >
+                                  <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                </Button>
+                              </div>
+                            ) : consolidations[mergeKey] ? (
+                              <span className="text-green-400">
+                                {reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
+                                  ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
+                                  : `${row.sec} 0000 ${row.head}`}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
                         </TableRow>
