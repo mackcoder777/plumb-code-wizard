@@ -2296,7 +2296,29 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                   <Undo2 className="h-3 w-3 mr-1" /> Undo
                                 </Button>
                               </div>
-                            ) : consolidations[mergeKey] ? (
+                            ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
+                              const adjustments = redistributeAdjustments[mergeKey] ?? {};
+                              const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+                              if (Math.abs(net) > 0.01) {
+                                return <span className="text-red-400 text-xs">Unbalanced</span>;
+                              }
+                              const changed = row.lines.filter((l) => (adjustments[l.code] ?? 0) !== 0);
+                              if (changed.length === 0) return <span className="text-muted-foreground text-xs">No change</span>;
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  {changed.map((line) => {
+                                    const delta = adjustments[line.code] ?? 0;
+                                    return (
+                                      <div key={line.code} className="text-xs font-mono">
+                                        <span className={delta < 0 ? 'text-orange-400' : 'text-green-500'}>
+                                          {line.code}: {(line.hours + delta).toFixed(1)}h
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })() : consolidations[mergeKey] ? (
                               <span className="text-green-400">
                                 {reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
                                   ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
