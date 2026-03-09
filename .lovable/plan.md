@@ -1,36 +1,77 @@
 
 
-## Fix: Custom Fab Codes Not Persisting Between Sessions
+# Smart Assign Preview Dialog
 
-### Root Cause
+## Problem
 
-The `customFabCodes` persist effect (line 447-449) has **two bugs**:
+When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
+- See WHICH items go to which code
+- Understand the high-level breakdown by description/size
+- Verify the assignments are correct before applying
 
-1. **Missing `'default'` guard** — Every other persist effect in this file checks `if (projectId !== 'default')` before writing to localStorage. The custom fab codes effect does not, so it writes stale/empty data under `budget_custom_fab_codes_default`.
+## What 9524 Covers (for reference)
 
-2. **Race condition on projectId change** — When `projectId` changes (e.g., from `'default'` to a real ID), this persist effect fires with the **old state** + **new projectId** before the reload effect (line 457) runs. This **overwrites** the previously saved custom fab codes for that project with empty data `{}`.
+Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
 
-This is the same pattern every other setting avoids by guarding with `projectId !== 'default'`, but that alone doesn't fully fix the race. A proper fix also needs to skip persisting during the reload transition.
+In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
 
-### Fix — `src/components/BudgetAdjustmentsPanel.tsx`
+## Solution: Smart Assign Preview Dialog
 
-**Lines 447-449**: Replace the unguarded persist effect with one that matches the pattern used by all other settings, plus add a transition guard:
+Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
 
-```typescript
-useEffect(() => {
-  if (projectId !== 'default' && projectId === prevProjectId) {
-    localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
-  }
-}, [customFabCodes, projectId, prevProjectId]);
+### UI Design
+
+When you click "Smart Assign", a dialog opens with:
+
+1. **Summary header** showing total items and code count
+2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
+3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
+4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
+5. **Confirm** and **Cancel** buttons at the bottom
+
+```text
++--------------------------------------------------+
+|  Smart Assign Preview                        [X]  |
+|                                                   |
+|  425 items will be assigned to 2 codes            |
+|                                                   |
+|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
+|  [Unmatched (0)]                                  |
+|                                                   |
+|  9525 - Plumbing Fixtures                         |
+|  +-----------+-------------------------+-----+    |
+|  | Qty       | Description             | $   |    |
+|  +-----------+-------------------------+-----+    |
+|  | 45        | Wall Lavatories          | 12k |    |
+|  | 32        | Urinal Wall Hung         | 8k  |    |
+|  | 28        | Water Closet             | 15k |    |
+|  | ...       | ...                      | ... |    |
+|  +-----------+-------------------------+-----+    |
+|                                                   |
+|            [Cancel]    [Apply All (425 items)]    |
++--------------------------------------------------+
 ```
 
-The `projectId === prevProjectId` check ensures we only persist when the user actually changes custom fab codes — not when the projectId itself is transitioning (which is when the reload effect is about to restore the correct saved values).
+### Technical Changes
 
-### Why This Works
-- On initial mount with `projectId = 'default'`: skipped (guard)
-- When projectId transitions from 'default' to real ID: skipped (`projectId !== prevProjectId`), so the reload effect restores saved data without it being overwritten
-- When user adds a custom code (projectId stable): persists normally
+#### File: `src/components/tabs/MaterialMappingTab.tsx`
 
-### Single file change
-- `src/components/BudgetAdjustmentsPanel.tsx` — lines 447-449 only
+1. **Add state** for the preview dialog:
+   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
+   - When not null, the dialog is open
+
+2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
+
+3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
+   - Uses the existing `Dialog` component from shadcn
+   - `Tabs` component for switching between code groups
+   - Each tab aggregates items by description/size and shows counts + dollar totals
+   - A summary row at the bottom of each tab
+   - "Apply All" button calls the existing batch update logic
+
+#### File: `src/hooks/useMaterialMappingPatterns.ts`
+
+4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+
+### No database changes needed.
 

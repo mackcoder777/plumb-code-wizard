@@ -444,14 +444,16 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     } catch { return {}; }
   });
 
-  useEffect(() => {
-    localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
-  }, [customFabCodes, projectId]);
-
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
   // Track previous projectId to detect changes
   const [prevProjectId, setPrevProjectId] = useState(projectId);
+
+  useEffect(() => {
+    if (projectId !== 'default' && projectId === prevProjectId) {
+      localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
+    }
+  }, [customFabCodes, projectId, prevProjectId]);
 
   // Re-load all settings when projectId changes (e.g., from 'default' to actual project ID)
   useEffect(() => {
