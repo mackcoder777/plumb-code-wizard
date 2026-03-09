@@ -957,23 +957,22 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < SMALL_THRESHOLD };
     });
 
-    const byHead: Record<string, typeof parsed> = {};
+    const bySecHead: Record<string, typeof parsed> = {};
     parsed.forEach(item => {
       if (!item.head) return;
-      if (!byHead[item.head]) byHead[item.head] = [];
-      byHead[item.head].push(item);
+      const key = `${item.sec}|${item.head}`;
+      if (!bySecHead[key]) bySecHead[key] = [];
+      bySecHead[key].push(item);
     });
 
-    return Object.entries(byHead)
+    return Object.entries(bySecHead)
       .filter(([, lines]) => lines.length > 1 && lines.some(l => l.isSmall))
-      .map(([head, lines]) => {
+      .map(([key, lines]) => {
+        const [sec, ...headParts] = key.split('|');
+        const head = headParts.join('|');
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
-        const secs = [...new Set(lines.map(l => l.sec))];
-        const secTotals: Record<string, number> = {};
-        secs.forEach(sec => {
-          secTotals[sec] = parsed.filter(p => p.sec === sec).reduce((s, p) => s + (p.hours ?? 0), 0);
-        });
-        return { head, lines, combinedHours, secTotals };
+        const secTotal = parsed.filter(p => p.sec === sec).reduce((s, p) => s + (p.hours ?? 0), 0);
+        return { head, sec: sec!, lines, combinedHours, secTotal };
       });
   }, [finalLaborSummary]);
 
