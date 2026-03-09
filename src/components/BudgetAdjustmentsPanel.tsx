@@ -2044,19 +2044,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
               {savedMergesData && savedMergesData.length > 0 && (
                 <div className="mb-4 space-y-1">
                   {savedMergesData
-                    .filter(m => !smallCodeAnalysis.some(s => s.head === m.cost_head))
+                    .filter(m => !smallCodeAnalysis.some(s => s.sec === m.sec_code && s.head === m.cost_head))
                     .map(m => (
-                      <div key={m.cost_head} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
+                      <div key={`${m.sec_code}|${m.cost_head}`} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
                         <div className="flex items-center gap-2 text-xs">
                           <span className="text-green-500 font-medium">✓ Saved</span>
-                          <span className="font-mono font-bold text-blue-400">{m.cost_head}</span>
+                          <span className="font-mono font-bold text-blue-400">SEC {m.sec_code} — {m.cost_head}</span>
                           <span className="text-muted-foreground">→ merged to {m.merged_act}</span>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-6 px-2 text-xs"
-                          onClick={() => handleUndoMerge(m.cost_head)}
+                          onClick={() => handleUndoMerge(m.sec_code, m.cost_head)}
                         >
                           <Undo2 className="h-3 w-3 mr-1" /> Undo
                         </Button>
