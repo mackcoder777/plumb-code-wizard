@@ -938,17 +938,40 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     savedMergesData.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
+      const reassignTo = (merge as any).reassign_to_head as string | null;
+
       const matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
         return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
-      if (matchingKeys.length < 2) return;
-      const group = matchingKeys.map(k => result[k]);
-      const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
-      const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
-      const mergedCode = `${sec} ${merge.merged_act} ${head}`;
-      matchingKeys.forEach(k => delete result[k]);
-      result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+
+      if (reassignTo) {
+        // Reassign: move hours/dollars to the target cost head in same SEC
+        const sourceHours = matchingKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
+        const sourceDollars = matchingKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
+        // Find target key in same SEC with the reassign_to_head cost head
+        const targetKey = Object.keys(result).find(key => {
+          const parts = (result[key].code ?? '').trim().split(/\s+/);
+          return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
+        });
+        if (targetKey && result[targetKey]) {
+          result[targetKey] = {
+            ...result[targetKey],
+            hours: result[targetKey].hours + sourceHours,
+            dollars: result[targetKey].dollars + sourceDollars,
+          };
+        }
+        matchingKeys.forEach(k => delete result[k]);
+      } else {
+        // Standard merge to 0000
+        if (matchingKeys.length < 2) return;
+        const group = matchingKeys.map(k => result[k]);
+        const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
+        const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
+        const mergedCode = `${sec} ${merge.merged_act} ${head}`;
+        matchingKeys.forEach(k => delete result[k]);
+        result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+      }
     });
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData]);
