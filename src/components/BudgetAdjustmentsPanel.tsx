@@ -2358,26 +2358,29 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 </Button>
                               </div>
                             ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
-                              const adjustments = redistributeAdjustments[mergeKey] ?? {};
-                              const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
-                              if (Math.abs(net) > 0.01) {
-                                return <span className="text-red-400 text-xs">Unbalanced</span>;
+                              const targets = redistributeAdjustments[mergeKey] ?? {};
+                              const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                              const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
+                              if (Math.abs(netDelta) > 0.01) {
+                                return <span className="text-amber-400 text-xs">Adjust to balance</span>;
                               }
-                              const changed = row.lines.filter((l) => (adjustments[l.code] ?? 0) !== 0);
+                              const changed = row.lines.filter(l => Math.abs(getTarget(l) - l.hours) > 0.01);
                               if (changed.length === 0) return <span className="text-muted-foreground text-xs">No change</span>;
                               return (
                                 <div className="flex flex-col gap-0.5">
                                   {changed.map((line) => {
-                                    const delta = adjustments[line.code] ?? 0;
+                                    const target = getTarget(line);
                                     return (
                                       <div key={line.code} className="text-xs font-mono">
-                                        <span className={delta < 0 ? 'text-orange-400' : 'text-green-500'}>
-                                          {line.code}: {(line.hours + delta).toFixed(1)}h
+                                        <span className="text-green-500">
+                                          {line.code}: {target.toFixed(1)}h
                                         </span>
                                       </div>
                                     );
                                   })}
                                 </div>
+                              );
+                            })()
                               );
                             })() : consolidations[mergeKey] ? (
                               <span className="text-green-400">
