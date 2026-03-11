@@ -2237,14 +2237,42 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                   ))}
                                 </select>
                                 {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
-                                  const adjustments = redistributeAdjustments[mergeKey] ?? {};
-                                  const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
-                                  const netOk = Math.abs(net) < 0.01;
+                                  const targets = redistributeAdjustments[mergeKey] ?? {};
+                                  // If no targets set yet, initialize to current hours
+                                  const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                                  const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
+                                  const isBalanced = Math.abs(netDelta) < 0.01;
+                                  const MIN_HOURS = 8;
+
+                                  const handleAutoRebalance = () => {
+                                    const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
+                                    const donors = row.lines.filter(l => l.hours > MIN_HOURS);
+                                    const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
+                                    const newTargets: Record<string, number> = {};
+                                    if (totalExcess <= 0) {
+                                      // Can't rebalance, just set everything to current
+                                      row.lines.forEach(l => { newTargets[l.code] = l.hours; });
+                                    } else {
+                                      const actualDeficit = Math.min(deficit, totalExcess);
+                                      row.lines.forEach(l => {
+                                        if (l.hours < MIN_HOURS) {
+                                          const need = MIN_HOURS - l.hours;
+                                          newTargets[l.code] = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                        } else {
+                                          const excess = l.hours - MIN_HOURS;
+                                          const contribution = actualDeficit * (excess / totalExcess);
+                                          newTargets[l.code] = l.hours - contribution;
+                                        }
+                                      });
+                                    }
+                                    setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
+                                  };
+
                                   return (
                                     <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
                                       {row.lines.map((line) => {
-                                        const delta = adjustments[line.code] ?? 0;
-                                        const result = line.hours + delta;
+                                        const target = getTarget(line);
+                                        const delta = target - line.hours;
                                         return (
                                           <div key={line.code} className="flex items-center gap-1 text-xs">
                                             <span className="font-mono w-36 truncate text-muted-foreground">{line.code}</span>
@@ -2253,10 +2281,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                             <input
                                               type="number"
                                               step={0.5}
-                                              value={delta === 0 ? '' : delta}
-                                              placeholder="0"
+                                              value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(1))}
+                                              placeholder={line.hours.toFixed(1)}
                                               onChange={(e) => {
-                                                const val = parseFloat(e.target.value) || 0;
+                                                const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
                                                 setRedistributeAdjustments((prev) => ({
                                                   ...prev,
                                                   [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
@@ -2264,15 +2292,37 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                               }}
                                               className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
                                             />
-                                            <span className={`font-mono w-14 text-right ${result < 8 && result > 0 ? 'text-orange-400' : result <= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                              {result.toFixed(1)}h
+                                            <span className={`font-mono w-20 text-right text-muted-foreground`}>
+                                              ({delta > 0 ? '+' : ''}{delta.toFixed(1)}h)
                                             </span>
                                           </div>
                                         );
                                       })}
-                                      <div className={`text-xs font-semibold mt-1 ${netOk ? 'text-green-500' : 'text-red-400'}`}>
-                                        Net: {net > 0 ? '+' : ''}{net.toFixed(1)}h {netOk ? '✓ balanced' : '✗ must equal 0 to apply'}
+                                      <div className="flex items-center gap-2 mt-1">
+                                        {isBalanced ? (
+                                          <span className="text-xs font-semibold text-green-500">✓ Balanced</span>
+                                        ) : netDelta > 0 ? (
+                                          <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(1)}h over — reduce some lines</span>
+                                        ) : (
+                                          <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(1)}h under — increase some lines</span>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={handleAutoRebalance}
+                                          className="text-xs text-primary hover:underline font-medium ml-auto"
+                                        >
+                                          Auto-Rebalance
+                                        </button>
                                       </div>
+                                      {row.lines.some(l => l.hours < MIN_HOURS) && (() => {
+                                        const donors = row.lines.filter(l => l.hours > MIN_HOURS);
+                                        const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
+                                        const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
+                                        if (totalExcess < deficit) {
+                                          return <span className="text-xs text-amber-400 mt-0.5">⚠ Not enough excess hours for full rebalance</span>;
+                                        }
+                                        return null;
+                                      })()}
                                     </div>
                                   );
                                 })()}
