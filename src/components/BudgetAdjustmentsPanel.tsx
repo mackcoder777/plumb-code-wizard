@@ -942,7 +942,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, computedBidLaborRate, shopRate, fabCodeMap, fabRates]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
