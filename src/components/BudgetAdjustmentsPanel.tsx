@@ -637,10 +637,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
   // LRCN persistence
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_lrcn_enabled_${projectId}`, lrcnEnabled.toString());
     }
-  }, [lrcnEnabled, projectId]);
+  }, [lrcnEnabled, projectId, prevProjectId]);
 
   useEffect(() => {
     if (projectId !== 'default') {
