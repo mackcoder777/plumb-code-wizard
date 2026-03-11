@@ -460,6 +460,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
 const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
   const lastCheckedIndexRef = useRef<number>(-1);
+  const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
@@ -2331,26 +2332,29 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                               <Checkbox
                                 checked={!!consolidations[mergeKey]}
                                 onClick={(e) => {
+                                  shiftKeyRef.current = (e as React.MouseEvent).shiftKey;
+                                }}
+                                onCheckedChange={(checked) => {
                                   const currentIndex = rowIndex;
-                                   const isShift = (e as React.MouseEvent).shiftKey;
-                                   if (isShift && lastCheckedIndexRef.current >= 0) {
-                                     const from = Math.min(lastCheckedIndexRef.current, currentIndex);
-                                     const to = Math.max(lastCheckedIndexRef.current, currentIndex);
-                                     const newValue = !consolidations[mergeKey];
-                                     const next: Record<string, boolean> = {};
-                                     for (let i = from; i <= to; i++) {
-                                       if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
-                                         next[smallCodeAnalysis[i].key] = newValue;
-                                         if (newValue) autoInitRow(smallCodeAnalysis[i].key);
-                                       }
-                                     }
-                                     setConsolidations((prev) => ({ ...prev, ...next }));
-                                   } else {
-                                     const newValue = !consolidations[mergeKey];
-                                     setConsolidations((prev) => ({ ...prev, [mergeKey]: newValue }));
-                                     if (newValue) autoInitRow(mergeKey);
-                                   }
-                                   lastCheckedIndexRef.current = currentIndex;
+                                  const isShift = shiftKeyRef.current;
+                                  shiftKeyRef.current = false;
+                                  
+                                  if (isShift && lastCheckedIndexRef.current >= 0) {
+                                    const from = Math.min(lastCheckedIndexRef.current, currentIndex);
+                                    const to = Math.max(lastCheckedIndexRef.current, currentIndex);
+                                    const next: Record<string, boolean> = {};
+                                    for (let i = from; i <= to; i++) {
+                                      if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
+                                        next[smallCodeAnalysis[i].key] = !!checked;
+                                        if (checked) autoInitRow(smallCodeAnalysis[i].key);
+                                      }
+                                    }
+                                    setConsolidations((prev) => ({ ...prev, ...next }));
+                                  } else {
+                                    setConsolidations((prev) => ({ ...prev, [mergeKey]: !!checked }));
+                                    if (checked) autoInitRow(mergeKey);
+                                  }
+                                  lastCheckedIndexRef.current = currentIndex;
                                 }}
                               />
                             )}
