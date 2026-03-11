@@ -2393,13 +2393,18 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                   }}
                                   disabled={isSaved}
                                 >
-                                  <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
-                                  <option value="__redistribute__">Redistribute Hours</option>
+                                  {row.lines.length > 1 && (
+                                    <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
+                                  )}
+                                  {row.lines.length > 1 && (
+                                    <option value="__redistribute__">Redistribute Hours</option>
+                                  )}
                                   {sameSECHeads.map((p) => (
                                     <option key={p.key} value={p.head}>
                                       Reassign → {p.head}
                                     </option>
                                   ))}
+                                  <option value="__keep__">Keep as-is</option>
                                 </select>
                                 {/* Auto-reason label */}
                                 {consolidations[mergeKey] && !manuallyOverridden.has(mergeKey) && (() => {
