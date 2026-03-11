@@ -842,8 +842,8 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
           code,
           description: data.description,
           hours: fieldHours,
-          rate: data.rate || computedBidLaborRate,
-          dollars: fieldHours * (data.rate || computedBidLaborRate),
+          rate: budgetRate,
+          dollars: fieldHours * budgetRate,
           type: 'field'
         };
 
