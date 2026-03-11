@@ -307,6 +307,13 @@ export interface BudgetAdjustments {
   // Computed rates
   computedBidLaborRate: number;
   shopRate: number;
+  savedMerges?: Array<{
+    sec_code: string;
+    cost_head: string;
+    reassign_to_head?: string | null;
+    redistribute_adjustments?: Record<string, number> | null;
+    merged_act: string;
+  }>;
 }
 
 interface BudgetAdjustmentsPanelProps {
@@ -1146,8 +1153,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       fabLrcnEnabled,
       computedBidLaborRate,
       shopRate,
+      savedMerges: savedMergesData?.map(m => ({
+        sec_code: m.sec_code,
+        cost_head: m.cost_head,
+        reassign_to_head: m.reassign_to_head,
+        redistribute_adjustments: m.redistribute_adjustments as Record<string, number> | null,
+        merged_act: m.merged_act,
+      })) ?? [],
     });
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary]);
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary, savedMergesData]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
