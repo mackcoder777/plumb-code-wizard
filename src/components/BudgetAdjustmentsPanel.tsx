@@ -1126,7 +1126,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
       // Set the reassign target to 0000 merge (same pattern as a normal merge)
       setReassignTargets((prev) => {
         if (prev[row.key]) return prev;
-        return { ...prev, [row.key]: row.willBecome ?? '__merge__' };
+        return { ...prev, [row.key]: '__merge__' };
       });
     });
   }, [orphanedRows]);
