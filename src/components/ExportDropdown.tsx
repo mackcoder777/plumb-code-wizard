@@ -60,7 +60,8 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   const hasAdjustments = budgetAdjustments && (
     budgetAdjustments.totalMaterialTax > 0 ||
     budgetAdjustments.foremanBonusHours > 0 ||
-    (budgetAdjustments.fabricationSummary && budgetAdjustments.fabricationSummary.length > 0)
+    (budgetAdjustments.fabricationSummary && budgetAdjustments.fabricationSummary.length > 0) ||
+    Object.keys(budgetAdjustments.adjustedLaborSummary || {}).length > 0
   );
 
   const foremanBonusDollars = (budgetAdjustments?.foremanBonusHours || 0) * laborRate;
