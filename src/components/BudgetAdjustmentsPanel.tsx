@@ -630,10 +630,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   }, [fabricationConfigs, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
     }
-  }, [materialTaxOverrides, projectId]);
+  }, [materialTaxOverrides, projectId, prevProjectId]);
 
   // LRCN persistence
   useEffect(() => {
