@@ -612,10 +612,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   }, [customTaxRate, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_foreman_enabled_${projectId}`, foremanBonusEnabled.toString());
     }
-  }, [foremanBonusEnabled, projectId]);
+  }, [foremanBonusEnabled, projectId, prevProjectId]);
 
   useEffect(() => {
     if (projectId !== 'default') {
