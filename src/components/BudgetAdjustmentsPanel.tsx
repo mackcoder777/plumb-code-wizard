@@ -812,7 +812,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     const foremanBonusHours = foremanBonusEnabled 
       ? originalTotalHours * (foremanBonusPercent / 100) 
       : 0;
-    const foremanBonusDollars = foremanBonusHours * budgetRate;
+    const foremanBonusDollars = foremanBonusHours * computedBidLaborRate;
 
     const hoursAfterForemanStrip = originalTotalHours - foremanBonusHours;
     const foremanStripRatio = originalTotalHours > 0 ? hoursAfterForemanStrip / originalTotalHours : 1;
@@ -943,7 +943,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
@@ -1371,7 +1371,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                 <div>
                   <div className="text-amber-700 dark:text-amber-300 text-sm">Rate</div>
                   <div className="font-mono font-bold text-amber-900 dark:text-amber-100 text-xl">
-                    ${bidLaborRate.toFixed(2)}
+                    ${computedBidLaborRate.toFixed(2)}
                   </div>
                 </div>
                 <div>
