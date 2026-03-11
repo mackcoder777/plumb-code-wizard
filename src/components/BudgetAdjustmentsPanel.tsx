@@ -594,86 +594,86 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     }
   }, [projectId, prevProjectId]);
 
-  // Persist settings to localStorage - only save if projectId is not 'default'
+  // Persist settings to localStorage - only save if projectId is not 'default' and stable
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
     }
-  }, [jobsiteZipCode, projectId]);
+  }, [jobsiteZipCode, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       if (customTaxRate !== null) {
         localStorage.setItem(`budget_taxrate_${projectId}`, customTaxRate.toString());
       } else {
         localStorage.removeItem(`budget_taxrate_${projectId}`);
       }
     }
-  }, [customTaxRate, projectId]);
+  }, [customTaxRate, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_foreman_enabled_${projectId}`, foremanBonusEnabled.toString());
     }
-  }, [foremanBonusEnabled, projectId]);
+  }, [foremanBonusEnabled, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_foreman_pct_${projectId}`, foremanBonusPercent.toString());
     }
-  }, [foremanBonusPercent, projectId]);
+  }, [foremanBonusPercent, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_fab_configs_${projectId}`, JSON.stringify(fabricationConfigs));
     }
-  }, [fabricationConfigs, projectId]);
+  }, [fabricationConfigs, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
     }
-  }, [materialTaxOverrides, projectId]);
+  }, [materialTaxOverrides, projectId, prevProjectId]);
 
   // LRCN persistence
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_lrcn_enabled_${projectId}`, lrcnEnabled.toString());
     }
-  }, [lrcnEnabled, projectId]);
+  }, [lrcnEnabled, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_bid_rates_${projectId}`, JSON.stringify(bidRates));
     }
-  }, [bidRates, projectId]);
+  }, [bidRates, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_rate_${projectId}`, budgetRate.toString());
     }
-  }, [budgetRate, projectId]);
+  }, [budgetRate, projectId, prevProjectId]);
 
   // Persist fabCodeMap
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_fab_code_map_${projectId}`, JSON.stringify(fabCodeMap));
     }
-  }, [fabCodeMap, projectId]);
+  }, [fabCodeMap, projectId, prevProjectId]);
 
   // Persist fabRates
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_fab_rates_${projectId}`, JSON.stringify(fabRates));
     }
-  }, [fabRates, projectId]);
+  }, [fabRates, projectId, prevProjectId]);
 
   // Persist fabLrcnEnabled
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_fab_lrcn_enabled_${projectId}`, fabLrcnEnabled.toString());
     }
-  }, [fabLrcnEnabled, projectId]);
+  }, [fabLrcnEnabled, projectId, prevProjectId]);
 
   // One-time migration: convert full-code keys (e.g. "BA 0000 DWTR") to cost-head-only keys ("DWTR")
   useEffect(() => {
