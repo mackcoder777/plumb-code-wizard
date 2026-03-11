@@ -2230,22 +2230,25 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 checked={!!consolidations[mergeKey]}
                                 onClick={(e) => {
                                   const currentIndex = rowIndex;
-                                  const isShift = (e as React.MouseEvent).shiftKey;
-                                  if (isShift && lastCheckedIndexRef.current >= 0) {
-                                    const from = Math.min(lastCheckedIndexRef.current, currentIndex);
-                                    const to = Math.max(lastCheckedIndexRef.current, currentIndex);
-                                    const newValue = !consolidations[mergeKey];
-                                    const next: Record<string, boolean> = {};
-                                    for (let i = from; i <= to; i++) {
-                                      if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
-                                        next[smallCodeAnalysis[i].key] = newValue;
-                                      }
-                                    }
-                                    setConsolidations((prev) => ({ ...prev, ...next }));
-                                  } else {
-                                    setConsolidations((prev) => ({ ...prev, [mergeKey]: !prev[mergeKey] }));
-                                  }
-                                  lastCheckedIndexRef.current = currentIndex;
+                                   const isShift = (e as React.MouseEvent).shiftKey;
+                                   if (isShift && lastCheckedIndexRef.current >= 0) {
+                                     const from = Math.min(lastCheckedIndexRef.current, currentIndex);
+                                     const to = Math.max(lastCheckedIndexRef.current, currentIndex);
+                                     const newValue = !consolidations[mergeKey];
+                                     const next: Record<string, boolean> = {};
+                                     for (let i = from; i <= to; i++) {
+                                       if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
+                                         next[smallCodeAnalysis[i].key] = newValue;
+                                         if (newValue) autoInitRow(smallCodeAnalysis[i].key);
+                                       }
+                                     }
+                                     setConsolidations((prev) => ({ ...prev, ...next }));
+                                   } else {
+                                     const newValue = !consolidations[mergeKey];
+                                     setConsolidations((prev) => ({ ...prev, [mergeKey]: newValue }));
+                                     if (newValue) autoInitRow(mergeKey);
+                                   }
+                                   lastCheckedIndexRef.current = currentIndex;
                                 }}
                               />
                             )}
