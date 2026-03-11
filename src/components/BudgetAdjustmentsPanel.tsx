@@ -1047,7 +1047,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     });
 
     return Object.entries(bySecHead)
-      .filter(([, lines]) => lines.length > 1 && lines.some(l => l.isSmall))
+      .filter(([, lines]) => lines.some(l => l.isSmall))
       .map(([key, lines]) => {
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
@@ -1059,6 +1059,12 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
     const MIN_HOURS = 8;
+
+    // Standalone small codes: default to reassign since there's nothing to merge/redistribute within
+    if (lines.length === 1) {
+      return { action: '__reassign__' as const, targets: undefined, reason: 'Auto: standalone code — reassign to another cost head' };
+    }
+
     const underMin = lines.filter(l => l.hours < MIN_HOURS);
     const donors = lines.filter(l => l.hours > MIN_HOURS);
     const deficit = underMin.reduce((sum, l) => sum + (MIN_HOURS - l.hours), 0);
@@ -1153,7 +1159,8 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
           return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
         }
-        const reassignTo = target && target !== '__merge__' ? target : null;
+        if (target === '__keep__') return null; // User chose to keep as-is, skip
+        const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
@@ -2387,13 +2394,23 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                   }}
                                   disabled={isSaved}
                                 >
-                                  <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
-                                  <option value="__redistribute__">Redistribute Hours</option>
-                                  {sameSECHeads.map((p) => (
+                                  {row.lines.length > 1 && (
+                                    <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
+                                  )}
+                                  {row.lines.length > 1 && (
+                                    <option value="__redistribute__">Redistribute Hours</option>
+                                  )}
+                                  {row.lines.length === 1 && (
+                                    <option value="__reassign__" disabled>— Select target —</option>
+                                  )}
+                                  {sameSECHeads
+                                    .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                    .map((p) => (
                                     <option key={p.key} value={p.head}>
                                       Reassign → {p.head}
                                     </option>
                                   ))}
+                                  <option value="__keep__">Keep as-is</option>
                                 </select>
                                 {/* Auto-reason label */}
                                 {consolidations[mergeKey] && !manuallyOverridden.has(mergeKey) && (() => {
@@ -2540,8 +2557,12 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                 </div>
                               );
                             })() : consolidations[mergeKey] ? (
-                              <span className="text-green-400">
-                                {reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
+                              <span className={reassignTargets[mergeKey] === '__keep__' || reassignTargets[mergeKey] === '__reassign__' ? 'text-muted-foreground' : 'text-green-400'}>
+                                {reassignTargets[mergeKey] === '__keep__'
+                                  ? 'Keeping as-is'
+                                  : reassignTargets[mergeKey] === '__reassign__'
+                                  ? 'Select a target →'
+                                  : reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
                                   ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
                                   : `${row.sec} 0000 ${row.head}`}
                               </span>
