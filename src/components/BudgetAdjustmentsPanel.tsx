@@ -2380,8 +2380,6 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                   })}
                                 </div>
                               );
-                            })()
-                              );
                             })() : consolidations[mergeKey] ? (
                               <span className="text-green-400">
                                 {reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
