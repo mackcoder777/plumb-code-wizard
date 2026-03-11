@@ -1104,6 +1104,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setConsolidations({});
     setReassignTargets({});
     setRedistributeAdjustments({});
+    setManuallyOverridden(new Set());
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
