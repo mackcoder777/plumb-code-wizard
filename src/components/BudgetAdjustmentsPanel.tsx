@@ -482,22 +482,40 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const saveMergeMutation = useMutation({
     mutationFn: async (entries: Array<{ sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>) => {
       if (!projectId || projectId === 'default') return;
-      await supabase.from('project_small_code_merges').delete().eq('project_id', projectId);
-      if (entries.length > 0) {
-        const { error } = await supabase.from('project_small_code_merges').insert(
-          entries.map(e => ({
-            project_id: projectId,
-            cost_head: e.cost_head,
-            sec_code: e.sec_code,
-            merged_act: '0000',
-            reassign_to_head: e.reassign_to_head ?? null,
-            redistribute_adjustments: e.redistribute_adjustments ?? null,
-          }))
-        );
-        if (error) console.error('Failed to save merges:', error);
+      
+      // Build the full set of rows to persist
+      const rows = entries.map(e => ({
+        project_id: projectId,
+        cost_head: e.cost_head,
+        sec_code: e.sec_code,
+        merged_act: '0000',
+        reassign_to_head: e.reassign_to_head ?? null,
+        redistribute_adjustments: e.redistribute_adjustments ?? null,
+      }));
+
+      // Delete existing entries for this project, then upsert in one go
+      const { error: deleteError } = await supabase
+        .from('project_small_code_merges')
+        .delete()
+        .eq('project_id', projectId);
+
+      if (deleteError) throw new Error(`Failed to clear existing merges: ${deleteError.message}`);
+
+      if (rows.length > 0) {
+        const { error: insertError } = await supabase
+          .from('project_small_code_merges')
+          .insert(rows);
+        if (insertError) throw new Error(`Failed to save merges: ${insertError.message}`);
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+      toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
+    },
+    onError: (error: Error) => {
+      console.error('Save merge failed:', error);
+      toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
+      // Refetch to restore last-known-good state
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
     },
   });
