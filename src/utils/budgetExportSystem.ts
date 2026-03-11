@@ -928,12 +928,15 @@ export function exportAuditReport(
   projectInfo: ProjectInfo,
   floorMappings: FloorSectionMap = {},
   buildingMappings: BuildingSectionMapping[] = [],
-  dbFloorMappings: FloorSectionMapping[] = []
+  dbFloorMappings: FloorSectionMapping[] = [],
+  budgetAdjustments?: BudgetAdjustments | null
 ): { laborItems: number; materialItems: number; totalItems: number } {
   const wb = XLSX.utils.book_new();
 
+  const savedMerges: SavedMerge[] = budgetAdjustments?.savedMerges ?? [];
+
   // Labor Report tab (detailed line items)
-  const laborData = prepareLaborReportData(items, floorMappings, buildingMappings, dbFloorMappings);
+  const laborData = prepareLaborReportData(items, floorMappings, buildingMappings, dbFloorMappings, null, savedMerges);
   if (laborData.length > 0) {
     const laborWs = XLSX.utils.json_to_sheet(laborData);
     laborWs['!cols'] = [
@@ -953,6 +956,7 @@ export function exportAuditReport(
       { wch: 10 }, // Quantity
       { wch: 10 }, // Hours
       { wch: 12 }, // Labor Dollars
+      { wch: 30 }, // Adjustment
     ];
     XLSX.utils.book_append_sheet(wb, laborWs, 'Labor Report');
   }
@@ -980,27 +984,86 @@ export function exportAuditReport(
     XLSX.utils.book_append_sheet(wb, materialWs, 'Material Report');
   }
 
-  // Summary tab
-  const laborSummary = aggregateLaborByCostCode(items, floorMappings, { buildingMappings, dbFloorMappings });
+  // Summary tab — use adjustedLaborSummary if available (matches Budget Packet)
+  let laborSummaryRows: { costCode: string; description: string; hours: number; laborDollars: number; itemCount: number }[];
+  if (budgetAdjustments?.adjustedLaborSummary && Object.keys(budgetAdjustments.adjustedLaborSummary).length > 0) {
+    laborSummaryRows = Object.values(budgetAdjustments.adjustedLaborSummary).map(item => ({
+      costCode: item.code,
+      description: item.description,
+      hours: item.hours,
+      laborDollars: item.dollars,
+      itemCount: 0, // not available from adjusted summary
+    }));
+  } else {
+    laborSummaryRows = aggregateLaborByCostCode(items, floorMappings, { buildingMappings, dbFloorMappings });
+  }
   const materialSummary = aggregateMaterialByCostCode(items);
 
   const summaryData = [
     ['LABOR SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Hours', 'Labor $', 'Items'],
-    ...laborSummary.map(l => [l.costCode, l.description, Math.round(l.hours * 10) / 10, Math.round(l.laborDollars * 100) / 100, l.itemCount]),
+    ...laborSummaryRows.map(l => [l.costCode, l.description, Math.round(l.hours * 10) / 10, Math.round(l.laborDollars * 100) / 100, l.itemCount || '']),
     [],
     ['MATERIAL SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Material $', 'Items'],
     ...materialSummary.map(m => [m.costCode, m.description, Math.round(m.materialDollars * 100) / 100, m.itemCount]),
     [],
     ['TOTALS'],
-    ['Total Labor Hours:', Math.round(laborSummary.reduce((s, l) => s + l.hours, 0) * 10) / 10],
-    ['Total Labor $:', Math.round(laborSummary.reduce((s, l) => s + l.laborDollars, 0) * 100) / 100],
+    ['Total Labor Hours:', Math.round(laborSummaryRows.reduce((s, l) => s + l.hours, 0) * 10) / 10],
+    ['Total Labor $:', Math.round(laborSummaryRows.reduce((s, l) => s + l.laborDollars, 0) * 100) / 100],
     ['Total Material $:', Math.round(materialSummary.reduce((s, m) => s + m.materialDollars, 0) * 100) / 100],
   ];
 
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+  // Adjustment Log tab
+  const adjustmentLogData: any[][] = [
+    ['ADJUSTMENT LOG'],
+    ['Action Type', 'Source Code(s)', 'Source Hours', 'Target Code', 'Final Hours', 'Applied At'],
+  ];
+
+  if (savedMerges.length > 0 && budgetAdjustments?.adjustedLaborSummary) {
+    const adjSummary = budgetAdjustments.adjustedLaborSummary;
+    savedMerges.forEach(merge => {
+      let actionType = 'Merge';
+      let sourceCode = `${merge.sec_code} * ${merge.cost_head}`;
+      let sourceHours = '';
+      let targetCode = `${merge.sec_code} ${merge.merged_act} ${merge.cost_head}`;
+      let finalHours = '';
+
+      if (merge.reassign_to_head) {
+        actionType = 'Reassign';
+        targetCode = `${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`;
+        const targetEntry = adjSummary[targetCode];
+        finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
+      } else if (merge.redistribute_adjustments && Object.keys(merge.redistribute_adjustments).length > 0) {
+        actionType = 'Redistribute';
+        const redist = merge.redistribute_adjustments;
+        sourceHours = Object.entries(redist).map(([act, hrs]) => `${act}: ${hrs}h`).join(', ');
+        targetCode = `${merge.sec_code} (redistributed) ${merge.cost_head}`;
+        finalHours = Object.values(redist).reduce((s, h) => s + (h as number), 0).toFixed(1);
+      } else {
+        const targetEntry = adjSummary[targetCode];
+        finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
+      }
+
+      adjustmentLogData.push([actionType, sourceCode, sourceHours, targetCode, finalHours, new Date().toISOString().split('T')[0]]);
+    });
+  } else {
+    adjustmentLogData.push(['No adjustments applied', '', '', '', '', '']);
+  }
+
+  const adjustmentWs = XLSX.utils.aoa_to_sheet(adjustmentLogData);
+  adjustmentWs['!cols'] = [
+    { wch: 14 }, // Action Type
+    { wch: 25 }, // Source Code(s)
+    { wch: 20 }, // Source Hours
+    { wch: 25 }, // Target Code
+    { wch: 12 }, // Final Hours
+    { wch: 14 }, // Applied At
+  ];
+  XLSX.utils.book_append_sheet(wb, adjustmentWs, 'Adjustment Log');
 
   // Generate filename
   const dateStr = new Date().toISOString().split('T')[0];
