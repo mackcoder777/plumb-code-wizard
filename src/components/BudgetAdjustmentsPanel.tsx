@@ -2275,9 +2275,21 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 <select
                                   className="text-xs bg-background border border-border rounded px-1 py-0.5"
                                   value={reassignTargets[mergeKey] ?? '__merge__'}
-                                  onChange={(e) =>
-                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
-                                  }
+                                  onChange={(e) => {
+                                    const newVal = e.target.value;
+                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: newVal }));
+                                    // Track manual override
+                                    const autoResult = getDefaultAction(row.lines);
+                                    setManuallyOverridden(prev => {
+                                      const next = new Set(prev);
+                                      if (newVal === autoResult.action) {
+                                        next.delete(mergeKey);
+                                      } else {
+                                        next.add(mergeKey);
+                                      }
+                                      return next;
+                                    });
+                                  }}
                                   disabled={isSaved}
                                 >
                                   <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
@@ -2288,6 +2300,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                     </option>
                                   ))}
                                 </select>
+                                {/* Auto-reason label */}
+                                {consolidations[mergeKey] && !manuallyOverridden.has(mergeKey) && (() => {
+                                  const autoResult = getDefaultAction(row.lines);
+                                  return (
+                                    <div className={`text-xs mt-0.5 ${autoResult.action === '__redistribute__' ? 'text-green-400' : 'text-amber-400'}`}>
+                                      {autoResult.reason}
+                                    </div>
+                                  );
+                                })()}
                                 {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
                                   const targets = redistributeAdjustments[mergeKey] ?? {};
                                   // If no targets set yet, initialize to current hours
