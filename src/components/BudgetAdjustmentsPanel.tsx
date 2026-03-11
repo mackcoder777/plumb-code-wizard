@@ -454,6 +454,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const lastCheckedIndexRef = useRef<number>(-1);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
+  const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1028,6 +1029,39 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       });
   }, [finalLaborSummary]);
 
+  // Auto-default action helper
+  const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
+    const MIN_HOURS = 8;
+    const underMin = lines.filter(l => l.hours < MIN_HOURS);
+    const donors = lines.filter(l => l.hours > MIN_HOURS);
+    const deficit = underMin.reduce((sum, l) => sum + (MIN_HOURS - l.hours), 0);
+    const totalExcess = donors.reduce((sum, l) => sum + (l.hours - MIN_HOURS), 0);
+
+    if (donors.length > 0 && totalExcess >= deficit) {
+      const targets: Record<string, number> = {};
+      lines.forEach(l => { targets[l.code] = l.hours; });
+      underMin.forEach(l => { targets[l.code] = MIN_HOURS; });
+      donors.forEach(l => {
+        const contribution = deficit * ((l.hours - MIN_HOURS) / totalExcess);
+        targets[l.code] = l.hours - contribution;
+      });
+      return { action: '__redistribute__' as const, targets, reason: 'Auto: enough excess to fund 8h minimum' };
+    }
+
+    return { action: '__merge__' as const, targets: undefined, reason: 'Auto: not enough excess for 8h minimum' };
+  };
+
+  // Auto-initialize a single row
+  const autoInitRow = (key: string) => {
+    const row = smallCodeAnalysis.find(r => r.key === key);
+    if (!row) return;
+    const result = getDefaultAction(row.lines);
+    setReassignTargets(prev => ({ ...prev, [key]: result.action }));
+    if (result.action === '__redistribute__' && result.targets) {
+      setRedistributeAdjustments(prev => ({ ...prev, [key]: result.targets! }));
+    }
+  };
+
   // Already-saved sec|head keys for display
   const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
@@ -1070,6 +1104,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setConsolidations({});
     setReassignTargets({});
     setRedistributeAdjustments({});
+    setManuallyOverridden(new Set());
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
@@ -2157,9 +2192,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                             smallCodeAnalysis.forEach((row) => {
                               if (!savedMergeKeySet.has(row.key)) {
                                 next[row.key] = !!checked;
+                                if (checked) {
+                                  autoInitRow(row.key);
+                                }
                               }
                             });
                             setConsolidations((prev) => ({ ...prev, ...next }));
+                            if (!checked) {
+                              setManuallyOverridden(new Set());
+                            }
                           }}
                         />
                       </TableHead>
@@ -2190,22 +2231,25 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 checked={!!consolidations[mergeKey]}
                                 onClick={(e) => {
                                   const currentIndex = rowIndex;
-                                  const isShift = (e as React.MouseEvent).shiftKey;
-                                  if (isShift && lastCheckedIndexRef.current >= 0) {
-                                    const from = Math.min(lastCheckedIndexRef.current, currentIndex);
-                                    const to = Math.max(lastCheckedIndexRef.current, currentIndex);
-                                    const newValue = !consolidations[mergeKey];
-                                    const next: Record<string, boolean> = {};
-                                    for (let i = from; i <= to; i++) {
-                                      if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
-                                        next[smallCodeAnalysis[i].key] = newValue;
-                                      }
-                                    }
-                                    setConsolidations((prev) => ({ ...prev, ...next }));
-                                  } else {
-                                    setConsolidations((prev) => ({ ...prev, [mergeKey]: !prev[mergeKey] }));
-                                  }
-                                  lastCheckedIndexRef.current = currentIndex;
+                                   const isShift = (e as React.MouseEvent).shiftKey;
+                                   if (isShift && lastCheckedIndexRef.current >= 0) {
+                                     const from = Math.min(lastCheckedIndexRef.current, currentIndex);
+                                     const to = Math.max(lastCheckedIndexRef.current, currentIndex);
+                                     const newValue = !consolidations[mergeKey];
+                                     const next: Record<string, boolean> = {};
+                                     for (let i = from; i <= to; i++) {
+                                       if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
+                                         next[smallCodeAnalysis[i].key] = newValue;
+                                         if (newValue) autoInitRow(smallCodeAnalysis[i].key);
+                                       }
+                                     }
+                                     setConsolidations((prev) => ({ ...prev, ...next }));
+                                   } else {
+                                     const newValue = !consolidations[mergeKey];
+                                     setConsolidations((prev) => ({ ...prev, [mergeKey]: newValue }));
+                                     if (newValue) autoInitRow(mergeKey);
+                                   }
+                                   lastCheckedIndexRef.current = currentIndex;
                                 }}
                               />
                             )}
@@ -2232,9 +2276,21 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                 <select
                                   className="text-xs bg-background border border-border rounded px-1 py-0.5"
                                   value={reassignTargets[mergeKey] ?? '__merge__'}
-                                  onChange={(e) =>
-                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }))
-                                  }
+                                  onChange={(e) => {
+                                    const newVal = e.target.value;
+                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: newVal }));
+                                    // Track manual override
+                                    const autoResult = getDefaultAction(row.lines);
+                                    setManuallyOverridden(prev => {
+                                      const next = new Set(prev);
+                                      if (newVal === autoResult.action) {
+                                        next.delete(mergeKey);
+                                      } else {
+                                        next.add(mergeKey);
+                                      }
+                                      return next;
+                                    });
+                                  }}
                                   disabled={isSaved}
                                 >
                                   <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
@@ -2245,6 +2301,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                                     </option>
                                   ))}
                                 </select>
+                                {/* Auto-reason label */}
+                                {consolidations[mergeKey] && !manuallyOverridden.has(mergeKey) && (() => {
+                                  const autoResult = getDefaultAction(row.lines);
+                                  return (
+                                    <div className={`text-xs mt-0.5 ${autoResult.action === '__redistribute__' ? 'text-green-400' : 'text-amber-400'}`}>
+                                      {autoResult.reason}
+                                    </div>
+                                  );
+                                })()}
                                 {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
                                   const targets = redistributeAdjustments[mergeKey] ?? {};
                                   // If no targets set yet, initialize to current hours
