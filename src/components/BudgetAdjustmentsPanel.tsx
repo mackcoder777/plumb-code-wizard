@@ -643,10 +643,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   }, [lrcnEnabled, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_bid_rates_${projectId}`, JSON.stringify(bidRates));
     }
-  }, [bidRates, projectId]);
+  }, [bidRates, projectId, prevProjectId]);
 
   useEffect(() => {
     if (projectId !== 'default') {
