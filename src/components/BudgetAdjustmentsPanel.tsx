@@ -1029,6 +1029,39 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       });
   }, [finalLaborSummary]);
 
+  // Auto-default action helper
+  const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
+    const MIN_HOURS = 8;
+    const underMin = lines.filter(l => l.hours < MIN_HOURS);
+    const donors = lines.filter(l => l.hours > MIN_HOURS);
+    const deficit = underMin.reduce((sum, l) => sum + (MIN_HOURS - l.hours), 0);
+    const totalExcess = donors.reduce((sum, l) => sum + (l.hours - MIN_HOURS), 0);
+
+    if (donors.length > 0 && totalExcess >= deficit) {
+      const targets: Record<string, number> = {};
+      lines.forEach(l => { targets[l.code] = l.hours; });
+      underMin.forEach(l => { targets[l.code] = MIN_HOURS; });
+      donors.forEach(l => {
+        const contribution = deficit * ((l.hours - MIN_HOURS) / totalExcess);
+        targets[l.code] = l.hours - contribution;
+      });
+      return { action: '__redistribute__' as const, targets, reason: 'Auto: enough excess to fund 8h minimum' };
+    }
+
+    return { action: '__merge__' as const, targets: undefined, reason: 'Auto: not enough excess for 8h minimum' };
+  };
+
+  // Auto-initialize a single row
+  const autoInitRow = (key: string) => {
+    const row = smallCodeAnalysis.find(r => r.key === key);
+    if (!row) return;
+    const result = getDefaultAction(row.lines);
+    setReassignTargets(prev => ({ ...prev, [key]: result.action }));
+    if (result.action === '__redistribute__' && result.targets) {
+      setRedistributeAdjustments(prev => ({ ...prev, [key]: result.targets! }));
+    }
+  };
+
   // Already-saved sec|head keys for display
   const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
