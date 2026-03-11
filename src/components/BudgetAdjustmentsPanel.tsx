@@ -2191,9 +2191,15 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                             smallCodeAnalysis.forEach((row) => {
                               if (!savedMergeKeySet.has(row.key)) {
                                 next[row.key] = !!checked;
+                                if (checked) {
+                                  autoInitRow(row.key);
+                                }
                               }
                             });
                             setConsolidations((prev) => ({ ...prev, ...next }));
+                            if (!checked) {
+                              setManuallyOverridden(new Set());
+                            }
                           }}
                         />
                       </TableHead>
