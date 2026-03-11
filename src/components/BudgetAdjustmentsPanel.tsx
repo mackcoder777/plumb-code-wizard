@@ -1371,7 +1371,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                 <div>
                   <div className="text-amber-700 dark:text-amber-300 text-sm">Rate</div>
                   <div className="font-mono font-bold text-amber-900 dark:text-amber-100 text-xl">
-                    ${bidLaborRate.toFixed(2)}
+                    ${computedBidLaborRate.toFixed(2)}
                   </div>
                 </div>
                 <div>
