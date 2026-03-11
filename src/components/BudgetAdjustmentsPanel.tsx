@@ -1039,10 +1039,19 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
         const head = headParts.join('|');
         const target = reassignTargets[key];
         if (target === '__redistribute__') {
-          const adjustments = redistributeAdjustments[key] ?? {};
-          const net = Object.values(adjustments).reduce((s, v) => s + v, 0);
+          const targets = redistributeAdjustments[key] ?? {};
+          const row = smallCodeAnalysis.find(r => r.key === key);
+          if (!row) return null;
+          // Convert targets to deltas for DB storage
+          const deltas: Record<string, number> = {};
+          row.lines.forEach(line => {
+            const t = targets[line.code] ?? line.hours;
+            const d = t - line.hours;
+            if (Math.abs(d) > 0.001) deltas[line.code] = parseFloat(d.toFixed(2));
+          });
+          const net = Object.values(deltas).reduce((s, v) => s + v, 0);
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
-          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: adjustments };
+          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
         }
         const reassignTo = target && target !== '__merge__' ? target : null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
