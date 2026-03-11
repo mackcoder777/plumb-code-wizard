@@ -602,14 +602,14 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   }, [jobsiteZipCode, projectId, prevProjectId]);
 
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       if (customTaxRate !== null) {
         localStorage.setItem(`budget_taxrate_${projectId}`, customTaxRate.toString());
       } else {
         localStorage.removeItem(`budget_taxrate_${projectId}`);
       }
     }
-  }, [customTaxRate, projectId]);
+  }, [customTaxRate, projectId, prevProjectId]);
 
   useEffect(() => {
     if (projectId !== 'default') {
