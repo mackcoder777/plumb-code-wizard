@@ -1,77 +1,67 @@
 
 
-# Smart Assign Preview Dialog
+## Bug: Checkboxes Can't Be Unchecked for Standalone Small Codes
 
-## Problem
+### Root Cause
 
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
+The `Checkbox` component (Radix UI) uses `onClick` for toggling instead of the proper `onCheckedChange` callback. Radix Checkbox internally handles click events and when only `checked` is provided without `onCheckedChange`, the component can swallow or interfere with clicks — particularly when trying to uncheck.
 
-## What 9524 Covers (for reference)
+The shift-click range-select logic requires access to the native `MouseEvent` (for `shiftKey`), which is why `onClick` was used. But this conflicts with Radix's internal event handling.
 
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
+### Fix
 
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
+**File: `src/components/BudgetAdjustmentsPanel.tsx`**
 
-## Solution: Smart Assign Preview Dialog
+**Change the checkbox to use `onCheckedChange` for the toggle logic, and a separate `onClick` only for capturing `shiftKey`:**
 
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
+1. Store the last shift state in a ref so `onCheckedChange` can read it
+2. Move all toggle logic from `onClick` into `onCheckedChange`
+3. Use `onClick` only to capture `e.shiftKey` into the ref
 
-### UI Design
+Specifically, replace the checkbox block (lines 2331-2355) with:
 
-When you click "Smart Assign", a dialog opens with:
-
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
-
-```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
+```tsx
+<Checkbox
+  checked={!!consolidations[mergeKey]}
+  onClick={(e) => {
+    // Just capture shift state for range-select
+    shiftKeyRef.current = (e as React.MouseEvent).shiftKey;
+  }}
+  onCheckedChange={(checked) => {
+    const currentIndex = rowIndex;
+    const isShift = shiftKeyRef.current;
+    shiftKeyRef.current = false;
+    
+    if (isShift && lastCheckedIndexRef.current >= 0) {
+      const from = Math.min(lastCheckedIndexRef.current, currentIndex);
+      const to = Math.max(lastCheckedIndexRef.current, currentIndex);
+      const next: Record<string, boolean> = {};
+      for (let i = from; i <= to; i++) {
+        if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
+          next[smallCodeAnalysis[i].key] = !!checked;
+          if (checked) autoInitRow(smallCodeAnalysis[i].key);
+        }
+      }
+      setConsolidations((prev) => ({ ...prev, ...next }));
+    } else {
+      setConsolidations((prev) => ({ ...prev, [mergeKey]: !!checked }));
+      if (checked) autoInitRow(mergeKey);
+    }
+    lastCheckedIndexRef.current = currentIndex;
+  }}
+/>
 ```
 
-### Technical Changes
+Also add a `shiftKeyRef` near the existing `lastCheckedIndexRef`:
+```tsx
+const shiftKeyRef = useRef<boolean>(false);
+```
 
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
+Similarly update the "Select All" checkbox (line 2285-2305) to use `onCheckedChange` if it also uses `onClick`.
 
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
-
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
-
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
-
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
-
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
-
-### No database changes needed.
+### Summary
+- Add `shiftKeyRef` near line 462
+- Replace `onClick` toggle logic with `onCheckedChange` on the per-row checkbox (lines 2331-2355)
+- Keep `onClick` only for capturing shift key state
+- No database changes
 
