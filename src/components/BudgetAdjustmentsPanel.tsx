@@ -458,11 +458,12 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
-  const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
+const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
   const lastCheckedIndexRef = useRef<number>(-1);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
+  const [dismissedOrphanBanner, setDismissedOrphanBanner] = useState(false);
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1090,6 +1091,45 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
   // Already-saved sec|head keys for display
   const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
+
+  // Detect rows that are unsaved but have a sibling with the same cost_head that IS saved.
+  // These were victims of the old unique constraint — the first SEC saved, siblings silently failed.
+  const orphanedRows = useMemo(() => {
+    if (!smallCodeAnalysis || smallCodeAnalysis.length === 0) return [];
+
+    // Build a set of cost heads that have at least one saved row
+    const savedCostHeads = new Set<string>();
+    for (const row of smallCodeAnalysis) {
+      if (savedMergeKeySet.has(row.key)) {
+        savedCostHeads.add(row.head);
+      }
+    }
+
+    // Any row that is NOT saved but whose cost head has a saved sibling is an orphan
+    return smallCodeAnalysis.filter(
+      (row) => !savedMergeKeySet.has(row.key) && savedCostHeads.has(row.head)
+    );
+  }, [smallCodeAnalysis, savedMergeKeySet]);
+
+  // Auto-select orphaned rows so the user can re-apply them in one click.
+  // This runs once when orphanedRows stabilizes (i.e., after saved merges load).
+  useEffect(() => {
+    if (orphanedRows.length === 0) return;
+
+    orphanedRows.forEach((row) => {
+      // Pre-check the consolidation checkbox
+      setConsolidations((prev) => {
+        if (prev[row.key]) return prev; // already initialized, skip
+        return { ...prev, [row.key]: true };
+      });
+
+      // Set the reassign target to 0000 merge (same pattern as a normal merge)
+      setReassignTargets((prev) => {
+        if (prev[row.key]) return prev;
+        return { ...prev, [row.key]: '__merge__' };
+      });
+    });
+  }, [orphanedRows]);
 
   const handleConsolidate = () => {
     const newEntries = Object.entries(consolidations)
@@ -2210,7 +2250,28 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
               )}
 
               {smallCodeAnalysis.length > 0 && (
-                <Table>
+                <>
+                  {!dismissedOrphanBanner && orphanedRows.length > 0 && (
+                    <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 mb-3 text-sm">
+                      <span className="mt-0.5 text-yellow-400 shrink-0">⚠</span>
+                      <div className="flex-1">
+                        <span className="font-medium text-yellow-300">
+                          {orphanedRows.length} row{orphanedRows.length !== 1 ? 's' : ''} were not saved previously due to a database constraint issue.
+                        </span>
+                        <span className="text-yellow-200/80 ml-1">
+                          They have been pre-selected — click <strong>Apply All Merges</strong> to save them now.
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setDismissedOrphanBanner(true)}
+                        className="text-yellow-400/60 hover:text-yellow-300 transition-colors text-xs shrink-0 mt-0.5"
+                        aria-label="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">
@@ -2493,9 +2554,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
                     })}
                   </TableBody>
                 </Table>
-              )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
+        )}
 
           <Separator className="my-4" />
 
