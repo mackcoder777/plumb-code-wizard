@@ -460,6 +460,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
 const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
   const lastCheckedIndexRef = useRef<number>(-1);
+  const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
