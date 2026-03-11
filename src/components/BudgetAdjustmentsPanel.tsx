@@ -2400,7 +2400,12 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                   {row.lines.length > 1 && (
                                     <option value="__redistribute__">Redistribute Hours</option>
                                   )}
-                                  {sameSECHeads.map((p) => (
+                                  {row.lines.length === 1 && (
+                                    <option value="__reassign__" disabled>— Select target —</option>
+                                  )}
+                                  {sameSECHeads
+                                    .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                    .map((p) => (
                                     <option key={p.key} value={p.head}>
                                       Reassign → {p.head}
                                     </option>
