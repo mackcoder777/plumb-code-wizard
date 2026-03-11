@@ -2557,8 +2557,12 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                 </div>
                               );
                             })() : consolidations[mergeKey] ? (
-                              <span className="text-green-400">
-                                {reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
+                              <span className={reassignTargets[mergeKey] === '__keep__' || reassignTargets[mergeKey] === '__reassign__' ? 'text-muted-foreground' : 'text-green-400'}>
+                                {reassignTargets[mergeKey] === '__keep__'
+                                  ? 'Keeping as-is'
+                                  : reassignTargets[mergeKey] === '__reassign__'
+                                  ? 'Select a target →'
+                                  : reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
                                   ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
                                   : `${row.sec} 0000 ${row.head}`}
                               </span>
