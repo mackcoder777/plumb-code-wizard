@@ -594,12 +594,12 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     }
   }, [projectId, prevProjectId]);
 
-  // Persist settings to localStorage - only save if projectId is not 'default'
+  // Persist settings to localStorage - only save if projectId is not 'default' and stable
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
     }
-  }, [jobsiteZipCode, projectId]);
+  }, [jobsiteZipCode, projectId, prevProjectId]);
 
   useEffect(() => {
     if (projectId !== 'default') {
