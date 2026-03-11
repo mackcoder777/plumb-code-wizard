@@ -2209,7 +2209,7 @@ const EnhancedCostCodeManager = () => {
                 <ExportDropdown
                   items={estimateData}
                   projectInfo={getProjectInfo()}
-                  laborRate={bidLaborRate}
+                  laborRate={budgetAdjustments?.budgetRate || bidLaborRate}
                   budgetAdjustments={budgetAdjustments}
                   disabled={estimateData.length === 0}
                   floorMappings={floorSectionMap}
