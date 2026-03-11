@@ -1047,7 +1047,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     });
 
     return Object.entries(bySecHead)
-      .filter(([, lines]) => lines.length > 1 && lines.some(l => l.isSmall))
+      .filter(([, lines]) => lines.some(l => l.isSmall))
       .map(([key, lines]) => {
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
