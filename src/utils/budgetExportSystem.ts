@@ -814,6 +814,32 @@ function parseLaborCode(code: string): { section: string; activity: string; cost
 // AUDIT REPORT EXPORT (Detailed Line Items)
 // ============================================
 
+interface SavedMerge {
+  sec_code: string;
+  cost_head: string;
+  reassign_to_head?: string | null;
+  redistribute_adjustments?: Record<string, number> | null;
+  merged_act: string;
+}
+
+/**
+ * Determines the adjustment label for an item based on saved merges
+ */
+function getAdjustmentLabel(sec: string, costHead: string, savedMerges: SavedMerge[]): string {
+  for (const merge of savedMerges) {
+    if (merge.sec_code !== sec) continue;
+    if (merge.cost_head !== costHead) continue;
+    if (merge.reassign_to_head) {
+      return `Reassigned → ${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`;
+    }
+    if (merge.redistribute_adjustments && Object.keys(merge.redistribute_adjustments).length > 0) {
+      return 'Redistributed';
+    }
+    return `Merged → ${merge.sec_code} ${merge.merged_act} ${merge.cost_head}`;
+  }
+  return '';
+}
+
 /**
  * Prepares labor report data for audit export
  */
@@ -822,7 +848,8 @@ function prepareLaborReportData(
   floorMappings: FloorSectionMap = {},
   buildingMappings: BuildingSectionMapping[] = [],
   dbFloorMappings: FloorSectionMapping[] = [],
-  datasetProfile: any = null
+  datasetProfile: any = null,
+  savedMerges: SavedMerge[] = []
 ): any[] {
   return items
     .filter(item => item.laborCostHead || item.costCode || item.suggestedCode?.costHead)
@@ -843,10 +870,13 @@ function prepareLaborReportData(
         sec = sec || '01';
       }
 
+      const costHead = item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '';
+      const adjustment = savedMerges.length > 0 ? getAdjustmentLabel(sec, costHead, savedMerges) : '';
+
       return {
         'SEC': sec,
         'ACT': item.laborAct || item.suggestedCode?.activity || '0000',
-        'COST HEAD': item.laborCostHead || item.costCode || item.suggestedCode?.costHead || '',
+        'COST HEAD': costHead,
         'DESCRIPTION': item.laborDescription || item.suggestedCode?.description || '',
         'Drawing': item.drawing || '',
         'System': item.system || '',
@@ -859,7 +889,8 @@ function prepareLaborReportData(
         'Size': item.size || '',
         'Quantity': item.quantity || 0,
         'Hours': item.hours || 0,
-        'Labor Dollars': item.laborDollars || 0
+        'Labor Dollars': item.laborDollars || 0,
+        'Adjustment': adjustment,
       };
     });
 }
