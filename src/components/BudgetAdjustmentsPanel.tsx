@@ -872,8 +872,8 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
           code,
           description: data.description,
           hours: hoursAfterForeman,
-          rate: data.rate || computedBidLaborRate,
-          dollars: hoursAfterForeman * (data.rate || computedBidLaborRate),
+          rate: budgetRate,
+          dollars: hoursAfterForeman * budgetRate,
           type: 'field'
         };
         totalFieldHours += hoursAfterForeman;
