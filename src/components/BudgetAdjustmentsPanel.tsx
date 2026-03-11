@@ -811,7 +811,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     const foremanBonusHours = foremanBonusEnabled 
       ? originalTotalHours * (foremanBonusPercent / 100) 
       : 0;
-    const foremanBonusDollars = foremanBonusHours * computedBidLaborRate;
+    const foremanBonusDollars = foremanBonusHours * budgetRate;
 
     const hoursAfterForemanStrip = originalTotalHours - foremanBonusHours;
     const foremanStripRatio = originalTotalHours > 0 ? hoursAfterForemanStrip / originalTotalHours : 1;
@@ -842,8 +842,8 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
           code,
           description: data.description,
           hours: fieldHours,
-          rate: data.rate || computedBidLaborRate,
-          dollars: fieldHours * (data.rate || computedBidLaborRate),
+          rate: budgetRate,
+          dollars: fieldHours * budgetRate,
           type: 'field'
         };
 
@@ -872,8 +872,8 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
           code,
           description: data.description,
           hours: hoursAfterForeman,
-          rate: data.rate || computedBidLaborRate,
-          dollars: hoursAfterForeman * (data.rate || computedBidLaborRate),
+          rate: budgetRate,
+          dollars: hoursAfterForeman * budgetRate,
           type: 'field'
         };
         totalFieldHours += hoursAfterForeman;
@@ -942,7 +942,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, computedBidLaborRate, shopRate, fabCodeMap, fabRates]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
