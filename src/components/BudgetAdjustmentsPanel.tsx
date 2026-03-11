@@ -663,10 +663,10 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
 
   // Persist fabRates
   useEffect(() => {
-    if (projectId !== 'default') {
+    if (projectId !== 'default' && projectId === prevProjectId) {
       localStorage.setItem(`budget_fab_rates_${projectId}`, JSON.stringify(fabRates));
     }
-  }, [fabRates, projectId]);
+  }, [fabRates, projectId, prevProjectId]);
 
   // Persist fabLrcnEnabled
   useEffect(() => {
