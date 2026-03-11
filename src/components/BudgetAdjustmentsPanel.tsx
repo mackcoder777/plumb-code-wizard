@@ -2554,9 +2554,10 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                     })}
                   </TableBody>
                 </Table>
-              )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
+        )}
 
           <Separator className="my-4" />
 
