@@ -307,6 +307,13 @@ export interface BudgetAdjustments {
   // Computed rates
   computedBidLaborRate: number;
   shopRate: number;
+  savedMerges?: Array<{
+    sec_code: string;
+    cost_head: string;
+    reassign_to_head?: string | null;
+    redistribute_adjustments?: Record<string, number> | null;
+    merged_act: string;
+  }>;
 }
 
 interface BudgetAdjustmentsPanelProps {
