@@ -812,7 +812,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     const foremanBonusHours = foremanBonusEnabled 
       ? originalTotalHours * (foremanBonusPercent / 100) 
       : 0;
-    const foremanBonusDollars = foremanBonusHours * budgetRate;
+    const foremanBonusDollars = foremanBonusHours * computedBidLaborRate;
 
     const hoursAfterForemanStrip = originalTotalHours - foremanBonusHours;
     const foremanStripRatio = originalTotalHours > 0 ? hoursAfterForemanStrip / originalTotalHours : 1;
