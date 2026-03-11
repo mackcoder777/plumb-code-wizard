@@ -1159,7 +1159,8 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
           return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
         }
-        const reassignTo = target && target !== '__merge__' ? target : null;
+        if (target === '__keep__') return null; // User chose to keep as-is, skip
+        const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
