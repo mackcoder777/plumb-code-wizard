@@ -1059,6 +1059,12 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
     const MIN_HOURS = 8;
+
+    // Standalone small codes: default to reassign since there's nothing to merge/redistribute within
+    if (lines.length === 1) {
+      return { action: '__reassign__' as const, targets: undefined, reason: 'Auto: standalone code — reassign to another cost head' };
+    }
+
     const underMin = lines.filter(l => l.hours < MIN_HOURS);
     const donors = lines.filter(l => l.hours > MIN_HOURS);
     const deficit = underMin.reduce((sum, l) => sum + (MIN_HOURS - l.hours), 0);
