@@ -276,9 +276,7 @@ export function resolveFloorMappingStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return { section: m.section_code, activity: floorActivity };
       return { section: suggestSectionForBuilding(zoneBuilding), activity: floorActivity };
     }
