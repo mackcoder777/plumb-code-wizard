@@ -247,9 +247,7 @@ export function resolveSectionStatic(
   // Drawing-based fallback (existing behavior)
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    const m = buildingMappings.find(
-      bm => bm.building_identifier.toUpperCase() === buildingId.toUpperCase()
-    );
+    const m = findBuildingMapping(buildingId, buildingMappings);
     if (m) return m.section_code;
     return suggestSectionForBuilding(buildingId);
   }
