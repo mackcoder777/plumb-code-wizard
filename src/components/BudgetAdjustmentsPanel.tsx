@@ -1186,6 +1186,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
   }, [smallCodeAnalysis, standaloneMaxHours]);
 
+  const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
+  const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
+
   // Auto-select orphaned rows so the user can re-apply them in one click.
   // This runs once when orphanedRows stabilizes (i.e., after saved merges load).
   useEffect(() => {
