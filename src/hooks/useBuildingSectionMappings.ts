@@ -283,9 +283,7 @@ export function resolveFloorMappingStatic(
     // Priority 2: User-configured zone patterns with activity extraction from zone prefix
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zonePatternMatch.building_identifier.toUpperCase()
-      );
+      const m = findBuildingMapping(zonePatternMatch.building_identifier, buildingMappings);
       if (m) {
         // Try to extract activity code from zone prefix (e.g. "PC1 - MODULAR" → "0PC1", "PC10 - ..." → "PC10")
         const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
