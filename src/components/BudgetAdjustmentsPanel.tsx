@@ -2344,7 +2344,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map((row, rowIndex) => {
+                    {filteredSmallCodeAnalysis.map((row, rowIndex) => {
                       const mergeKey = row.key;
                       const isSaved = savedMergeKeySet.has(mergeKey);
                       const sameSECHeads = Object.keys(finalLaborSummary ?? {})
