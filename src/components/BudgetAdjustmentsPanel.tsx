@@ -460,6 +460,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
 const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
+const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
   const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
