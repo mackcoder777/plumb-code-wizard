@@ -2352,321 +2352,475 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       </button>
                     </div>
                   )}
-                  <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">
-                        <Checkbox
-                           checked={
-                            filteredSmallCodeAnalysis.length > 0 &&
-                            filteredSmallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
-                            filteredSmallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
-                          }
-                          onCheckedChange={(checked) => {
-                            const next: Record<string, boolean> = {};
-                            filteredSmallCodeAnalysis.forEach((row) => {
-                              if (!savedMergeKeySet.has(row.key)) {
-                                next[row.key] = !!checked;
-                                if (checked) {
-                                  autoInitRow(row.key);
-                                }
-                              }
-                            });
-                            setConsolidations((prev) => ({ ...prev, ...next }));
-                            if (!checked) {
-                              setManuallyOverridden(new Set());
-                            }
-                          }}
-                        />
-                      </TableHead>
-                      <TableHead>Cost Head</TableHead>
-                      <TableHead>Current Lines (hrs each)</TableHead>
-                      <TableHead className="text-right">Combined Hrs</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Result</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredSmallCodeAnalysis.map((row, rowIndex) => {
-                      const mergeKey = row.key;
-                      const isSaved = savedMergeKeySet.has(mergeKey);
-                      const sameSECHeads = Object.keys(finalLaborSummary ?? {})
-                        .map((k) => {
-                          const parts = k.trim().split(/\s+/);
-                          return { key: k, sec: parts[0], act: parts[1], head: parts.slice(2).join(' ') };
-                        })
-                        .filter((p) => p.sec === row.sec && p.head !== row.head);
-                      return (
-                        <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
-                          <TableCell>
-                            {isSaved ? (
-                              <Checkbox checked disabled />
-                            ) : (
+
+                  {/* Inner tab switcher */}
+                  <div className="flex items-center gap-2 mb-4 border-b border-border pb-2">
+                    <button
+                      onClick={() => setSmallCodeTab('merge')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        smallCodeTab === 'merge'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Merge Groups
+                      {mergeGroups.length > 0 && (
+                        <span className="ml-1.5 opacity-70 text-[0.65rem]">
+                          ({mergeGroups.length})
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setSmallCodeTab('standalone')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        smallCodeTab === 'standalone'
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-muted text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Standalone Codes
+                      {standaloneGroups.length > 0 && (
+                        <span className="ml-1.5 opacity-70 text-[0.65rem]">
+                          ({standaloneGroups.length})
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* ── MERGE GROUPS TAB ── */}
+                  {smallCodeTab === 'merge' && (
+                    mergeGroups.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4">
+                        No multi-line merge candidates below the hour threshold.
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">
                               <Checkbox
-                                checked={!!consolidations[mergeKey]}
-                                onClick={(e) => {
-                                  shiftKeyRef.current = (e as React.MouseEvent).shiftKey;
-                                }}
+                                checked={
+                                  mergeGroups.length > 0 &&
+                                  mergeGroups.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
+                                  mergeGroups.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
+                                }
                                 onCheckedChange={(checked) => {
-                                  const currentIndex = rowIndex;
-                                  const isShift = shiftKeyRef.current;
-                                  shiftKeyRef.current = false;
-                                  
-                                  if (isShift && lastCheckedIndexRef.current >= 0) {
-                                    const from = Math.min(lastCheckedIndexRef.current, currentIndex);
-                                    const to = Math.max(lastCheckedIndexRef.current, currentIndex);
-                                    const next: Record<string, boolean> = {};
-                                    for (let i = from; i <= to; i++) {
-                                      if (!savedMergeKeySet.has(filteredSmallCodeAnalysis[i].key)) {
-                                        next[filteredSmallCodeAnalysis[i].key] = !!checked;
-                                        if (checked) autoInitRow(filteredSmallCodeAnalysis[i].key);
-                                      }
+                                  const next: Record<string, boolean> = {};
+                                  mergeGroups.forEach((row) => {
+                                    if (!savedMergeKeySet.has(row.key)) {
+                                      next[row.key] = !!checked;
+                                      if (checked) autoInitRow(row.key);
                                     }
-                                    setConsolidations((prev) => ({ ...prev, ...next }));
-                                  } else {
-                                    setConsolidations((prev) => ({ ...prev, [mergeKey]: !!checked }));
-                                    if (checked) autoInitRow(mergeKey);
-                                  }
-                                  lastCheckedIndexRef.current = currentIndex;
+                                  });
+                                  setConsolidations((prev) => ({ ...prev, ...next }));
+                                  if (!checked) setManuallyOverridden(new Set());
                                 }}
                               />
-                            )}
-                          </TableCell>
-                          <TableCell className="font-mono font-bold text-blue-400">
-                            SEC {row.sec} — {row.head}
-                            {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {row.lines.map(l => (
-                                <span key={l.code} className={`px-1.5 py-0.5 rounded text-xs ${l.isSmall ? 'bg-orange-500/20 text-orange-300' : 'bg-muted text-muted-foreground'}`}>
-                                  {l.code} ({(l.hours ?? 0).toFixed(1)}h)
-                                </span>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < 8 ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
-                            {row.combinedHours.toFixed(1)}
-                          </TableCell>
-                          <TableCell>
-                            {(consolidations[mergeKey] || isSaved) ? (
-                              <div>
-
-                                <select
-                                  className="text-xs bg-background border border-border rounded px-1 py-0.5"
-                                  value={reassignTargets[mergeKey] ?? '__merge__'}
-                                  onChange={(e) => {
-                                    const newVal = e.target.value;
-                                    setReassignTargets((prev) => ({ ...prev, [mergeKey]: newVal }));
-                                    // Track manual override
-                                    const autoResult = getDefaultAction(row.lines);
-                                    setManuallyOverridden(prev => {
-                                      const next = new Set(prev);
-                                      if (newVal === autoResult.action) {
-                                        next.delete(mergeKey);
-                                      } else {
-                                        next.add(mergeKey);
-                                      }
-                                      return next;
-                                    });
-                                  }}
-                                  disabled={isSaved}
-                                >
-                                  {row.lines.length > 1 && (
-                                    <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
-                                  )}
-                                  {row.lines.length > 1 && (
-                                    <option value="__redistribute__">Redistribute Hours</option>
-                                  )}
-                                  {row.lines.length === 1 && (
-                                    <option value="__reassign__" disabled>— Select target —</option>
-                                  )}
-                                  {sameSECHeads
-                                    .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
-                                    .map((p) => (
-                                    <option key={p.key} value={p.head}>
-                                      Reassign → {p.head}
-                                    </option>
-                                  ))}
-                                  <option value="__keep__">Keep as-is</option>
-                                </select>
-                                {/* Auto-reason label */}
-                                {consolidations[mergeKey] && !manuallyOverridden.has(mergeKey) && (() => {
-                                  const autoResult = getDefaultAction(row.lines);
-                                  return (
-                                    <div className={`text-xs mt-0.5 ${autoResult.action === '__redistribute__' ? 'text-green-400' : 'text-amber-400'}`}>
-                                      {autoResult.reason}
-                                    </div>
-                                  );
-                                })()}
-                                {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
-                                  const targets = redistributeAdjustments[mergeKey] ?? {};
-                                  // If no targets set yet, initialize to current hours
-                                  const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
-                                  const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
-                                  const isBalanced = Math.abs(netDelta) < 0.01;
-                                  const MIN_HOURS = 8;
-
-                                  const handleAutoRebalance = () => {
-                                    const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
-                                    const donors = row.lines.filter(l => l.hours > MIN_HOURS);
-                                    const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
-                                    const newTargets: Record<string, number> = {};
-                                    if (totalExcess <= 0) {
-                                      // Can't rebalance, just set everything to current
-                                      row.lines.forEach(l => { newTargets[l.code] = l.hours; });
-                                    } else {
-                                      const actualDeficit = Math.min(deficit, totalExcess);
-                                      row.lines.forEach(l => {
-                                        if (l.hours < MIN_HOURS) {
-                                          const need = MIN_HOURS - l.hours;
-                                          newTargets[l.code] = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                            </TableHead>
+                            <TableHead>Cost Head</TableHead>
+                            <TableHead>Current Lines (hrs each)</TableHead>
+                            <TableHead className="text-right">Combined Hrs</TableHead>
+                            <TableHead>Action</TableHead>
+                            <TableHead>Result</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {mergeGroups.map((row, rowIndex) => {
+                            const mergeKey = row.key;
+                            const isSaved = savedMergeKeySet.has(mergeKey);
+                            const sameSECHeads = Object.keys(finalLaborSummary ?? {})
+                              .map((k) => {
+                                const parts = k.trim().split(/\s+/);
+                                return { key: k, sec: parts[0], act: parts[1], head: parts.slice(2).join(' ') };
+                              })
+                              .filter((p) => p.sec === row.sec && p.head !== row.head);
+                            return (
+                              <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
+                                <TableCell>
+                                  {isSaved ? (
+                                    <Checkbox checked disabled />
+                                  ) : (
+                                    <Checkbox
+                                      checked={!!consolidations[mergeKey]}
+                                      onClick={(e) => { shiftKeyRef.current = (e as React.MouseEvent).shiftKey; }}
+                                      onCheckedChange={(checked) => {
+                                        const currentIndex = rowIndex;
+                                        const isShift = shiftKeyRef.current;
+                                        shiftKeyRef.current = false;
+                                        if (isShift && lastCheckedIndexRef.current >= 0) {
+                                          const from = Math.min(lastCheckedIndexRef.current, currentIndex);
+                                          const to = Math.max(lastCheckedIndexRef.current, currentIndex);
+                                          const next: Record<string, boolean> = {};
+                                          for (let i = from; i <= to; i++) {
+                                            if (!savedMergeKeySet.has(mergeGroups[i].key)) {
+                                              next[mergeGroups[i].key] = !!checked;
+                                              if (checked) autoInitRow(mergeGroups[i].key);
+                                            }
+                                          }
+                                          setConsolidations((prev) => ({ ...prev, ...next }));
                                         } else {
-                                          const excess = l.hours - MIN_HOURS;
-                                          const contribution = actualDeficit * (excess / totalExcess);
-                                          newTargets[l.code] = l.hours - contribution;
+                                          setConsolidations((prev) => ({ ...prev, [mergeKey]: !!checked }));
+                                          if (checked) autoInitRow(mergeKey);
                                         }
-                                      });
-                                    }
-                                    setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
-                                  };
-
-                                  return (
-                                    <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
-                                      {row.lines.map((line) => {
-                                        const target = getTarget(line);
-                                        const delta = target - line.hours;
+                                        lastCheckedIndexRef.current = currentIndex;
+                                      }}
+                                    />
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-mono font-bold text-blue-400">
+                                  SEC {row.sec} — {row.head}
+                                  {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1">
+                                    {row.lines.map(l => (
+                                      <span key={l.code} className={`px-1.5 py-0.5 rounded text-xs ${l.isSmall ? 'bg-orange-500/20 text-orange-300' : 'bg-muted text-muted-foreground'}`}>
+                                        {l.code} ({(l.hours ?? 0).toFixed(1)}h)
+                                      </span>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                                <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < 8 ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
+                                  {row.combinedHours.toFixed(1)}
+                                </TableCell>
+                                <TableCell>
+                                  {(consolidations[mergeKey] || isSaved) ? (
+                                    <div>
+                                      <select
+                                        className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                        value={reassignTargets[mergeKey] ?? '__merge__'}
+                                        onChange={(e) => {
+                                          const newVal = e.target.value;
+                                          setReassignTargets((prev) => ({ ...prev, [mergeKey]: newVal }));
+                                          const autoResult = getDefaultAction(row.lines);
+                                          setManuallyOverridden(prev => {
+                                            const next = new Set(prev);
+                                            if (newVal === autoResult.action) next.delete(mergeKey);
+                                            else next.add(mergeKey);
+                                            return next;
+                                          });
+                                        }}
+                                        disabled={isSaved}
+                                      >
+                                        <option value="__merge__">Merge → {row.sec} 0000 {row.head}</option>
+                                        <option value="__redistribute__">Redistribute Hours</option>
+                                        {sameSECHeads
+                                          .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                          .map((p) => (
+                                          <option key={p.key} value={p.head}>Reassign → {p.head}</option>
+                                        ))}
+                                        <option value="__keep__">Keep as-is</option>
+                                      </select>
+                                      {consolidations[mergeKey] && !manuallyOverridden.has(mergeKey) && (() => {
+                                        const autoResult = getDefaultAction(row.lines);
                                         return (
-                                          <div key={line.code} className="flex items-center gap-1 text-xs">
-                                            <span className="font-mono w-36 truncate text-muted-foreground">{line.code}</span>
-                                            <span className="font-mono w-12 text-right text-foreground">{line.hours.toFixed(1)}h</span>
-                                            <span className="text-muted-foreground px-1">→</span>
-                                            <input
-                                              type="number"
-                                              step={0.5}
-                                              value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(1))}
-                                              placeholder={line.hours.toFixed(1)}
-                                              onChange={(e) => {
-                                                const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
-                                                setRedistributeAdjustments((prev) => ({
-                                                  ...prev,
-                                                  [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
-                                                }));
-                                              }}
-                                              className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
-                                            />
-                                            <span className={`font-mono w-20 text-right text-muted-foreground`}>
-                                              ({delta > 0 ? '+' : ''}{delta.toFixed(1)}h)
-                                            </span>
+                                          <div className={`text-xs mt-0.5 ${autoResult.action === '__redistribute__' ? 'text-green-400' : 'text-amber-400'}`}>
+                                            {autoResult.reason}
                                           </div>
                                         );
-                                      })}
-                                      <div className="flex items-center gap-2 mt-1">
-                                        {isBalanced ? (
-                                          <span className="text-xs font-semibold text-green-500">✓ Balanced</span>
-                                        ) : netDelta > 0 ? (
-                                          <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(1)}h over — reduce some lines</span>
-                                        ) : (
-                                          <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(1)}h under — increase some lines</span>
-                                        )}
-                                        <button
-                                          type="button"
-                                          onClick={handleAutoRebalance}
-                                          className="text-xs text-primary hover:underline font-medium ml-auto"
-                                        >
-                                          Auto-Rebalance
-                                        </button>
-                                      </div>
-                                      {row.lines.some(l => l.hours < MIN_HOURS) && (() => {
-                                        const donors = row.lines.filter(l => l.hours > MIN_HOURS);
-                                        const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
-                                        const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
-                                        if (totalExcess < deficit) {
-                                          return <span className="text-xs text-amber-400 mt-0.5">⚠ Not enough excess hours for full rebalance</span>;
-                                        }
-                                        return null;
+                                      })()}
+                                      {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
+                                        const targets = redistributeAdjustments[mergeKey] ?? {};
+                                        const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                                        const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
+                                        const isBalanced = Math.abs(netDelta) < 0.01;
+                                        const MIN_HOURS = 8;
+                                        const handleAutoRebalance = () => {
+                                          const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
+                                          const donors = row.lines.filter(l => l.hours > MIN_HOURS);
+                                          const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
+                                          const newTargets: Record<string, number> = {};
+                                          if (totalExcess <= 0) {
+                                            row.lines.forEach(l => { newTargets[l.code] = l.hours; });
+                                          } else {
+                                            const actualDeficit = Math.min(deficit, totalExcess);
+                                            row.lines.forEach(l => {
+                                              if (l.hours < MIN_HOURS) {
+                                                const need = MIN_HOURS - l.hours;
+                                                newTargets[l.code] = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                              } else {
+                                                const excess = l.hours - MIN_HOURS;
+                                                const contribution = actualDeficit * (excess / totalExcess);
+                                                newTargets[l.code] = l.hours - contribution;
+                                              }
+                                            });
+                                          }
+                                          setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
+                                        };
+                                        return (
+                                          <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
+                                            {row.lines.map((line) => {
+                                              const target = getTarget(line);
+                                              const delta = target - line.hours;
+                                              return (
+                                                <div key={line.code} className="flex items-center gap-1 text-xs">
+                                                  <span className="font-mono w-36 truncate text-muted-foreground">{line.code}</span>
+                                                  <span className="font-mono w-12 text-right text-foreground">{line.hours.toFixed(1)}h</span>
+                                                  <span className="text-muted-foreground px-1">→</span>
+                                                  <input
+                                                    type="number"
+                                                    step={0.5}
+                                                    value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(1))}
+                                                    placeholder={line.hours.toFixed(1)}
+                                                    onChange={(e) => {
+                                                      const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
+                                                      setRedistributeAdjustments((prev) => ({
+                                                        ...prev,
+                                                        [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
+                                                      }));
+                                                    }}
+                                                    className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
+                                                  />
+                                                  <span className="font-mono w-20 text-right text-muted-foreground">
+                                                    ({delta > 0 ? '+' : ''}{delta.toFixed(1)}h)
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                            <div className="flex items-center gap-2 mt-1">
+                                              {isBalanced ? (
+                                                <span className="text-xs font-semibold text-green-500">✓ Balanced</span>
+                                              ) : netDelta > 0 ? (
+                                                <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(1)}h over — reduce some lines</span>
+                                              ) : (
+                                                <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(1)}h under — increase some lines</span>
+                                              )}
+                                              <button
+                                                type="button"
+                                                onClick={handleAutoRebalance}
+                                                className="text-xs text-primary hover:underline font-medium ml-auto"
+                                              >
+                                                Auto-Rebalance
+                                              </button>
+                                            </div>
+                                            {row.lines.some(l => l.hours < MIN_HOURS) && (() => {
+                                              const donors = row.lines.filter(l => l.hours > MIN_HOURS);
+                                              const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
+                                              const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
+                                              if (totalExcess < deficit) {
+                                                return <span className="text-xs text-amber-400 mt-0.5">⚠ Not enough excess hours for full rebalance</span>;
+                                              }
+                                              return null;
+                                            })()}
+                                          </div>
+                                        );
                                       })()}
                                     </div>
-                                  );
-                                })()}
-                              </div>
-                            ) : (
-                              <div>
-                                {row.lines.length === 1 ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic">
-                                    <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" />
-                                    keeps original code
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic">
-                                    <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" />
-                                    no merge applied
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {isSaved ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-green-400">
-                                  {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
-                                    ? `→ ${row.sec} * ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
-                                    : `${row.sec} 0000 ${row.head}`}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-5 px-1.5 text-xs"
-                                  onClick={() => handleUndoMerge(row.sec, row.head)}
-                                >
-                                  <Undo2 className="h-3 w-3 mr-1" /> Undo
-                                </Button>
-                              </div>
-                            ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
-                              const targets = redistributeAdjustments[mergeKey] ?? {};
-                              const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
-                              const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
-                              if (Math.abs(netDelta) > 0.01) {
-                                return <span className="text-amber-400 text-xs">Adjust to balance</span>;
-                              }
-                              const changed = row.lines.filter(l => Math.abs(getTarget(l) - l.hours) > 0.01);
-                              if (changed.length === 0) return <span className="text-muted-foreground text-xs">No change</span>;
-                              return (
-                                <div className="flex flex-col gap-0.5">
-                                  {changed.map((line) => {
-                                    const target = getTarget(line);
+                                  ) : (
+                                    <div>
+                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic">
+                                        <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" />
+                                        no merge applied
+                                      </span>
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-mono text-xs">
+                                  {isSaved ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-green-400">
+                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                          ? `→ ${row.sec} * ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
+                                          : `${row.sec} 0000 ${row.head}`}
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 px-1.5 text-xs"
+                                        onClick={() => handleUndoMerge(row.sec, row.head)}
+                                      >
+                                        <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                      </Button>
+                                    </div>
+                                  ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
+                                    const targets = redistributeAdjustments[mergeKey] ?? {};
+                                    const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                                    const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
+                                    if (Math.abs(netDelta) > 0.01) {
+                                      return <span className="text-amber-400 text-xs">Adjust to balance</span>;
+                                    }
+                                    const changed = row.lines.filter(l => Math.abs(getTarget(l) - l.hours) > 0.01);
+                                    if (changed.length === 0) return <span className="text-muted-foreground text-xs">No change</span>;
                                     return (
-                                      <div key={line.code} className="text-xs font-mono">
-                                        <span className="text-green-500">
-                                          {line.code}: {target.toFixed(1)}h
-                                        </span>
+                                      <div className="flex flex-col gap-0.5">
+                                        {changed.map((line) => {
+                                          const target = getTarget(line);
+                                          return (
+                                            <div key={line.code} className="text-xs font-mono">
+                                              <span className="text-green-500">{line.code}: {target.toFixed(1)}h</span>
+                                            </div>
+                                          );
+                                        })}
                                       </div>
                                     );
-                                  })}
-                                </div>
+                                  })() : consolidations[mergeKey] ? (
+                                    <span className={reassignTargets[mergeKey] === '__keep__' || reassignTargets[mergeKey] === '__reassign__' ? 'text-muted-foreground' : 'text-green-400'}>
+                                      {reassignTargets[mergeKey] === '__keep__'
+                                        ? 'Keeping as-is'
+                                        : reassignTargets[mergeKey] === '__reassign__'
+                                        ? 'Select a target →'
+                                        : reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
+                                        ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
+                                        : `${row.sec} 0000 ${row.head}`}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    )
+                  )}
+
+                  {/* ── STANDALONE CODES TAB ── */}
+                  {smallCodeTab === 'standalone' && (
+                    standaloneGroups.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4">
+                        No standalone codes below the hour threshold.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs text-muted-foreground">
+                            Single-entry codes below the minimum. Select rows to reassign their hours to another cost head in the same section.
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Filter:</span>
+                            <Select
+                              value={String(standaloneMaxHours)}
+                              onValueChange={(v) => setStandaloneMaxHours(Number(v))}
+                            >
+                              <SelectTrigger className="h-7 w-24 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="8">All (&lt; 8h)</SelectItem>
+                                <SelectItem value="6">&lt; 6h</SelectItem>
+                                <SelectItem value="4">&lt; 4h</SelectItem>
+                                <SelectItem value="2">&lt; 2h</SelectItem>
+                                <SelectItem value="1">&lt; 1h</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-10">
+                                <Checkbox
+                                  checked={
+                                    standaloneGroups.length > 0 &&
+                                    standaloneGroups.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
+                                    standaloneGroups.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
+                                  }
+                                  onCheckedChange={(checked) => {
+                                    const next: Record<string, boolean> = {};
+                                    standaloneGroups.forEach((row) => {
+                                      if (!savedMergeKeySet.has(row.key)) {
+                                        next[row.key] = !!checked;
+                                        if (checked) autoInitRow(row.key);
+                                      }
+                                    });
+                                    setConsolidations((prev) => ({ ...prev, ...next }));
+                                  }}
+                                />
+                              </TableHead>
+                              <TableHead>Code</TableHead>
+                              <TableHead className="text-right">Hours</TableHead>
+                              <TableHead>Reassign To</TableHead>
+                              <TableHead>Status</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {standaloneGroups.map((row) => {
+                              const mergeKey = row.key;
+                              const isSaved = savedMergeKeySet.has(mergeKey);
+                              const line = row.lines[0];
+                              const sameSECHeads = Object.keys(finalLaborSummary ?? {})
+                                .map((k) => {
+                                  const parts = k.trim().split(/\s+/);
+                                  return { key: k, sec: parts[0], act: parts[1], head: parts.slice(2).join(' ') };
+                                })
+                                .filter((p) => p.sec === row.sec && p.head !== row.head);
+                              return (
+                                <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
+                                  <TableCell>
+                                    {isSaved ? (
+                                      <Checkbox checked disabled />
+                                    ) : (
+                                      <Checkbox
+                                        checked={!!consolidations[mergeKey]}
+                                        onCheckedChange={(checked) => {
+                                          setConsolidations((prev) => ({ ...prev, [mergeKey]: !!checked }));
+                                          if (checked) autoInitRow(mergeKey);
+                                        }}
+                                      />
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="font-mono font-bold text-orange-400">
+                                    {line.code}
+                                    {isSaved && <span className="ml-2 text-xs text-green-500 font-normal">✓ Saved</span>}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono font-semibold text-destructive">
+                                    {row.combinedHours.toFixed(1)}h
+                                  </TableCell>
+                                  <TableCell>
+                                    {isSaved ? (
+                                      <span className="text-green-400 text-xs font-mono">
+                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                          ? `→ ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
+                                          : 'Merged'}
+                                      </span>
+                                    ) : (consolidations[mergeKey]) ? (
+                                      <select
+                                        className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                        value={reassignTargets[mergeKey] ?? '__reassign__'}
+                                        onChange={(e) => {
+                                          setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }));
+                                        }}
+                                      >
+                                        <option value="__reassign__" disabled>— select target —</option>
+                                        {sameSECHeads
+                                          .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                          .map((p) => (
+                                          <option key={p.key} value={p.head}>{p.head}</option>
+                                        ))}
+                                        <option value="__keep__">Keep as-is</option>
+                                      </select>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground italic">keeps original code</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {isSaved ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-green-500 text-xs">✓ Saved</span>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-5 px-1.5 text-xs"
+                                          onClick={() => handleUndoMerge(row.sec, row.head)}
+                                        >
+                                          <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Pending</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
                               );
-                            })() : consolidations[mergeKey] ? (
-                              <span className={reassignTargets[mergeKey] === '__keep__' || reassignTargets[mergeKey] === '__reassign__' ? 'text-muted-foreground' : 'text-green-400'}>
-                                {reassignTargets[mergeKey] === '__keep__'
-                                  ? 'Keeping as-is'
-                                  : reassignTargets[mergeKey] === '__reassign__'
-                                  ? 'Select a target →'
-                                  : reassignTargets[mergeKey] && reassignTargets[mergeKey] !== '__merge__'
-                                  ? `→ ${row.sec} * ${reassignTargets[mergeKey]}`
-                                  : `${row.sec} 0000 ${row.head}`}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </>
-            )}
+                            })}
+                          </TableBody>
+                        </Table>
+                      </>
+                    )
+                  )}
+                </>
+              )}
           </div>
         )}
 
