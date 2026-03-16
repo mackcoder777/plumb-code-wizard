@@ -427,9 +427,7 @@ export function useBuildingSectionMappings(projectId: string | null) {
 
       const buildingId = getBuildingFromDrawing(drawing);
       if (buildingId) {
-        const mapping = mappings.find(
-          m => m.building_identifier.toUpperCase() === buildingId.toUpperCase()
-        );
+        const mapping = findBuildingMapping(buildingId, mappings);
         if (mapping) return mapping.section_code;
         return suggestSectionForBuilding(buildingId);
       }
