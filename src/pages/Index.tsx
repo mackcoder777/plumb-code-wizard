@@ -2621,13 +2621,11 @@ const EnhancedCostCodeManager = () => {
                       if (hours === 0) return;
 
                       let costHead: string;
-                      let existingSection: string | null = null;
                       let existingActivity: string | null = null;
                       
                       if (!rawCostHead) {
                         // CRITICAL FIX: Bucket uncoded items instead of skipping
                         costHead = 'UNCD';
-                        existingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                         existingActivity = '0000';
                       } else {
                         // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
@@ -2635,11 +2633,9 @@ const EnhancedCostCodeManager = () => {
                         
                         // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
                         if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                          existingSection = parts[0];
                           existingActivity = parts[1];
                           costHead = parts.slice(4).join(' ');
                         } else if (parts.length >= 3) {
-                          existingSection = parts[0];
                           existingActivity = parts[1];
                           costHead = parts.slice(2).join(' ');
                         } else {
@@ -2647,8 +2643,8 @@ const EnhancedCostCodeManager = () => {
                         }
                       }
                       
-                      // Use existing section/activity if present, otherwise derive from floor/system
-                      const section = existingSection || resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                      // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
+                      const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings));
                       const fullCode = `${section} ${activity} ${costHead}`;
