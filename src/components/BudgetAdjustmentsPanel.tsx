@@ -2287,7 +2287,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                 </div>
               )}
 
-              {smallCodeAnalysis.length > 0 && (
+              {filteredSmallCodeAnalysis.length > 0 && (
                 <>
                   {!dismissedOrphanBanner && orphanedRows.length > 0 && (
                     <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 mb-3 text-sm">
