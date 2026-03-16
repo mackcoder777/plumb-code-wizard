@@ -4,6 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -465,6 +466,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   const [dismissedOrphanBanner, setDismissedOrphanBanner] = useState(false);
+  const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1117,6 +1119,14 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
       (row) => !savedMergeKeySet.has(row.key) && savedCostHeads.has(row.head)
     );
   }, [smallCodeAnalysis, savedMergeKeySet]);
+
+  // Filtered view for standalone hour threshold
+  const filteredSmallCodeAnalysis = useMemo(() => {
+    return smallCodeAnalysis.filter(row => {
+      if (row.lines.length > 1) return true;
+      return row.combinedHours < standaloneMaxHours;
+    });
+  }, [smallCodeAnalysis, standaloneMaxHours]);
 
   // Auto-select orphaned rows so the user can re-apply them in one click.
   // This runs once when orphanedRows stabilizes (i.e., after saved merges load).
@@ -2216,17 +2226,37 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                 <h3 className="text-sm font-semibold text-orange-400 flex items-center gap-2">
                   ⚠️ Small Code Review
                   <span className="text-xs font-normal text-muted-foreground">
-                    ({smallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
+                    ({filteredSmallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
                   </span>
                 </h3>
-                <Button
-                  onClick={handleConsolidate}
-                  disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
-                  size="sm"
-                  className="bg-blue-600 text-white hover:bg-blue-500"
-                >
-                  {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
-                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Standalone filter:</span>
+                    <Select
+                      value={String(standaloneMaxHours)}
+                      onValueChange={(v) => setStandaloneMaxHours(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 w-28 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="8">All (&lt; 8h)</SelectItem>
+                        <SelectItem value="6">&lt; 6h</SelectItem>
+                        <SelectItem value="4">&lt; 4h</SelectItem>
+                        <SelectItem value="2">&lt; 2h</SelectItem>
+                        <SelectItem value="1">&lt; 1h</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleConsolidate}
+                    disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
+                    size="sm"
+                    className="bg-blue-600 text-white hover:bg-blue-500"
+                  >
+                    {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
@@ -2257,7 +2287,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                 </div>
               )}
 
-              {smallCodeAnalysis.length > 0 && (
+              {filteredSmallCodeAnalysis.length > 0 && (
                 <>
                   {!dismissedOrphanBanner && orphanedRows.length > 0 && (
                     <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 mb-3 text-sm">
@@ -2284,14 +2314,14 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                     <TableRow>
                       <TableHead className="w-10">
                         <Checkbox
-                          checked={
-                            smallCodeAnalysis.length > 0 &&
-                            smallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
-                            smallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
+                           checked={
+                            filteredSmallCodeAnalysis.length > 0 &&
+                            filteredSmallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
+                            filteredSmallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
                           }
                           onCheckedChange={(checked) => {
                             const next: Record<string, boolean> = {};
-                            smallCodeAnalysis.forEach((row) => {
+                            filteredSmallCodeAnalysis.forEach((row) => {
                               if (!savedMergeKeySet.has(row.key)) {
                                 next[row.key] = !!checked;
                                 if (checked) {
@@ -2314,7 +2344,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {smallCodeAnalysis.map((row, rowIndex) => {
+                    {filteredSmallCodeAnalysis.map((row, rowIndex) => {
                       const mergeKey = row.key;
                       const isSaved = savedMergeKeySet.has(mergeKey);
                       const sameSECHeads = Object.keys(finalLaborSummary ?? {})
@@ -2344,9 +2374,9 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                     const to = Math.max(lastCheckedIndexRef.current, currentIndex);
                                     const next: Record<string, boolean> = {};
                                     for (let i = from; i <= to; i++) {
-                                      if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
-                                        next[smallCodeAnalysis[i].key] = !!checked;
-                                        if (checked) autoInitRow(smallCodeAnalysis[i].key);
+                                      if (!savedMergeKeySet.has(filteredSmallCodeAnalysis[i].key)) {
+                                        next[filteredSmallCodeAnalysis[i].key] = !!checked;
+                                        if (checked) autoInitRow(filteredSmallCodeAnalysis[i].key);
                                       }
                                     }
                                     setConsolidations((prev) => ({ ...prev, ...next }));
