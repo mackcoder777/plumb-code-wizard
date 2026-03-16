@@ -466,6 +466,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   const [dismissedOrphanBanner, setDismissedOrphanBanner] = useState(false);
+  const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
