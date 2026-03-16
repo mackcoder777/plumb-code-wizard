@@ -2408,6 +2408,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                           <TableCell>
                             {(consolidations[mergeKey] || isSaved) ? (
                               <div>
+
                                 <select
                                   className="text-xs bg-background border border-border rounded px-1 py-0.5"
                                   value={reassignTargets[mergeKey] ?? '__merge__'}
@@ -2547,7 +2548,19 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                 })()}
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
+                              <div>
+                                {row.lines.length === 1 ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic">
+                                    <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" />
+                                    keeps original code
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic">
+                                    <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/40" />
+                                    no merge applied
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </TableCell>
                           <TableCell className="font-mono text-xs">
