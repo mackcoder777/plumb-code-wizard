@@ -208,9 +208,7 @@ export function resolveSectionStatic(
     // Priority 2: User-configured zone patterns
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zonePatternMatch.building_identifier.toUpperCase()
-      );
+      const m = findBuildingMapping(zonePatternMatch.building_identifier, buildingMappings);
       if (m) return m.section_code;
     }
   }
