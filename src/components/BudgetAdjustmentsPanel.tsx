@@ -1126,7 +1126,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     orphanedRows.forEach((row) => {
       // Pre-check the consolidation checkbox
       setConsolidations((prev) => {
-        if (prev[row.key]) return prev; // already initialized, skip
+        if (row.key in prev) return prev; // already initialized (even if unchecked), skip
         return { ...prev, [row.key]: true };
       });
 
