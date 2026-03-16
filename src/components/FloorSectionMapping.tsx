@@ -716,6 +716,29 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     try {
       await batchSave.mutateAsync({ projectId, mappings: mappingsToSave });
       setHasChanges(false);
+
+      // Sync building_section_mappings from floor mapping groups so the
+      // resolver always gets canonical section codes from building records too.
+      const buildingGroups: Record<string, string> = {};
+      mappingsToSave.forEach(row => {
+        const m = (row.floorPattern || '').match(/^bldg\s+([A-Z0-9]+)\s*-/i);
+        if (m && row.sectionCode) {
+          buildingGroups[m[1].toUpperCase()] = row.sectionCode;
+        }
+      });
+      if (Object.keys(buildingGroups).length > 0) {
+        await (supabase as any).from('building_section_mappings').upsert(
+          Object.entries(buildingGroups).map(([buildingId, sectionCode]) => ({
+            project_id: projectId,
+            building_identifier: buildingId,
+            section_code: sectionCode,
+            updated_at: new Date().toISOString(),
+          })),
+          { onConflict: 'project_id,building_identifier' }
+        );
+        onBuildingMappingsChanged?.();
+      }
+
       toast({ title: "Mappings Saved", description: `Saved ${mappingsToSave.length} floor-to-section mappings.` });
     } catch {
       toast({ title: "Save Failed", description: "Failed to save floor mappings. Please try again.", variant: "destructive" });

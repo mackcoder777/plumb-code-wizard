@@ -965,10 +965,67 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
   const finalLaborSummary = useMemo(() => {
     const summary = calculations.adjustedLaborSummary;
     if (!summary || Object.keys(summary).length === 0) return summary;
-    if (!savedMergesData?.length) return summary;
 
-    let result = { ...summary };
-    savedMergesData.forEach(merge => {
+    // Build canonical alias map: numeric section → canonical section
+    // e.g. "2" → "B2" when a B-prefixed version exists in the same summary
+    const sectionAliases: Record<string, string> = {};
+    if (summary) {
+      Object.values(summary).forEach((item: any) => {
+        const parts = (item.code ?? '').trim().split(/\s+/);
+        if (parts.length >= 1) {
+          const sec = parts[0];
+          if (/^\d+$/.test(sec)) {
+            const canonical = `B${sec}`;
+            const hasCanonical = Object.values(summary).some(
+              (i: any) => (i.code ?? '').trim().startsWith(canonical + ' ')
+            );
+            if (hasCanonical) sectionAliases[sec] = canonical;
+          }
+        }
+      });
+    }
+
+    // Normalize any stale numeric sections in the summary itself
+    let result: Record<string, any> = {};
+    Object.entries(summary).forEach(([key, item]: [string, any]) => {
+      const parts = (item.code ?? '').trim().split(/\s+/);
+      if (parts.length >= 1 && sectionAliases[parts[0]]) {
+        parts[0] = sectionAliases[parts[0]];
+        const newCode = parts.join(' ');
+        // Merge into existing canonical entry if it exists
+        if (result[newCode]) {
+          result[newCode] = {
+            ...result[newCode],
+            hours: (result[newCode].hours ?? 0) + (item.hours ?? 0),
+            dollars: (result[newCode].dollars ?? 0) + (item.dollars ?? 0),
+          };
+        } else {
+          result[newCode] = { ...item, code: newCode };
+        }
+      } else {
+        if (result[key]) {
+          result[key] = {
+            ...result[key],
+            hours: (result[key].hours ?? 0) + (item.hours ?? 0),
+            dollars: (result[key].dollars ?? 0) + (item.dollars ?? 0),
+          };
+        } else {
+          result[key] = { ...item };
+        }
+      }
+    });
+
+    if (!savedMergesData?.length) return result;
+
+    // Normalize merge sec_codes using the alias map
+    const normalizedMerges = (savedMergesData ?? []).map(merge => ({
+      ...merge,
+      sec_code: merge.sec_code
+        ? (sectionAliases[merge.sec_code] ?? merge.sec_code)
+        : merge.sec_code,
+    }));
+
+    normalizedMerges.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
       const reassignTo = (merge as any).reassign_to_head as string | null;
