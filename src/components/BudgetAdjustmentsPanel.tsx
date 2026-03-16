@@ -2408,6 +2408,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                           <TableCell>
                             {(consolidations[mergeKey] || isSaved) ? (
                               <div>
+
                                 <select
                                   className="text-xs bg-background border border-border rounded px-1 py-0.5"
                                   value={reassignTargets[mergeKey] ?? '__merge__'}
