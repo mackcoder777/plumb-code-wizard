@@ -107,8 +107,10 @@ export function detectBuildingsFromDrawings(
   const buildingMap = new Map<string, { drawings: Set<string>; count: number }>();
 
   for (const item of items) {
-    const bid = getBuildingFromDrawing(item.drawing || '');
-    if (!bid) continue;
+    const rawBid = getBuildingFromDrawing(item.drawing || '');
+    if (!rawBid) continue;
+    // Normalize: strip leading "B" from numeric IDs so "B9" and "9" merge
+    const bid = rawBid.replace(/^[Bb](\d+)$/, '$1');
     if (!buildingMap.has(bid)) {
       buildingMap.set(bid, { drawings: new Set(), count: 0 });
     }
