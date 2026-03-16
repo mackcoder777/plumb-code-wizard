@@ -2288,24 +2288,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                   </span>
                 </h3>
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Standalone filter:</span>
-                    <Select
-                      value={String(standaloneMaxHours)}
-                      onValueChange={(v) => setStandaloneMaxHours(Number(v))}
-                    >
-                      <SelectTrigger className="h-8 w-28 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="8">All (&lt; 8h)</SelectItem>
-                        <SelectItem value="6">&lt; 6h</SelectItem>
-                        <SelectItem value="4">&lt; 4h</SelectItem>
-                        <SelectItem value="2">&lt; 2h</SelectItem>
-                        <SelectItem value="1">&lt; 1h</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <Button
                     onClick={handleConsolidate}
                     disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
