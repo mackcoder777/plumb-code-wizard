@@ -3,6 +3,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
 import { DatasetProfile, getBuildingFromZone, getZonePatternMatch } from '@/utils/datasetProfiler';
 
+/** Finds a building mapping with B-prefix normalization ("9" ↔ "B9") */
+function findBuildingMapping<T extends { building_identifier: string }>(
+  buildingId: string,
+  mappings: T[]
+): T | undefined {
+  const upper = buildingId.toUpperCase().trim();
+  // 1. Exact match
+  let m = mappings.find(bm => bm.building_identifier.toUpperCase().trim() === upper);
+  if (m) return m;
+  // 2. "9" → try "B9"
+  if (/^\d+$/.test(upper)) {
+    m = mappings.find(bm => bm.building_identifier.toUpperCase().trim() === `B${upper}`);
+    if (m) return m;
+  }
+  // 3. "B9" → try "9"
+  if (/^B\d+$/.test(upper)) {
+    m = mappings.find(bm => bm.building_identifier.toUpperCase().trim() === upper.slice(1));
+    if (m) return m;
+  }
+  return undefined;
+}
+
 /** Floors that exist across multiple buildings and need zone-based section resolution */
 const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
 
@@ -85,8 +107,10 @@ export function detectBuildingsFromDrawings(
   const buildingMap = new Map<string, { drawings: Set<string>; count: number }>();
 
   for (const item of items) {
-    const bid = getBuildingFromDrawing(item.drawing || '');
-    if (!bid) continue;
+    const rawBid = getBuildingFromDrawing(item.drawing || '');
+    if (!rawBid) continue;
+    // Normalize: strip leading "B" from numeric IDs so "B9" and "9" merge
+    const bid = rawBid.replace(/^[Bb](\d+)$/, '$1');
     if (!buildingMap.has(bid)) {
       buildingMap.set(bid, { drawings: new Set(), count: 0 });
     }
@@ -177,18 +201,14 @@ export function resolveSectionStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return m.section_code;
       return suggestSectionForBuilding(zoneBuilding);
     }
     // Priority 2: User-configured zone patterns
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zonePatternMatch.building_identifier.toUpperCase()
-      );
+      const m = findBuildingMapping(zonePatternMatch.building_identifier, buildingMappings);
       if (m) return m.section_code;
     }
   }
@@ -206,9 +226,7 @@ export function resolveSectionStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return m.section_code;
       return suggestSectionForBuilding(zoneBuilding);
     }
@@ -220,9 +238,7 @@ export function resolveSectionStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return m.section_code;
       return suggestSectionForBuilding(zoneBuilding);
     }
@@ -231,9 +247,7 @@ export function resolveSectionStatic(
   // Drawing-based fallback (existing behavior)
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    const m = buildingMappings.find(
-      bm => bm.building_identifier.toUpperCase() === buildingId.toUpperCase()
-    );
+    const m = findBuildingMapping(buildingId, buildingMappings);
     if (m) return m.section_code;
     return suggestSectionForBuilding(buildingId);
   }
@@ -262,18 +276,14 @@ export function resolveFloorMappingStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return { section: m.section_code, activity: floorActivity };
       return { section: suggestSectionForBuilding(zoneBuilding), activity: floorActivity };
     }
     // Priority 2: User-configured zone patterns with activity extraction from zone prefix
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zonePatternMatch.building_identifier.toUpperCase()
-      );
+      const m = findBuildingMapping(zonePatternMatch.building_identifier, buildingMappings);
       if (m) {
         // Try to extract activity code from zone prefix (e.g. "PC1 - MODULAR" → "0PC1", "PC10 - ..." → "PC10")
         const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
@@ -300,9 +310,7 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return { section: m.section_code, activity: '0000' };
       return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
     }
@@ -315,9 +323,7 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return { section: m.section_code, activity: '0000' };
       return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
     }
@@ -326,9 +332,7 @@ export function resolveFloorMappingStatic(
   // Drawing-based fallback
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    const m = buildingMappings.find(
-      bm => bm.building_identifier.toUpperCase() === buildingId.toUpperCase()
-    );
+    const m = findBuildingMapping(buildingId, buildingMappings);
     if (m) return { section: m.section_code, activity: '0000' };
     return { section: suggestSectionForBuilding(buildingId), activity: '0000' };
   }
@@ -423,9 +427,7 @@ export function useBuildingSectionMappings(projectId: string | null) {
 
       const buildingId = getBuildingFromDrawing(drawing);
       if (buildingId) {
-        const mapping = mappings.find(
-          m => m.building_identifier.toUpperCase() === buildingId.toUpperCase()
-        );
+        const mapping = findBuildingMapping(buildingId, mappings);
         if (mapping) return mapping.section_code;
         return suggestSectionForBuilding(buildingId);
       }
