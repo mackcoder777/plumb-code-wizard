@@ -2321,7 +2321,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                           }
                           onCheckedChange={(checked) => {
                             const next: Record<string, boolean> = {};
-                            smallCodeAnalysis.forEach((row) => {
+                            filteredSmallCodeAnalysis.forEach((row) => {
                               if (!savedMergeKeySet.has(row.key)) {
                                 next[row.key] = !!checked;
                                 if (checked) {
