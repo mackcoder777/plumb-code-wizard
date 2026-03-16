@@ -1120,6 +1120,14 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
     );
   }, [smallCodeAnalysis, savedMergeKeySet]);
 
+  // Filtered view for standalone hour threshold
+  const filteredSmallCodeAnalysis = useMemo(() => {
+    return smallCodeAnalysis.filter(row => {
+      if (row.lines.length > 1) return true;
+      return row.combinedHours < standaloneMaxHours;
+    });
+  }, [smallCodeAnalysis, standaloneMaxHours]);
+
   // Auto-select orphaned rows so the user can re-apply them in one click.
   // This runs once when orphanedRows stabilizes (i.e., after saved merges load).
   useEffect(() => {
