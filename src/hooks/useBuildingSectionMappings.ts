@@ -3,6 +3,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
 import { DatasetProfile, getBuildingFromZone, getZonePatternMatch } from '@/utils/datasetProfiler';
 
+/** Finds a building mapping with B-prefix normalization ("9" ↔ "B9") */
+function findBuildingMapping<T extends { building_identifier: string }>(
+  buildingId: string,
+  mappings: T[]
+): T | undefined {
+  const upper = buildingId.toUpperCase().trim();
+  // 1. Exact match
+  let m = mappings.find(bm => bm.building_identifier.toUpperCase().trim() === upper);
+  if (m) return m;
+  // 2. "9" → try "B9"
+  if (/^\d+$/.test(upper)) {
+    m = mappings.find(bm => bm.building_identifier.toUpperCase().trim() === `B${upper}`);
+    if (m) return m;
+  }
+  // 3. "B9" → try "9"
+  if (/^B\d+$/.test(upper)) {
+    m = mappings.find(bm => bm.building_identifier.toUpperCase().trim() === upper.slice(1));
+    if (m) return m;
+  }
+  return undefined;
+}
+
 /** Floors that exist across multiple buildings and need zone-based section resolution */
 const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
 
