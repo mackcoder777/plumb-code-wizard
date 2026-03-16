@@ -2314,10 +2314,10 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                     <TableRow>
                       <TableHead className="w-10">
                         <Checkbox
-                          checked={
-                            smallCodeAnalysis.length > 0 &&
-                            smallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
-                            smallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
+                           checked={
+                            filteredSmallCodeAnalysis.length > 0 &&
+                            filteredSmallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
+                            filteredSmallCodeAnalysis.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
                           }
                           onCheckedChange={(checked) => {
                             const next: Record<string, boolean> = {};
