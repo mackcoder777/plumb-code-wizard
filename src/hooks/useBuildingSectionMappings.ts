@@ -292,24 +292,20 @@ export function resolveFloorMappingStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = findBuildingMapping(zoneBuilding, buildingMappings);
-      if (m) return { section: m.section_code, activity: floorActivity };
-      return { section: suggestSectionForBuilding(zoneBuilding), activity: floorActivity };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity };
     }
     // Priority 2: User-configured zone patterns with activity extraction from zone prefix
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
-      const m = findBuildingMapping(zonePatternMatch.building_identifier, buildingMappings);
-      if (m) {
-        // Try to extract activity code from zone prefix (e.g. "PC1 - MODULAR" → "0PC1", "PC10 - ..." → "PC10")
-        const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
-        if (prefixMatch) {
-          const prefix = prefixMatch[1].toUpperCase();
-          const activity = prefix.length <= 3 ? '0' + prefix : prefix;
-          return { section: m.section_code, activity };
-        }
-        return { section: m.section_code, activity: floorActivity };
+      const canonicalSection = getCanonicalSectionForBuilding(zonePatternMatch.building_identifier, floorMappings, buildingMappings);
+      // Try to extract activity code from zone prefix (e.g. "PC1 - MODULAR" → "0PC1", "PC10 - ..." → "PC10")
+      const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
+      if (prefixMatch) {
+        const prefix = prefixMatch[1].toUpperCase();
+        const activity = prefix.length <= 3 ? '0' + prefix : prefix;
+        return { section: canonicalSection, activity };
       }
+      return { section: canonicalSection, activity: floorActivity };
     }
   }
 
@@ -326,9 +322,7 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = findBuildingMapping(zoneBuilding, buildingMappings);
-      if (m) return { section: m.section_code, activity: '0000' };
-      return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000' };
     }
   }
 
@@ -339,18 +333,14 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = findBuildingMapping(zoneBuilding, buildingMappings);
-      if (m) return { section: m.section_code, activity: '0000' };
-      return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000' };
     }
   }
 
   // Drawing-based fallback
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    const m = findBuildingMapping(buildingId, buildingMappings);
-    if (m) return { section: m.section_code, activity: '0000' };
-    return { section: suggestSectionForBuilding(buildingId), activity: '0000' };
+    return { section: getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings), activity: '0000' };
   }
 
   return { section: '01', activity: '0000' };
