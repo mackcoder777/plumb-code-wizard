@@ -2374,9 +2374,9 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                                     const to = Math.max(lastCheckedIndexRef.current, currentIndex);
                                     const next: Record<string, boolean> = {};
                                     for (let i = from; i <= to; i++) {
-                                      if (!savedMergeKeySet.has(smallCodeAnalysis[i].key)) {
-                                        next[smallCodeAnalysis[i].key] = !!checked;
-                                        if (checked) autoInitRow(smallCodeAnalysis[i].key);
+                                      if (!savedMergeKeySet.has(filteredSmallCodeAnalysis[i].key)) {
+                                        next[filteredSmallCodeAnalysis[i].key] = !!checked;
+                                        if (checked) autoInitRow(filteredSmallCodeAnalysis[i].key);
                                       }
                                     }
                                     setConsolidations((prev) => ({ ...prev, ...next }));
