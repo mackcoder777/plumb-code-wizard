@@ -2226,17 +2226,37 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
                 <h3 className="text-sm font-semibold text-orange-400 flex items-center gap-2">
                   ⚠️ Small Code Review
                   <span className="text-xs font-normal text-muted-foreground">
-                    ({smallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
+                    ({filteredSmallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
                   </span>
                 </h3>
-                <Button
-                  onClick={handleConsolidate}
-                  disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
-                  size="sm"
-                  className="bg-blue-600 text-white hover:bg-blue-500"
-                >
-                  {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
-                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Standalone filter:</span>
+                    <Select
+                      value={String(standaloneMaxHours)}
+                      onValueChange={(v) => setStandaloneMaxHours(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 w-28 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="8">All (&lt; 8h)</SelectItem>
+                        <SelectItem value="6">&lt; 6h</SelectItem>
+                        <SelectItem value="4">&lt; 4h</SelectItem>
+                        <SelectItem value="2">&lt; 2h</SelectItem>
+                        <SelectItem value="1">&lt; 1h</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleConsolidate}
+                    disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
+                    size="sm"
+                    className="bg-blue-600 text-white hover:bg-blue-500"
+                  >
+                    {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
