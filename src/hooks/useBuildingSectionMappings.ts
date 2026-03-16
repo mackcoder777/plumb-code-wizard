@@ -332,9 +332,7 @@ export function resolveFloorMappingStatic(
   // Drawing-based fallback
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    const m = buildingMappings.find(
-      bm => bm.building_identifier.toUpperCase() === buildingId.toUpperCase()
-    );
+    const m = findBuildingMapping(buildingId, buildingMappings);
     if (m) return { section: m.section_code, activity: '0000' };
     return { section: suggestSectionForBuilding(buildingId), activity: '0000' };
   }
