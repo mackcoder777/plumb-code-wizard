@@ -310,9 +310,7 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return { section: m.section_code, activity: '0000' };
       return { section: suggestSectionForBuilding(zoneBuilding), activity: '0000' };
     }
