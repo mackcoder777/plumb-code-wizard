@@ -238,9 +238,7 @@ export function resolveSectionStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = buildingMappings.find(
-        bm => bm.building_identifier.toUpperCase() === zoneBuilding.toUpperCase()
-      );
+      const m = findBuildingMapping(zoneBuilding, buildingMappings);
       if (m) return m.section_code;
       return suggestSectionForBuilding(zoneBuilding);
     }
