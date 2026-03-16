@@ -187,6 +187,31 @@ export interface ResolutionOptions {
  * Optionally uses zone-based resolution when the dataset profile indicates
  * zone contains the building identifier (Pattern 2).
  */
+/**
+ * Returns the canonical section code for a building by cross-referencing
+ * floor mappings first (source of truth), then building mappings, then suggestion.
+ * Prevents stale numeric section codes (e.g. "2") from overriding canonical
+ * floor-mapping-derived codes (e.g. "B2").
+ */
+function getCanonicalSectionForBuilding(
+  buildingId: string,
+  floorMappings: FloorSectionMapping[],
+  buildingMappings: BuildingSectionMapping[]
+): string {
+  const idNorm = buildingId.toUpperCase();
+  // Check floor mapping entries whose pattern starts with "Bldg X -"
+  const floorMatch = floorMappings.find(fm => {
+    const m = (fm.floor_pattern || '').match(/^bldg\s+([A-Z0-9]+)\s*-/i);
+    return m && m[1].toUpperCase() === idNorm;
+  });
+  if (floorMatch?.section_code) return floorMatch.section_code;
+  // Fall back to building mapping record
+  const bm = findBuildingMapping(buildingId, buildingMappings);
+  if (bm) return bm.section_code;
+  // Last resort: derive from ID
+  return suggestSectionForBuilding(buildingId);
+}
+
 export function resolveSectionStatic(
   floor: string,
   drawing: string,
@@ -201,15 +226,12 @@ export function resolveSectionStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = findBuildingMapping(zoneBuilding, buildingMappings);
-      if (m) return m.section_code;
-      return suggestSectionForBuilding(zoneBuilding);
+      return getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings);
     }
     // Priority 2: User-configured zone patterns
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
-      const m = findBuildingMapping(zonePatternMatch.building_identifier, buildingMappings);
-      if (m) return m.section_code;
+      return getCanonicalSectionForBuilding(zonePatternMatch.building_identifier, floorMappings, buildingMappings);
     }
   }
 
@@ -226,9 +248,7 @@ export function resolveSectionStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = findBuildingMapping(zoneBuilding, buildingMappings);
-      if (m) return m.section_code;
-      return suggestSectionForBuilding(zoneBuilding);
+      return getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings);
     }
   }
   // Per-item zone fallback (pattern-agnostic, suppressed for subzone/phase)
@@ -238,18 +258,14 @@ export function resolveSectionStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      const m = findBuildingMapping(zoneBuilding, buildingMappings);
-      if (m) return m.section_code;
-      return suggestSectionForBuilding(zoneBuilding);
+      return getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings);
     }
   }
 
   // Drawing-based fallback (existing behavior)
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    const m = findBuildingMapping(buildingId, buildingMappings);
-    if (m) return m.section_code;
-    return suggestSectionForBuilding(buildingId);
+    return getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings);
   }
 
   return '01';
