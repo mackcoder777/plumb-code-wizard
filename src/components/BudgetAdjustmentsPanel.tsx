@@ -2662,6 +2662,39 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                           })}
                         </TableBody>
                       </Table>
+                      {/* Merge tab footer */}
+                      {(() => {
+                        const mergeKeys = Object.entries(consolidations)
+                          .filter(([k, v]) => v && mergeGroups.some(g => g.key === k) && !savedMergeKeySet.has(k));
+                        const readyCount = mergeKeys.length;
+                        return (
+                          <div className="flex justify-between items-center mt-4 pt-4 border-t border-border">
+                            <span className="text-xs text-muted-foreground">
+                              {readyCount} selected for merge
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => {
+                                  const cleared = { ...consolidations };
+                                  mergeGroups.forEach(g => { delete cleared[g.key]; });
+                                  setConsolidations(cleared);
+                                }}
+                                className="text-xs text-muted-foreground hover:text-foreground underline bg-transparent border-none cursor-pointer"
+                              >
+                                Clear Selections
+                              </button>
+                              <Button
+                                onClick={handleConsolidate}
+                                disabled={readyCount === 0 || saveMergeMutation.isPending}
+                                size="sm"
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                              >
+                                {saveMergeMutation.isPending ? 'Saving…' : `Apply ${readyCount > 0 ? readyCount + ' ' : ''}Merge${readyCount !== 1 ? 's' : ''}`}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     )
                   )}
 
