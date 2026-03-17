@@ -1313,6 +1313,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             description: `Skipped: ${names}. Fix balance and re-apply.`,
             variant: 'destructive',
           });
+        } else {
+          toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
         }
       },
     });
