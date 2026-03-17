@@ -2527,18 +2527,19 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           const donors = row.lines.filter(l => l.hours > MIN_HOURS);
                                           const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
                                           const newTargets: Record<string, number> = {};
+                                          const toActKey2 = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
                                           if (totalExcess <= 0) {
-                                            row.lines.forEach(l => { newTargets[l.code] = l.hours; });
+                                            row.lines.forEach(l => { newTargets[toActKey2(l.code)] = l.hours; });
                                           } else {
                                             const actualDeficit = Math.min(deficit, totalExcess);
                                             row.lines.forEach(l => {
                                               if (l.hours < MIN_HOURS) {
                                                 const need = MIN_HOURS - l.hours;
-                                                newTargets[l.code] = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                                newTargets[toActKey2(l.code)] = l.hours + Math.min(need, need * (actualDeficit / deficit));
                                               } else {
                                                 const excess = l.hours - MIN_HOURS;
                                                 const contribution = actualDeficit * (excess / totalExcess);
-                                                newTargets[l.code] = l.hours - contribution;
+                                                newTargets[toActKey2(l.code)] = l.hours - contribution;
                                               }
                                             });
                                           }
