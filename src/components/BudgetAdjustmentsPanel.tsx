@@ -2903,7 +2903,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {standaloneGroups.map((row) => {
+                            {[...standaloneGroups, ...savedOnlyRows.filter((r) => {
+                              const saved = (savedMergesData ?? []).find(
+                                (m) => m.sec_code === r.sec && m.cost_head === r.head
+                              );
+                              return saved && saved.reassign_to_head !== null &&
+                                !(saved.redistribute_adjustments &&
+                                  Object.keys(typeof saved.redistribute_adjustments === 'object' && saved.redistribute_adjustments !== null ? saved.redistribute_adjustments : {}).length > 0);
+                            })].map((row) => {
                               const mergeKey = row.key;
                               const isSaved = savedMergeKeySet.has(mergeKey);
                               const line = row.lines[0];
