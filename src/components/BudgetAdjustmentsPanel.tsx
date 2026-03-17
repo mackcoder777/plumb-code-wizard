@@ -1256,6 +1256,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
+    const currentGroup = smallCodeAnalysis.find(
+      (r) => r.sec === sec && r.head === head
+    );
+    const isCurrentlyStandalone =
+      currentGroup !== undefined && currentGroup.lines.length === 1;
+    const onStandaloneTab = smallCodeTab === 'standalone';
+
     const remaining = (savedMergesData ?? [])
       .filter(m => !(m.sec_code === sec && m.cost_head === head))
       .map(m => ({
@@ -1264,7 +1271,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         reassign_to_head: (m as any).reassign_to_head ?? null,
         redistribute_adjustments: (m as any).redistribute_adjustments ?? null,
       }));
-    saveMergeMutation.mutate(remaining);
+    saveMergeMutation.mutate(remaining, {
+      onSuccess: () => {
+        if (isCurrentlyStandalone && onStandaloneTab) {
+          setSmallCodeTab('merge');
+          toast({
+            title: `${head} moved to Merge Groups`,
+            description: 'This code has multiple activity codes — find it in the Merge Groups tab.',
+          });
+        }
+      },
+    });
   };
 
   useEffect(() => {
