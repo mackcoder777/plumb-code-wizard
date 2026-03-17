@@ -1277,7 +1277,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               rate: 0,
               type: 'field' as const,
             }],
-        isSavedOnly: true,
+        
       });
     });
 
