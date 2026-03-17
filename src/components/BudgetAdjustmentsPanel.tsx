@@ -1095,24 +1095,43 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Redistribute: apply per-activity hour deltas
       if (redistAdj && Object.keys(redistAdj).length > 0) {
-        Object.entries(redistAdj).forEach(([actCode, delta]) => {
-          if (!delta || delta === 0) return;
-          // Handle both legacy full-code keys ("B3 00LB SPCL") and
-          // correct activity-code-only keys ("00LB")
+        // Pre-validate: ensure ALL referenced codes exist before touching any
+        const redistEntries = Object.entries(redistAdj).filter(
+          ([, delta]) => delta && (delta as number) !== 0
+        );
+        const missingKeys: string[] = [];
+        redistEntries.forEach(([actCode]) => {
           const isFullCode = actCode.includes(' ');
           const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
-          const matchKey = matchingKeys.find(k => (result[k].code ?? '').trim() === fullCode) ?? fullCode;
-          if (!result[matchKey]) return;
-          const rate = result[matchKey].hours > 0
-            ? result[matchKey].dollars / result[matchKey].hours
-            : 0;
-          result[matchKey] = {
-            ...result[matchKey],
-            hours: result[matchKey].hours + delta,
-            dollars: result[matchKey].dollars + delta * rate,
-          };
-          if (result[matchKey].hours <= 0.001) delete result[matchKey];
+          const matchKey =
+            matchingKeys.find((k) => (result[k]?.code ?? '').trim() === fullCode) ??
+            fullCode;
+          if (!result[matchKey]) missingKeys.push(matchKey);
         });
+
+        if (missingKeys.length > 0) {
+          console.warn(
+            `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. No deltas applied to preserve hour balance.`
+          );
+        } else {
+          redistEntries.forEach(([actCode, delta]) => {
+            const isFullCode = actCode.includes(' ');
+            const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            const matchKey =
+              matchingKeys.find(
+                (k) => (result[k].code ?? '').trim() === fullCode
+              ) ?? fullCode;
+            const rate = result[matchKey].hours > 0
+              ? result[matchKey].dollars / result[matchKey].hours
+              : 0;
+            result[matchKey] = {
+              ...result[matchKey],
+              hours: result[matchKey].hours + (delta as number),
+              dollars: result[matchKey].dollars + (delta as number) * rate,
+            };
+            if (result[matchKey].hours <= 0.001) delete result[matchKey];
+          });
+        }
         return; // do not fall through to merge/reassign logic
       }
 
