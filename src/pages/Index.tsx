@@ -2556,9 +2556,9 @@ const EnhancedCostCodeManager = () => {
             )
           )}
 
-          {/* Budget Builder Tab */}
-          {activeTab === 'budget' && (
-            estimateData.length > 0 ? (
+{/* Budget Builder Tab — always mounted so adjustments persist for export */}
+          <div className={activeTab === 'budget' ? '' : 'hidden'}>
+          {estimateData.length > 0 ? (
               <div className="p-6 space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
