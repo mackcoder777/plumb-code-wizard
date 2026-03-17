@@ -2290,16 +2290,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     ({filteredSmallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
                   </span>
                 </h3>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={handleConsolidate}
-                    disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
-                    size="sm"
-                    className="bg-blue-600 text-white hover:bg-blue-500"
-                  >
-                    {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
-                  </Button>
-                </div>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
