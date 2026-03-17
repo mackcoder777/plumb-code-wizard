@@ -2307,26 +2307,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
               {filteredSmallCodeAnalysis.length > 0 && (
                 <>
-                  {!dismissedOrphanBanner && orphanedRows.length > 0 && (
-                    <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 mb-3 text-sm">
-                      <span className="mt-0.5 text-yellow-400 shrink-0">⚠</span>
-                      <div className="flex-1">
-                        <span className="font-medium text-yellow-300">
-                          {orphanedRows.length} row{orphanedRows.length !== 1 ? 's' : ''} were not saved previously due to a database constraint issue.
-                        </span>
-                        <span className="text-yellow-200/80 ml-1">
-                          They have been pre-selected — click <strong>Apply All Merges</strong> to save them now.
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setDismissedOrphanBanner(true)}
-                        className="text-yellow-400/60 hover:text-yellow-300 transition-colors text-xs shrink-0 mt-0.5"
-                        aria-label="Dismiss"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
 
                   {/* Inner tab switcher */}
                   <div className="flex items-center gap-2 mb-4 border-b border-border pb-2">
