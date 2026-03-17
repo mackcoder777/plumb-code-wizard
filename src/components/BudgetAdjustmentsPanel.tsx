@@ -2820,9 +2820,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           m => m.sec_code === row.sec && m.cost_head === row.head
                                         );
                                         const isKept = (savedEntry as any)?.reassign_to_head === '__keep__';
+                                        const isStale = !(savedEntry as any)?.reassign_to_head && row.lines.length === 1;
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className="text-green-500 text-xs">{isKept ? '✓ Kept' : '✓ Saved'}</span>
+                                            <span
+                                              className={`text-xs ${
+                                                isStale
+                                                  ? 'text-amber-500'
+                                                  : isKept
+                                                  ? 'text-blue-400'
+                                                  : 'text-green-500'
+                                              }`}
+                                            >
+                                              {isStale ? '⚠ Needs target' : isKept ? '✓ Kept' : '✓ Saved'}
+                                            </span>
                                             <Button
                                               variant="ghost"
                                               size="sm"
