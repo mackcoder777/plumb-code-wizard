@@ -1045,7 +1045,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       if (redistAdj && Object.keys(redistAdj).length > 0) {
         Object.entries(redistAdj).forEach(([actCode, delta]) => {
           if (!delta || delta === 0) return;
-          const fullCode = `${sec} ${actCode} ${head}`;
+          // Handle both legacy full-code keys ("B3 00LB SPCL") and
+          // correct activity-code-only keys ("00LB")
+          const isFullCode = actCode.includes(' ');
+          const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
           const matchKey = matchingKeys.find(k => (result[k].code ?? '').trim() === fullCode) ?? fullCode;
           if (!result[matchKey]) return;
           const rate = result[matchKey].hours > 0
@@ -1141,11 +1144,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     if (donors.length > 0 && totalExcess >= deficit) {
       const targets: Record<string, number> = {};
-      lines.forEach(l => { targets[l.code] = l.hours; });
-      underMin.forEach(l => { targets[l.code] = MIN_HOURS; });
+      const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
+      lines.forEach(l => { targets[toActKey(l.code)] = l.hours; });
+      underMin.forEach(l => { targets[toActKey(l.code)] = MIN_HOURS; });
       donors.forEach(l => {
         const contribution = deficit * ((l.hours - MIN_HOURS) / totalExcess);
-        targets[l.code] = l.hours - contribution;
+        targets[toActKey(l.code)] = l.hours - contribution;
       });
       return { action: '__redistribute__' as const, targets, reason: 'Auto: enough excess to fund 8h minimum' };
     }
@@ -1193,10 +1197,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           if (!row) return null;
           // Convert targets to deltas for DB storage
           const deltas: Record<string, number> = {};
+          const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
           row.lines.forEach(line => {
-            const t = targets[line.code] ?? line.hours;
+            const actKey = toActKey(line.code);
+            const t = targets[actKey] ?? targets[line.code] ?? line.hours;
             const d = t - line.hours;
-            if (Math.abs(d) > 0.001) deltas[line.code] = parseFloat(d.toFixed(2));
+            if (Math.abs(d) > 0.001) deltas[actKey] = parseFloat(d.toFixed(2));
           });
           const net = Object.values(deltas).reduce((s, v) => s + v, 0);
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
@@ -1250,6 +1256,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
+    const currentGroup = smallCodeAnalysis.find(
+      (r) => r.sec === sec && r.head === head
+    );
+    const isCurrentlyStandalone =
+      currentGroup !== undefined && currentGroup.lines.length === 1;
+    const onStandaloneTab = smallCodeTab === 'standalone';
+
     const remaining = (savedMergesData ?? [])
       .filter(m => !(m.sec_code === sec && m.cost_head === head))
       .map(m => ({
@@ -1258,7 +1271,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         reassign_to_head: (m as any).reassign_to_head ?? null,
         redistribute_adjustments: (m as any).redistribute_adjustments ?? null,
       }));
-    saveMergeMutation.mutate(remaining);
+    saveMergeMutation.mutate(remaining, {
+      onSuccess: () => {
+        if (isCurrentlyStandalone && onStandaloneTab) {
+          setSmallCodeTab('merge');
+          toast({
+            title: `${head} moved to Merge Groups`,
+            description: 'This code has multiple activity codes — find it in the Merge Groups tab.',
+          });
+        }
+      },
+    });
   };
 
   useEffect(() => {
@@ -2494,7 +2517,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       })()}
                                       {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
                                         const targets = redistributeAdjustments[mergeKey] ?? {};
-                                        const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                                        const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
+                                        const getTarget = (line: typeof row.lines[0]) => targets[toActKey(line.code)] ?? targets[line.code] ?? line.hours;
                                         const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
                                         const isBalanced = Math.abs(netDelta) < 0.01;
                                         const MIN_HOURS = 8;
@@ -2503,18 +2527,19 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           const donors = row.lines.filter(l => l.hours > MIN_HOURS);
                                           const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
                                           const newTargets: Record<string, number> = {};
+                                          const toActKey2 = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
                                           if (totalExcess <= 0) {
-                                            row.lines.forEach(l => { newTargets[l.code] = l.hours; });
+                                            row.lines.forEach(l => { newTargets[toActKey2(l.code)] = l.hours; });
                                           } else {
                                             const actualDeficit = Math.min(deficit, totalExcess);
                                             row.lines.forEach(l => {
                                               if (l.hours < MIN_HOURS) {
                                                 const need = MIN_HOURS - l.hours;
-                                                newTargets[l.code] = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                                newTargets[toActKey2(l.code)] = l.hours + Math.min(need, need * (actualDeficit / deficit));
                                               } else {
                                                 const excess = l.hours - MIN_HOURS;
                                                 const contribution = actualDeficit * (excess / totalExcess);
-                                                newTargets[l.code] = l.hours - contribution;
+                                                newTargets[toActKey2(l.code)] = l.hours - contribution;
                                               }
                                             });
                                           }
@@ -2539,7 +2564,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                                       const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
                                                       setRedistributeAdjustments((prev) => ({
                                                         ...prev,
-                                                        [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
+                                                        [mergeKey]: { ...(prev[mergeKey] ?? {}), [(() => { const p = (line.code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : line.code; })()]: val },
                                                       }));
                                                     }}
                                                     className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
@@ -2607,7 +2632,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     </div>
                                   ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
                                     const targets = redistributeAdjustments[mergeKey] ?? {};
-                                    const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                                    const toActKey3 = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
+                                    const getTarget = (line: typeof row.lines[0]) => targets[toActKey3(line.code)] ?? targets[line.code] ?? line.hours;
                                     const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
                                     if (Math.abs(netDelta) > 0.01) {
                                       return <span className="text-amber-400 text-xs">Adjust to balance</span>;
