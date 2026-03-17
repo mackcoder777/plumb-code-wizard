@@ -1095,24 +1095,43 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Redistribute: apply per-activity hour deltas
       if (redistAdj && Object.keys(redistAdj).length > 0) {
-        Object.entries(redistAdj).forEach(([actCode, delta]) => {
-          if (!delta || delta === 0) return;
-          // Handle both legacy full-code keys ("B3 00LB SPCL") and
-          // correct activity-code-only keys ("00LB")
+        // Pre-validate: ensure ALL referenced codes exist before touching any
+        const redistEntries = Object.entries(redistAdj).filter(
+          ([, delta]) => delta && (delta as number) !== 0
+        );
+        const missingKeys: string[] = [];
+        redistEntries.forEach(([actCode]) => {
           const isFullCode = actCode.includes(' ');
           const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
-          const matchKey = matchingKeys.find(k => (result[k].code ?? '').trim() === fullCode) ?? fullCode;
-          if (!result[matchKey]) return;
-          const rate = result[matchKey].hours > 0
-            ? result[matchKey].dollars / result[matchKey].hours
-            : 0;
-          result[matchKey] = {
-            ...result[matchKey],
-            hours: result[matchKey].hours + delta,
-            dollars: result[matchKey].dollars + delta * rate,
-          };
-          if (result[matchKey].hours <= 0.001) delete result[matchKey];
+          const matchKey =
+            matchingKeys.find((k) => (result[k]?.code ?? '').trim() === fullCode) ??
+            fullCode;
+          if (!result[matchKey]) missingKeys.push(matchKey);
         });
+
+        if (missingKeys.length > 0) {
+          console.warn(
+            `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. No deltas applied to preserve hour balance.`
+          );
+        } else {
+          redistEntries.forEach(([actCode, delta]) => {
+            const isFullCode = actCode.includes(' ');
+            const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            const matchKey =
+              matchingKeys.find(
+                (k) => (result[k].code ?? '').trim() === fullCode
+              ) ?? fullCode;
+            const rate = result[matchKey].hours > 0
+              ? result[matchKey].dollars / result[matchKey].hours
+              : 0;
+            result[matchKey] = {
+              ...result[matchKey],
+              hours: result[matchKey].hours + (delta as number),
+              dollars: result[matchKey].dollars + (delta as number) * rate,
+            };
+            if (result[matchKey].hours <= 0.001) delete result[matchKey];
+          });
+        }
         return; // do not fall through to merge/reassign logic
       }
 
@@ -1130,13 +1149,34 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
         });
         if (targetKey && result[targetKey]) {
+          // Normal path: target exists, accumulate and delete source
           result[targetKey] = {
             ...result[targetKey],
             hours: result[targetKey].hours + sourceHours,
             dollars: result[targetKey].dollars + sourceDollars,
           };
+          matchingKeys.forEach(k => delete result[k]);
+        } else if (targetKey) {
+          // Target code doesn't exist yet — create it so hours are not lost
+          console.warn(
+            `[finalLaborSummary] reassign target ${targetKey} not found — creating entry to preserve ${sourceHours.toFixed(2)}h`
+          );
+          result[targetKey] = {
+            code: targetKey,
+            sec: sec,
+            activityCode: '0000',
+            head: reassignTo,
+            hours: sourceHours,
+            dollars: sourceDollars,
+            description: `Reassigned from ${matchingKeys.join(', ')}`,
+          };
+          matchingKeys.forEach(k => delete result[k]);
+        } else {
+          // No target at all — keep source in place rather than delete
+          console.warn(
+            `[finalLaborSummary] reassign has no target for ${sec}|${head} — keeping source to preserve ${sourceHours.toFixed(2)}h`
+          );
         }
-        matchingKeys.forEach(k => delete result[k]);
       } else {
         // Standard merge to 0000
         if (matchingKeys.length < 2) return;
@@ -1148,6 +1188,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
       }
     });
+    // Reconciliation check — warn if hours were lost during merge application
+    const inputHours = Object.values(calculations.adjustedLaborSummary ?? {}).reduce(
+      (s: number, e: any) => s + (e.hours ?? 0),
+      0
+    );
+    const outputHours = Object.values(result).reduce(
+      (s: number, e: any) => s + (e.hours ?? 0),
+      0
+    );
+    const drift: number = inputHours - outputHours;
+    if (Math.abs(drift) > 0.1) {
+      console.warn(
+        `[finalLaborSummary] ⚠ Hour drift detected: input=${inputHours.toFixed(2)} output=${outputHours.toFixed(2)} lost=${drift.toFixed(2)}h`
+      );
+    }
+
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData]);
 
