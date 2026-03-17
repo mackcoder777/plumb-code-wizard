@@ -1288,7 +1288,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const filteredSmallCodeAnalysis = useMemo(() => {
     return smallCodeAnalysis.filter(row => {
       if (row.lines.length > 1) return true;
-      return row.combinedHours < standaloneMaxHours;
+      return savedMergeKeySet.has(row.key) || row.combinedHours < standaloneMaxHours;
     });
   }, [smallCodeAnalysis, standaloneMaxHours]);
 
