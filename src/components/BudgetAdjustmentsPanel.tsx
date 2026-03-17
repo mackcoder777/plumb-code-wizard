@@ -1274,7 +1274,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
-    if (newEntries.length === 0 && (savedMergesData ?? []).length === 0) {
+
+    // Separate invalid entries from valid ones
+    const invalidRows = newEntries.filter((e: any) => e.__invalid);
+    const validEntries = newEntries.filter((e: any) => !e.__invalid);
+
+    if (validEntries.length === 0 && (savedMergesData ?? []).length === 0 && invalidRows.length === 0) {
       console.log('[handleConsolidate] Early return: no entries to save');
       return;
     }
@@ -1285,29 +1290,32 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       redistribute_adjustments: (m as any).redistribute_adjustments as Record<string, number> | null ?? null,
     }));
     const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>();
-    [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
+    [...existingEntries, ...validEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
 
-    // Diagnostic logging
-    console.log('[handleConsolidate] newEntries count:', newEntries.length, newEntries);
-    console.log('[handleConsolidate] allMap total:', allMap.size, Object.fromEntries(allMap));
+    console.log('[handleConsolidate] validEntries:', validEntries.length, 'invalidRows:', invalidRows.length);
 
-    // Build the final rows array
     const allRows = [...allMap.values()];
-
-    // Guard: check for duplicate (sec_code, cost_head) pairs before sending
     const seen = new Set<string>();
     const dedupedRows = allRows.filter(row => {
       const key = `${row.sec_code}__${row.cost_head}`;
-      if (seen.has(key)) {
-        console.warn('[handleConsolidate] Duplicate key stripped before save:', key, row);
-        return false;
-      }
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    console.log('[handleConsolidate] Final rows to save:', dedupedRows.length, dedupedRows);
-    saveMergeMutation.mutate(dedupedRows);
+    console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
+    saveMergeMutation.mutate(dedupedRows, {
+      onSuccess: () => {
+        if (invalidRows.length > 0) {
+          const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
+          toast({
+            title: `Partially saved — ${invalidRows.length} row(s) skipped`,
+            description: `Skipped: ${names}. Fix balance and re-apply.`,
+            variant: 'destructive',
+          });
+        }
+      },
+    });
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
