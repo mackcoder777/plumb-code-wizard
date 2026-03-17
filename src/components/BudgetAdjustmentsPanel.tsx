@@ -2517,7 +2517,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       })()}
                                       {consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' && (() => {
                                         const targets = redistributeAdjustments[mergeKey] ?? {};
-                                        const getTarget = (line: typeof row.lines[0]) => targets[line.code] ?? line.hours;
+                                        const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
+                                        const getTarget = (line: typeof row.lines[0]) => targets[toActKey(line.code)] ?? targets[line.code] ?? line.hours;
                                         const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
                                         const isBalanced = Math.abs(netDelta) < 0.01;
                                         const MIN_HOURS = 8;
