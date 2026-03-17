@@ -1344,6 +1344,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             title: `${head} moved to Merge Groups`,
             description: 'This code has multiple activity codes — find it in the Merge Groups tab.',
           });
+        } else {
+          toast({ title: 'Merge undone', description: `${sec} ${head} has been restored.` });
         }
       },
     });
