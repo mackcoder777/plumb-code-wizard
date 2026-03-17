@@ -572,7 +572,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       setReassignTargets({});
       setRedistributeAdjustments({});
       setManuallyOverridden(new Set());
-      toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
+      // Toast is handled per-callsite in .mutate({ onSuccess })
     },
     onError: (error: Error) => {
       console.error('Save merge failed:', error);
