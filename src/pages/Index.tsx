@@ -2698,7 +2698,7 @@ const EnhancedCostCodeManager = () => {
                 </p>
               </div>
             )
-          )}
+          </div>
 
           {/* Bulk Buyout Tab */}
           {activeTab === 'buyout' && (
