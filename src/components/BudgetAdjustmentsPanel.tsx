@@ -1149,13 +1149,34 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
         });
         if (targetKey && result[targetKey]) {
+          // Normal path: target exists, accumulate and delete source
           result[targetKey] = {
             ...result[targetKey],
             hours: result[targetKey].hours + sourceHours,
             dollars: result[targetKey].dollars + sourceDollars,
           };
+          matchingKeys.forEach(k => delete result[k]);
+        } else if (targetKey) {
+          // Target code doesn't exist yet — create it so hours are not lost
+          console.warn(
+            `[finalLaborSummary] reassign target ${targetKey} not found — creating entry to preserve ${sourceHours.toFixed(2)}h`
+          );
+          result[targetKey] = {
+            code: targetKey,
+            sec: sec,
+            activityCode: '0000',
+            head: reassignTo,
+            hours: sourceHours,
+            dollars: sourceDollars,
+            description: `Reassigned from ${matchingKeys.join(', ')}`,
+          };
+          matchingKeys.forEach(k => delete result[k]);
+        } else {
+          // No target at all — keep source in place rather than delete
+          console.warn(
+            `[finalLaborSummary] reassign has no target for ${sec}|${head} — keeping source to preserve ${sourceHours.toFixed(2)}h`
+          );
         }
-        matchingKeys.forEach(k => delete result[k]);
       } else {
         // Standard merge to 0000
         if (matchingKeys.length < 2) return;
