@@ -1061,6 +1061,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return; // do not fall through to merge/reassign logic
       }
 
+      if (reassignTo === '__keep__') {
+        return; // hours stay on original code, nothing to do
+      }
+
       if (reassignTo) {
         // Reassign: move hours/dollars to the target cost head in same SEC
         const sourceHours = matchingKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
