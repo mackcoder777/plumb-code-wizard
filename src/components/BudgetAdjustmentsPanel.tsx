@@ -1167,55 +1167,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Already-saved sec|head keys for display
   const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
-  // Detect rows that are unsaved but have a sibling with the same cost_head that IS saved.
-  // These were victims of the old unique constraint — the first SEC saved, siblings silently failed.
-  const orphanedRows = useMemo(() => {
-    if (!smallCodeAnalysis || smallCodeAnalysis.length === 0) return [];
-
-    // Build a set of cost heads that have at least one saved row
-    const savedCostHeads = new Set<string>();
-    for (const row of smallCodeAnalysis) {
-      if (savedMergeKeySet.has(row.key)) {
-        savedCostHeads.add(row.head);
-      }
-    }
-
-    // Any row that is NOT saved but whose cost head has a saved sibling is an orphan
-    return smallCodeAnalysis.filter(
-      (row) => !savedMergeKeySet.has(row.key) && savedCostHeads.has(row.head)
-    );
-  }, [smallCodeAnalysis, savedMergeKeySet]);
-
-  // Filtered view for standalone hour threshold
-  const filteredSmallCodeAnalysis = useMemo(() => {
-    return smallCodeAnalysis.filter(row => {
-      if (row.lines.length > 1) return true;
-      return row.combinedHours < standaloneMaxHours;
-    });
-  }, [smallCodeAnalysis, standaloneMaxHours]);
-
-  const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
-  const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
-
-  // Auto-select orphaned rows so the user can re-apply them in one click.
-  // This runs once when orphanedRows stabilizes (i.e., after saved merges load).
-  useEffect(() => {
-    if (orphanedRows.length === 0) return;
-
-    orphanedRows.forEach((row) => {
-      // Pre-check the consolidation checkbox
-      setConsolidations((prev) => {
-        if (row.key in prev) return prev; // already initialized (even if unchecked), skip
-        return { ...prev, [row.key]: true };
-      });
-
-      // Set the reassign target to 0000 merge (same pattern as a normal merge)
-      setReassignTargets((prev) => {
-        if (prev[row.key]) return prev;
-        return { ...prev, [row.key]: '__merge__' };
-      });
-    });
-  }, [orphanedRows]);
+  const orphanedRows: typeof smallCodeAnalysis = [];
 
   const handleConsolidate = () => {
     const newEntries = Object.entries(consolidations)
