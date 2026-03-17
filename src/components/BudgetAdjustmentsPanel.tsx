@@ -1244,21 +1244,24 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const head = headParts.join('|');
         const target = reassignTargets[key];
         if (target === '__redistribute__') {
-          const targets = redistributeAdjustments[key] ?? {};
+          const rowTargets = redistributeAdjustments[key] ?? {};
           const row = smallCodeAnalysis.find(r => r.key === key);
           if (!row) return null;
-          // Convert targets to deltas for DB storage
-          const deltas: Record<string, number> = {};
-          const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
-          row.lines.forEach(line => {
-            const actKey = toActKey(line.code);
-            const t = targets[actKey] ?? targets[line.code] ?? line.hours;
-            const d = t - line.hours;
-            if (Math.abs(d) > 0.001) deltas[actKey] = parseFloat(d.toFixed(2));
-          });
-          const net = Object.values(deltas).reduce((s, v) => s + v, 0);
-          if (Math.abs(net) > 0.01) return null; // skip unbalanced
-          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
+          const { deltas: rawDeltas, netRounded, isBalanced: redistBalanced } =
+            buildRoundedDeltas(row.lines, rowTargets);
+          let finalDeltas = rawDeltas;
+          if (!redistBalanced) {
+            finalDeltas = fixResidual(rawDeltas, netRounded);
+            const recheckNet = Object.values(finalDeltas).reduce((s, v) => s + v, 0);
+            if (Math.abs(recheckNet) > 0.01) {
+              console.warn(`[redistribute] skipping ${sec}|${head}: net=${netRounded} after fix=${recheckNet}`);
+              return { __invalid: true, sec, head, reason: `unbalanced (net ${netRounded.toFixed(3)}h)` } as any;
+            }
+          }
+          if (Object.keys(finalDeltas).length === 0) {
+            return { __invalid: true, sec, head, reason: 'no effective delta' } as any;
+          }
+          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: finalDeltas };
         }
         // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
