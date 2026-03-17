@@ -1223,7 +1223,66 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Already-saved sec|head keys for display
   const savedMergeKeySet = useMemo(() => new Set(savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`) ?? []), [savedMergesData]);
 
-  const orphanedRows: typeof smallCodeAnalysis = [];
+  // Reconstruct display rows for saved entries consumed by finalLaborSummary
+  const savedOnlyRows = useMemo(() => {
+    if (!savedMergesData || savedMergesData.length === 0) return [];
+    const analysisKeys = new Set(smallCodeAnalysis.map((r) => r.key));
+    const rows: typeof smallCodeAnalysis = [];
+
+    savedMergesData.forEach((m) => {
+      const key = `${m.sec_code}|${m.cost_head}`;
+      if (analysisKeys.has(key)) return; // already visible
+
+      // Recover original lines from pre-merge adjustedLaborSummary
+      const premerge = calculations?.adjustedLaborSummary ?? {};
+      const premergeLines = Object.values(premerge).filter((entry) => {
+        const parts = (entry.code ?? '').trim().split(/\s+/);
+        const sec = parts[0] ?? '';
+        const head = parts.slice(2).join(' ') || '';
+        return sec === m.sec_code && head === m.cost_head;
+      });
+
+      const combinedHours = premergeLines.reduce((s, l) => s + (l.hours ?? 0), 0);
+
+      rows.push({
+        key,
+        sec: m.sec_code,
+        head: m.cost_head,
+        combinedHours,
+        lines: premergeLines.length > 0
+          ? premergeLines.map((l) => {
+              const parts = (l.code ?? '').trim().split(/\s+/);
+              return {
+                code: l.code,
+                hours: l.hours ?? 0,
+                description: l.description ?? '',
+                sec: parts[0] ?? '',
+                act: parts[1] ?? '',
+                head: parts.slice(2).join(' ') || '',
+                isSmall: (l.hours ?? 0) < 8,
+                dollars: l.dollars ?? 0,
+                rate: l.rate ?? 0,
+                type: l.type ?? 'field',
+              };
+            })
+          : [{
+              code: `${m.sec_code} 0000 ${m.cost_head}`,
+              hours: combinedHours,
+              description: '',
+              sec: m.sec_code,
+              act: '0000',
+              head: m.cost_head,
+              isSmall: combinedHours < 8,
+              dollars: 0,
+              rate: 0,
+              type: 'field' as const,
+            }],
+        isSavedOnly: true,
+      });
+    });
+
+    return rows;
+  }, [savedMergesData, smallCodeAnalysis, calculations?.adjustedLaborSummary]);
 
   // Filtered view for standalone hour threshold
   const filteredSmallCodeAnalysis = useMemo(() => {
