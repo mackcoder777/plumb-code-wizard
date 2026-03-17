@@ -329,6 +329,58 @@ interface BudgetAdjustmentsPanelProps {
 const FAB_SECTION = 'FP';
 const FAB_ACTIVITY = '0000';
 
+// ── Redistribute helpers ────────────────────────────────────
+const toActKeyGlobal = (code: string): string => {
+  const parts = (code ?? '').trim().split(/\s+/);
+  return parts.length >= 3 ? parts[1] : code;
+};
+
+interface SmallCodeLine {
+  code: string;
+  hours: number;
+  dollars: number;
+  [key: string]: unknown;
+}
+
+const buildRoundedDeltas = (
+  lines: SmallCodeLine[],
+  targets: Record<string, string | number>
+): {
+  deltas: Record<string, number>;
+  netRounded: number;
+  isBalanced: boolean;
+} => {
+  let netRounded = 0;
+  const deltas: Record<string, number> = {};
+  lines.forEach((l) => {
+    const actKey = toActKeyGlobal(l.code);
+    const targetVal = parseFloat(String(targets[actKey] ?? targets[l.code] ?? l.hours));
+    const raw = targetVal - l.hours;
+    const rounded = parseFloat(raw.toFixed(2));
+    netRounded += rounded;
+    if (Math.abs(rounded) > 0.001) {
+      deltas[actKey] = rounded;
+    }
+  });
+  netRounded = parseFloat(netRounded.toFixed(4));
+  return { deltas, netRounded, isBalanced: Math.abs(netRounded) <= 0.01 };
+};
+
+/** Nudge the largest-delta line to absorb floating-point residual */
+const fixResidual = (
+  deltas: Record<string, number>,
+  netRounded: number
+): Record<string, number> => {
+  if (Math.abs(netRounded) <= 0.001 || Object.keys(deltas).length === 0) return deltas;
+  const fixed = { ...deltas };
+  const target = Object.keys(fixed).reduce((a, b) =>
+    Math.abs(fixed[a]) >= Math.abs(fixed[b]) ? a : b
+  );
+  fixed[target] = parseFloat((fixed[target] - netRounded).toFixed(2));
+  return fixed;
+};
+// ─────────────────────────────────────────────────────────────
+
 // Maps field labor cost heads → fabrication material cost head
 const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   // Cast Iron → CSTF
