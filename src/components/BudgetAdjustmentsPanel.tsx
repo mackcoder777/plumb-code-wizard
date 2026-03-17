@@ -1204,6 +1204,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
         // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
+        const sourceGroup = smallCodeAnalysis.find(
+          (r) => r.key === `${sec}|${head}`
+        );
+        const isStandaloneNoTarget =
+          sourceGroup && sourceGroup.lines.length === 1 && !reassignTo;
+        if (isStandaloneNoTarget) return null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
@@ -2770,10 +2776,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableCell>
                                   <TableCell>
                                     {isSaved ? (
-                                      <span className="text-green-400 text-xs font-mono">
-                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                      <span
+                                        className={`text-xs font-mono ${
+                                          !(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                            ? 'text-amber-400'
+                                            : 'text-green-400'
+                                        }`}
+                                      >
+                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head === '__keep__'
+                                          ? '→ kept as-is'
+                                          : (savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
                                           ? `→ ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
-                                          : 'Merged'}
+                                          : '⚠ No target — undo & reassign'}
                                       </span>
                                     ) : (consolidations[mergeKey]) ? (
                                       <select
@@ -2806,9 +2820,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           m => m.sec_code === row.sec && m.cost_head === row.head
                                         );
                                         const isKept = (savedEntry as any)?.reassign_to_head === '__keep__';
+                                        const isStale = !(savedEntry as any)?.reassign_to_head && row.lines.length === 1;
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className="text-green-500 text-xs">{isKept ? '✓ Kept' : '✓ Saved'}</span>
+                                            <span
+                                              className={`text-xs ${
+                                                isStale
+                                                  ? 'text-amber-500'
+                                                  : isKept
+                                                  ? 'text-blue-400'
+                                                  : 'text-green-500'
+                                              }`}
+                                            >
+                                              {isStale ? '⚠ Needs target' : isKept ? '✓ Kept' : '✓ Saved'}
+                                            </span>
                                             <Button
                                               variant="ghost"
                                               size="sm"
