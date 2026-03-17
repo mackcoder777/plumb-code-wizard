@@ -2384,6 +2384,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         No multi-line merge candidates below the hour threshold.
                       </p>
                     ) : (
+                      <>
                       <Table>
                         <TableHeader>
                           <TableRow>
