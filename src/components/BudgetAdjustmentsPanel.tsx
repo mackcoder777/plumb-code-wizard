@@ -329,6 +329,58 @@ interface BudgetAdjustmentsPanelProps {
 const FAB_SECTION = 'FP';
 const FAB_ACTIVITY = '0000';
 
+// ── Redistribute helpers ────────────────────────────────────
+const toActKeyGlobal = (code: string): string => {
+  const parts = (code ?? '').trim().split(/\s+/);
+  return parts.length >= 3 ? parts[1] : code;
+};
+
+interface SmallCodeLine {
+  code: string;
+  hours: number;
+  dollars: number;
+  [key: string]: unknown;
+}
+
+const buildRoundedDeltas = (
+  lines: SmallCodeLine[],
+  targets: Record<string, string | number>
+): {
+  deltas: Record<string, number>;
+  netRounded: number;
+  isBalanced: boolean;
+} => {
+  let netRounded = 0;
+  const deltas: Record<string, number> = {};
+  lines.forEach((l) => {
+    const actKey = toActKeyGlobal(l.code);
+    const targetVal = parseFloat(String(targets[actKey] ?? targets[l.code] ?? l.hours));
+    const raw = targetVal - l.hours;
+    const rounded = parseFloat(raw.toFixed(2));
+    netRounded += rounded;
+    if (Math.abs(rounded) > 0.001) {
+      deltas[actKey] = rounded;
+    }
+  });
+  netRounded = parseFloat(netRounded.toFixed(4));
+  return { deltas, netRounded, isBalanced: Math.abs(netRounded) <= 0.01 };
+};
+
+/** Nudge the largest-delta line to absorb floating-point residual */
+const fixResidual = (
+  deltas: Record<string, number>,
+  netRounded: number
+): Record<string, number> => {
+  if (Math.abs(netRounded) <= 0.001 || Object.keys(deltas).length === 0) return deltas;
+  const fixed = { ...deltas };
+  const target = Object.keys(fixed).reduce((a, b) =>
+    Math.abs(fixed[a]) >= Math.abs(fixed[b]) ? a : b
+  );
+  fixed[target] = parseFloat((fixed[target] - netRounded).toFixed(2));
+  return fixed;
+};
+// ─────────────────────────────────────────────────────────────
+
 // Maps field labor cost heads → fabrication material cost head
 const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   // Cast Iron → CSTF
@@ -520,7 +572,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       setReassignTargets({});
       setRedistributeAdjustments({});
       setManuallyOverridden(new Set());
-      toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
+      // Toast is handled per-callsite in .mutate({ onSuccess })
     },
     onError: (error: Error) => {
       console.error('Save merge failed:', error);
@@ -1192,21 +1244,24 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const head = headParts.join('|');
         const target = reassignTargets[key];
         if (target === '__redistribute__') {
-          const targets = redistributeAdjustments[key] ?? {};
+          const rowTargets = redistributeAdjustments[key] ?? {};
           const row = smallCodeAnalysis.find(r => r.key === key);
           if (!row) return null;
-          // Convert targets to deltas for DB storage
-          const deltas: Record<string, number> = {};
-          const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
-          row.lines.forEach(line => {
-            const actKey = toActKey(line.code);
-            const t = targets[actKey] ?? targets[line.code] ?? line.hours;
-            const d = t - line.hours;
-            if (Math.abs(d) > 0.001) deltas[actKey] = parseFloat(d.toFixed(2));
-          });
-          const net = Object.values(deltas).reduce((s, v) => s + v, 0);
-          if (Math.abs(net) > 0.01) return null; // skip unbalanced
-          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
+          const { deltas: rawDeltas, netRounded, isBalanced: redistBalanced } =
+            buildRoundedDeltas(row.lines, rowTargets);
+          let finalDeltas = rawDeltas;
+          if (!redistBalanced) {
+            finalDeltas = fixResidual(rawDeltas, netRounded);
+            const recheckNet = Object.values(finalDeltas).reduce((s, v) => s + v, 0);
+            if (Math.abs(recheckNet) > 0.01) {
+              console.warn(`[redistribute] skipping ${sec}|${head}: net=${netRounded} after fix=${recheckNet}`);
+              return { __invalid: true, sec, head, reason: `unbalanced (net ${netRounded.toFixed(3)}h)` } as any;
+            }
+          }
+          if (Object.keys(finalDeltas).length === 0) {
+            return { __invalid: true, sec, head, reason: 'no effective delta' } as any;
+          }
+          return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: finalDeltas };
         }
         // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
@@ -1219,7 +1274,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
-    if (newEntries.length === 0 && (savedMergesData ?? []).length === 0) {
+
+    // Separate invalid entries from valid ones
+    const invalidRows = newEntries.filter((e: any) => e.__invalid);
+    const validEntries = newEntries.filter((e: any) => !e.__invalid);
+
+    if (validEntries.length === 0 && (savedMergesData ?? []).length === 0 && invalidRows.length === 0) {
       console.log('[handleConsolidate] Early return: no entries to save');
       return;
     }
@@ -1230,29 +1290,34 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       redistribute_adjustments: (m as any).redistribute_adjustments as Record<string, number> | null ?? null,
     }));
     const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>();
-    [...existingEntries, ...newEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
+    [...existingEntries, ...validEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
 
-    // Diagnostic logging
-    console.log('[handleConsolidate] newEntries count:', newEntries.length, newEntries);
-    console.log('[handleConsolidate] allMap total:', allMap.size, Object.fromEntries(allMap));
+    console.log('[handleConsolidate] validEntries:', validEntries.length, 'invalidRows:', invalidRows.length);
 
-    // Build the final rows array
     const allRows = [...allMap.values()];
-
-    // Guard: check for duplicate (sec_code, cost_head) pairs before sending
     const seen = new Set<string>();
     const dedupedRows = allRows.filter(row => {
       const key = `${row.sec_code}__${row.cost_head}`;
-      if (seen.has(key)) {
-        console.warn('[handleConsolidate] Duplicate key stripped before save:', key, row);
-        return false;
-      }
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    console.log('[handleConsolidate] Final rows to save:', dedupedRows.length, dedupedRows);
-    saveMergeMutation.mutate(dedupedRows);
+    console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
+    saveMergeMutation.mutate(dedupedRows, {
+      onSuccess: () => {
+        if (invalidRows.length > 0) {
+          const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
+          toast({
+            title: `Partially saved — ${invalidRows.length} row(s) skipped`,
+            description: `Skipped: ${names}. Fix balance and re-apply.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
+        }
+      },
+    });
   };
 
   const handleUndoMerge = (sec: string, head: string) => {
@@ -1279,6 +1344,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             title: `${head} moved to Merge Groups`,
             description: 'This code has multiple activity codes — find it in the Merge Groups tab.',
           });
+        } else {
+          toast({ title: 'Merge undone', description: `${sec} ${head} has been restored.` });
         }
       },
     });
