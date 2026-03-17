@@ -2776,10 +2776,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableCell>
                                   <TableCell>
                                     {isSaved ? (
-                                      <span className="text-green-400 text-xs font-mono">
-                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                      <span
+                                        className={`text-xs font-mono ${
+                                          !(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
+                                            ? 'text-amber-400'
+                                            : 'text-green-400'
+                                        }`}
+                                      >
+                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head === '__keep__'
+                                          ? '→ kept as-is'
+                                          : (savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
                                           ? `→ ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
-                                          : 'Merged'}
+                                          : '⚠ No target — undo & reassign'}
                                       </span>
                                     ) : (consolidations[mergeKey]) ? (
                                       <select
