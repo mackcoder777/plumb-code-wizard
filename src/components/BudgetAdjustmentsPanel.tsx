@@ -1204,6 +1204,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
         // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
+        const sourceGroup = smallCodeAnalysis.find(
+          (r) => r.key === `${sec}|${head}`
+        );
+        const isStandaloneNoTarget =
+          sourceGroup && sourceGroup.lines.length === 1 && !reassignTo;
+        if (isStandaloneNoTarget) return null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
