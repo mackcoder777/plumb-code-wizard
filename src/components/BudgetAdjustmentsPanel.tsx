@@ -1144,11 +1144,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     if (donors.length > 0 && totalExcess >= deficit) {
       const targets: Record<string, number> = {};
-      lines.forEach(l => { targets[l.code] = l.hours; });
-      underMin.forEach(l => { targets[l.code] = MIN_HOURS; });
+      const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
+      lines.forEach(l => { targets[toActKey(l.code)] = l.hours; });
+      underMin.forEach(l => { targets[toActKey(l.code)] = MIN_HOURS; });
       donors.forEach(l => {
         const contribution = deficit * ((l.hours - MIN_HOURS) / totalExcess);
-        targets[l.code] = l.hours - contribution;
+        targets[toActKey(l.code)] = l.hours - contribution;
       });
       return { action: '__redistribute__' as const, targets, reason: 'Auto: enough excess to fund 8h minimum' };
     }
