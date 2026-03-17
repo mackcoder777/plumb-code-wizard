@@ -830,6 +830,7 @@ function getAdjustmentLabel(sec: string, costHead: string, savedMerges: SavedMer
     if (merge.sec_code !== sec) continue;
     if (merge.cost_head !== costHead) continue;
     if (merge.reassign_to_head) {
+      if (merge.reassign_to_head === '__keep__') return 'Kept as-is';
       return `Reassigned → ${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`;
     }
     if (merge.redistribute_adjustments && Object.keys(merge.redistribute_adjustments).length > 0) {
