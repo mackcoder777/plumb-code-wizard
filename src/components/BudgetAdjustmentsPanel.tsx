@@ -1290,7 +1290,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       if (row.lines.length > 1) return true;
       return savedMergeKeySet.has(row.key) || row.combinedHours < standaloneMaxHours;
     });
-  }, [smallCodeAnalysis, standaloneMaxHours]);
+  }, [smallCodeAnalysis, standaloneMaxHours, savedMergeKeySet]);
 
   const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
   const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
