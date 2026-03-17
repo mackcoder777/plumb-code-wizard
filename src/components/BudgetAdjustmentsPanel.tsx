@@ -1189,15 +1189,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
     // Reconciliation check — warn if hours were lost during merge application
-    const inputHours = Object.values(adjustedLaborSummary ?? {}).reduce(
-      (s, e) => s + (e.hours ?? 0),
+    const inputHours = Object.values(calculations.adjustedLaborSummary ?? {}).reduce(
+      (s: number, e: any) => s + (e.hours ?? 0),
       0
     );
     const outputHours = Object.values(result).reduce(
-      (s, e) => s + (e.hours ?? 0),
+      (s: number, e: any) => s + (e.hours ?? 0),
       0
     );
-    const drift = inputHours - outputHours;
+    const drift: number = inputHours - outputHours;
     if (Math.abs(drift) > 0.1) {
       console.warn(
         `[finalLaborSummary] ⚠ Hour drift detected: input=${inputHours.toFixed(2)} output=${outputHours.toFixed(2)} lost=${drift.toFixed(2)}h`
