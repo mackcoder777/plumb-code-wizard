@@ -1061,6 +1061,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return; // do not fall through to merge/reassign logic
       }
 
+      if (reassignTo === '__keep__') {
+        return; // hours stay on original code, nothing to do
+      }
+
       if (reassignTo) {
         // Reassign: move hours/dollars to the target cost head in same SEC
         const sourceHours = matchingKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
@@ -1235,7 +1239,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
           return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
         }
-        if (target === '__keep__') return null; // User chose to keep as-is, skip
+        // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
@@ -2854,19 +2858,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const target = reassignTargets[mergeKey];
                                       const hasTarget = !!target && target !== '__reassign__' && target !== '';
 
-                                      if (isSaved) return (
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-green-500 text-xs">✓ Saved</span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 px-1.5 text-xs"
-                                            onClick={() => handleUndoMerge(row.sec, row.head)}
-                                          >
-                                            <Undo2 className="h-3 w-3 mr-1" /> Undo
-                                          </Button>
-                                        </div>
-                                      );
+                                      if (isSaved) {
+                                        const savedEntry = savedMergesData?.find(
+                                          m => m.sec_code === row.sec && m.cost_head === row.head
+                                        );
+                                        const isKept = (savedEntry as any)?.reassign_to_head === '__keep__';
+                                        return (
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-green-500 text-xs">{isKept ? '✓ Kept' : '✓ Saved'}</span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-5 px-1.5 text-xs"
+                                              onClick={() => handleUndoMerge(row.sec, row.head)}
+                                            >
+                                              <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                            </Button>
+                                          </div>
+                                        );
+                                      }
                                       if (!isChecked) return <span className="text-xs text-muted-foreground">—</span>;
                                       if (!hasTarget) return <span className="text-xs text-orange-400">Select target</span>;
                                       return <span className="text-xs text-primary font-semibold">Ready</span>;
