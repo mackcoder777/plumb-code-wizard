@@ -2697,7 +2697,7 @@ const EnhancedCostCodeManager = () => {
                   The Budget Builder allows you to add sales tax, foreman bonus strips, and fabrication hour allocations.
                 </p>
               </div>
-            )
+            )}
           </div>
 
           {/* Bulk Buyout Tab */}
