@@ -2290,16 +2290,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     ({filteredSmallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
                   </span>
                 </h3>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={handleConsolidate}
-                    disabled={!Object.values(consolidations).some(Boolean) || saveMergeMutation.isPending}
-                    size="sm"
-                    className="bg-blue-600 text-white hover:bg-blue-500"
-                  >
-                    {saveMergeMutation.isPending ? 'Saving…' : '✔ Apply Selected Merges'}
-                  </Button>
-                </div>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
@@ -2394,6 +2384,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         No multi-line merge candidates below the hour threshold.
                       </p>
                     ) : (
+                      <>
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -2672,6 +2663,40 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                           })}
                         </TableBody>
                       </Table>
+                      {/* Merge tab footer */}
+                      {(() => {
+                        const mergeKeys = Object.entries(consolidations)
+                          .filter(([k, v]) => v && mergeGroups.some(g => g.key === k) && !savedMergeKeySet.has(k));
+                        const readyCount = mergeKeys.length;
+                        return (
+                          <div className="flex justify-between items-center mt-4 pt-4 border-t border-border">
+                            <span className="text-xs text-muted-foreground">
+                              {readyCount} selected for merge
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => {
+                                  const cleared = { ...consolidations };
+                                  mergeGroups.forEach(g => { delete cleared[g.key]; });
+                                  setConsolidations(cleared);
+                                }}
+                                className="text-xs text-muted-foreground hover:text-foreground underline bg-transparent border-none cursor-pointer"
+                              >
+                                Clear Selections
+                              </button>
+                              <Button
+                                onClick={handleConsolidate}
+                                disabled={readyCount === 0 || saveMergeMutation.isPending}
+                                size="sm"
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                              >
+                                {saveMergeMutation.isPending ? 'Saving…' : `Apply ${readyCount > 0 ? readyCount + ' ' : ''}Merge${readyCount !== 1 ? 's' : ''}`}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      </>
                     )
                   )}
 
@@ -2795,27 +2820,81 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     )}
                                   </TableCell>
                                   <TableCell>
-                                    {isSaved ? (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-green-500 text-xs">✓ Saved</span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-5 px-1.5 text-xs"
-                                          onClick={() => handleUndoMerge(row.sec, row.head)}
-                                        >
-                                          <Undo2 className="h-3 w-3 mr-1" /> Undo
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">Pending</span>
-                                    )}
+                                    {(() => {
+                                      const isChecked = !!consolidations[mergeKey];
+                                      const target = reassignTargets[mergeKey];
+                                      const hasTarget = !!target && target !== '__reassign__' && target !== '';
+
+                                      if (isSaved) return (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-green-500 text-xs">✓ Saved</span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 px-1.5 text-xs"
+                                            onClick={() => handleUndoMerge(row.sec, row.head)}
+                                          >
+                                            <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                          </Button>
+                                        </div>
+                                      );
+                                      if (!isChecked) return <span className="text-xs text-muted-foreground">—</span>;
+                                      if (!hasTarget) return <span className="text-xs text-orange-400">Select target</span>;
+                                      return <span className="text-xs text-primary font-semibold">Ready</span>;
+                                    })()}
                                   </TableCell>
                                 </TableRow>
                               );
                             })}
                           </TableBody>
                         </Table>
+                        {/* Standalone tab footer */}
+                        {(() => {
+                          const standaloneKeys = standaloneGroups.map(g => g.key);
+                          const checkedKeys = standaloneKeys.filter(k => consolidations[k] && !savedMergeKeySet.has(k));
+                          const readyKeys = checkedKeys.filter(k => {
+                            const t = reassignTargets[k];
+                            return t && t !== '__reassign__' && t !== '';
+                          });
+                          const selectedCount = checkedKeys.length;
+                          const readyCount = readyKeys.length;
+
+                          return (
+                            <div className="flex justify-between items-center mt-4 pt-4 border-t border-border">
+                              <span className="text-xs text-muted-foreground">
+                                {selectedCount} selected,{' '}
+                                <span className={readyCount > 0 ? 'text-green-500' : 'text-orange-400'}>
+                                  {readyCount} with valid targets
+                                </span>
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => {
+                                    const cleared = { ...consolidations };
+                                    const clearedTargets = { ...reassignTargets };
+                                    standaloneKeys.forEach(k => {
+                                      delete cleared[k];
+                                      delete clearedTargets[k];
+                                    });
+                                    setConsolidations(cleared);
+                                    setReassignTargets(clearedTargets);
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground underline bg-transparent border-none cursor-pointer"
+                                >
+                                  Clear Selections
+                                </button>
+                                <Button
+                                  onClick={handleConsolidate}
+                                  disabled={readyCount === 0 || saveMergeMutation.isPending}
+                                  size="sm"
+                                  className="bg-green-600 text-white hover:bg-green-500"
+                                >
+                                  {saveMergeMutation.isPending ? 'Saving…' : `Apply ${readyCount > 0 ? readyCount + ' ' : ''}Reassignment${readyCount !== 1 ? 's' : ''}`}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </>
                     )
                   )}
