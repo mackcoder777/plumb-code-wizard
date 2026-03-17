@@ -2858,19 +2858,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const target = reassignTargets[mergeKey];
                                       const hasTarget = !!target && target !== '__reassign__' && target !== '';
 
-                                      if (isSaved) return (
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-green-500 text-xs">✓ Saved</span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 px-1.5 text-xs"
-                                            onClick={() => handleUndoMerge(row.sec, row.head)}
-                                          >
-                                            <Undo2 className="h-3 w-3 mr-1" /> Undo
-                                          </Button>
-                                        </div>
-                                      );
+                                      if (isSaved) {
+                                        const savedEntry = savedMergesData?.find(
+                                          m => m.sec_code === row.sec && m.cost_head === row.head
+                                        );
+                                        const isKept = (savedEntry as any)?.reassign_to_head === '__keep__';
+                                        return (
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-green-500 text-xs">{isKept ? '✓ Kept' : '✓ Saved'}</span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-5 px-1.5 text-xs"
+                                              onClick={() => handleUndoMerge(row.sec, row.head)}
+                                            >
+                                              <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                            </Button>
+                                          </div>
+                                        );
+                                      }
                                       if (!isChecked) return <span className="text-xs text-muted-foreground">—</span>;
                                       if (!hasTarget) return <span className="text-xs text-orange-400">Select target</span>;
                                       return <span className="text-xs text-primary font-semibold">Ready</span>;
