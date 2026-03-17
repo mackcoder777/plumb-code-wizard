@@ -2564,7 +2564,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                                       const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
                                                       setRedistributeAdjustments((prev) => ({
                                                         ...prev,
-                                                        [mergeKey]: { ...(prev[mergeKey] ?? {}), [line.code]: val },
+                                                        [mergeKey]: { ...(prev[mergeKey] ?? {}), [(() => { const p = (line.code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : line.code; })()]: val },
                                                       }));
                                                     }}
                                                     className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
