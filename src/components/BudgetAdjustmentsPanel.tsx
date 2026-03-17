@@ -1197,10 +1197,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           if (!row) return null;
           // Convert targets to deltas for DB storage
           const deltas: Record<string, number> = {};
+          const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
           row.lines.forEach(line => {
-            const t = targets[line.code] ?? line.hours;
+            const actKey = toActKey(line.code);
+            const t = targets[actKey] ?? targets[line.code] ?? line.hours;
             const d = t - line.hours;
-            if (Math.abs(d) > 0.001) deltas[line.code] = parseFloat(d.toFixed(2));
+            if (Math.abs(d) > 0.001) deltas[actKey] = parseFloat(d.toFixed(2));
           });
           const net = Object.values(deltas).reduce((s, v) => s + v, 0);
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
