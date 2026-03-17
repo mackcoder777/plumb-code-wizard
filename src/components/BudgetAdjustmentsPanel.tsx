@@ -1235,7 +1235,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           if (Math.abs(net) > 0.01) return null; // skip unbalanced
           return { sec_code: sec!, cost_head: head, reassign_to_head: null, redistribute_adjustments: deltas };
         }
-        if (target === '__keep__') return null; // User chose to keep as-is, skip
+        // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
