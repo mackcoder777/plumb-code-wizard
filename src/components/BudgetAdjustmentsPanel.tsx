@@ -1169,6 +1169,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   const orphanedRows: typeof smallCodeAnalysis = [];
 
+  // Filtered view for standalone hour threshold
+  const filteredSmallCodeAnalysis = useMemo(() => {
+    return smallCodeAnalysis.filter(row => {
+      if (row.lines.length > 1) return true;
+      return row.combinedHours < standaloneMaxHours;
+    });
+  }, [smallCodeAnalysis, standaloneMaxHours]);
+
+  const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
+  const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
+
   const handleConsolidate = () => {
     const newEntries = Object.entries(consolidations)
       .filter(([, v]) => v)
