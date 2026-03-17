@@ -516,6 +516,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+      setConsolidations({});
+      setReassignTargets({});
+      setRedistributeAdjustments({});
+      setManuallyOverridden(new Set());
       toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
     },
     onError: (error: Error) => {
