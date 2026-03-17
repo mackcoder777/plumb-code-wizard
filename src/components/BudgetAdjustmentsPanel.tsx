@@ -1045,7 +1045,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       if (redistAdj && Object.keys(redistAdj).length > 0) {
         Object.entries(redistAdj).forEach(([actCode, delta]) => {
           if (!delta || delta === 0) return;
-          const fullCode = `${sec} ${actCode} ${head}`;
+          // Handle both legacy full-code keys ("B3 00LB SPCL") and
+          // correct activity-code-only keys ("00LB")
+          const isFullCode = actCode.includes(' ');
+          const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
           const matchKey = matchingKeys.find(k => (result[k].code ?? '').trim() === fullCode) ?? fullCode;
           if (!result[matchKey]) return;
           const rate = result[matchKey].hours > 0
