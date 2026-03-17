@@ -1255,7 +1255,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const handleUndoMerge = (sec: string, head: string) => {
     const remaining = (savedMergesData ?? [])
       .filter(m => !(m.sec_code === sec && m.cost_head === head))
-      .map(m => ({ sec_code: m.sec_code, cost_head: m.cost_head }));
+      .map(m => ({
+        sec_code: m.sec_code,
+        cost_head: m.cost_head,
+        reassign_to_head: (m as any).reassign_to_head ?? null,
+        redistribute_adjustments: (m as any).redistribute_adjustments ?? null,
+      }));
     saveMergeMutation.mutate(remaining);
   };
 
