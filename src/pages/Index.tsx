@@ -2033,7 +2033,7 @@ const EnhancedCostCodeManager = () => {
           {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'buyout', 'rules'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={`px-6 py-4 font-medium transition-all ${
                 activeTab === tab
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
