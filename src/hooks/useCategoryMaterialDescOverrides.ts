@@ -56,15 +56,35 @@ export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
         );
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Failed to save override',
-        description: error.message,
-        variant: 'destructive',
+    onMutate: async ({ categoryName, materialDescription, laborCode }) => {
+      await qc.cancelQueries({ queryKey: [TABLE, projectId] });
+      const previous = qc.getQueryData<CategoryMaterialDescOverride[]>([TABLE, projectId]);
+      qc.setQueryData<CategoryMaterialDescOverride[]>([TABLE, projectId], old => {
+        const list = old ?? [];
+        const idx = list.findIndex(
+          o => o.category_name === categoryName && o.material_description === materialDescription
+        );
+        const next: CategoryMaterialDescOverride = {
+          id: idx >= 0 ? list[idx].id : `optimistic-${Date.now()}`,
+          project_id: projectId!,
+          category_name: categoryName,
+          material_description: materialDescription,
+          labor_code: laborCode,
+        };
+        return idx >= 0
+          ? list.map((o, i) => (i === idx ? next : o))
+          : [...list, next];
       });
+      return { previous };
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous !== undefined) {
+        qc.setQueryData([TABLE, projectId], context.previous);
+      }
+      toast({ title: 'Failed to save override', description: error.message, variant: 'destructive' });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
     },
   });
 }
@@ -89,15 +109,24 @@ export function useDeleteCategoryMaterialDescOverride(projectId: string | null) 
         .eq('material_description', materialDescription);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
+    onMutate: async ({ categoryName, materialDescription }) => {
+      await qc.cancelQueries({ queryKey: [TABLE, projectId] });
+      const previous = qc.getQueryData<CategoryMaterialDescOverride[]>([TABLE, projectId]);
+      qc.setQueryData<CategoryMaterialDescOverride[]>([TABLE, projectId], old =>
+        (old ?? []).filter(
+          o => !(o.category_name === categoryName && o.material_description === materialDescription)
+        )
+      );
+      return { previous };
     },
-    onError: (error: Error) => {
-      toast({
-        title: 'Failed to remove override',
-        description: error.message,
-        variant: 'destructive',
-      });
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous !== undefined) {
+        qc.setQueryData([TABLE, projectId], context.previous);
+      }
+      toast({ title: 'Failed to remove override', description: error.message, variant: 'destructive' });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
     },
   });
 }

@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { EstimateItem } from '@/types/estimate';
+import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
+import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
@@ -27,6 +29,62 @@ interface CategoryLaborMappingPanelProps {
   onMappingsChange?: (mappings: Record<string, string>) => void;
   onViewCategoryItems?: (category: string) => void;
 }
+
+// Memoized wrapper that binds categoryName and computes materialDescGroups
+interface BoundMaterialDescSectionProps {
+  categoryName: string;
+  categoryLaborCode: string | null;
+  materialDescOverrides: CategoryMaterialDescOverride[];
+  laborCodes: { code: string; description: string }[];
+  patterns: MaterialDescLaborPattern[];
+  estimateData: EstimateItem[];
+  onSave: (categoryName: string, materialDescription: string, laborCode: string) => Promise<void>;
+  onDelete: (categoryName: string, materialDescription: string) => Promise<void>;
+}
+
+const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
+  categoryName, categoryLaborCode, materialDescOverrides, laborCodes, patterns,
+  estimateData, onSave, onDelete,
+}: BoundMaterialDescSectionProps) {
+  const materialDescGroups = useMemo(() => {
+    const groups: Record<string, { items: number; hours: number; samples: string[] }> = {};
+    estimateData.forEach(item => {
+      if (item.reportCat !== categoryName) return;
+      const desc = item.materialDesc || 'No Description';
+      if (!groups[desc]) groups[desc] = { items: 0, hours: 0, samples: [] };
+      groups[desc].items++;
+      groups[desc].hours += item.hours || 0;
+      if (groups[desc].samples.length < 2 && item.itemName) {
+        groups[desc].samples.push(item.itemName);
+      }
+    });
+    return Object.entries(groups)
+      .sort((a, b) => b[1].hours - a[1].hours)
+      .map(([desc, d]) => ({ desc, ...d }));
+  }, [estimateData, categoryName]);
+
+  const boundOnSave = useCallback(
+    (materialDescription: string, laborCode: string) => onSave(categoryName, materialDescription, laborCode),
+    [categoryName, onSave]
+  );
+  const boundOnDelete = useCallback(
+    (materialDescription: string) => onDelete(categoryName, materialDescription),
+    [categoryName, onDelete]
+  );
+
+  return (
+    <MaterialDescSection
+      categoryName={categoryName}
+      categoryLaborCode={categoryLaborCode}
+      materialDescGroups={materialDescGroups}
+      materialDescOverrides={materialDescOverrides}
+      laborCodes={laborCodes}
+      patterns={patterns}
+      onSave={boundOnSave}
+      onDelete={boundOnDelete}
+    />
+  );
+});
 
 export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps> = ({
   data,
@@ -56,6 +114,22 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   // Material description learning patterns
   const { data: materialDescPatterns = [] } = useMaterialDescLaborPatterns();
   const recordPattern = useRecordMaterialDescLaborPattern();
+
+  // Stable callbacks for material desc overrides
+  const handleSaveOverride = useCallback(
+    async (categoryName: string, materialDescription: string, laborCode: string) => {
+      await saveOverride.mutateAsync({ categoryName, materialDescription, laborCode });
+      recordPattern.mutate({ materialDescription, laborCode });
+    },
+    [saveOverride, recordPattern]
+  );
+
+  const handleDeleteOverride = useCallback(
+    async (categoryName: string, materialDescription: string) => {
+      await deleteOverride.mutateAsync({ categoryName, materialDescription });
+    },
+    [deleteOverride]
+  );
   
   // Build mappings lookup
   const mappingsLookup = useMemo(() => {
@@ -340,40 +414,16 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                             )}
                             
                             {/* Material Description Router */}
-                            {(() => {
-                              const categoryItems = data.filter(item => item.reportCat === cat.category);
-                              const groups: Record<string, { items: number; hours: number; samples: string[] }> = {};
-                              categoryItems.forEach(item => {
-                                const desc = item.materialDesc || 'No Description';
-                                if (!groups[desc]) groups[desc] = { items: 0, hours: 0, samples: [] };
-                                groups[desc].items++;
-                                groups[desc].hours += item.hours || 0;
-                                if (groups[desc].samples.length < 2 && item.itemName) {
-                                  groups[desc].samples.push(item.itemName);
-                                }
-                              });
-                              const materialDescGroups = Object.entries(groups)
-                                .sort((a, b) => b[1].hours - a[1].hours)
-                                .map(([desc, d]) => ({ desc, ...d }));
-
-                              return (
-                                <MaterialDescSection
-                                  categoryName={cat.category}
-                                  categoryLaborCode={currentCode ?? null}
-                                  materialDescGroups={materialDescGroups}
-                                  materialDescOverrides={materialDescOverrides}
-                                  laborCodes={laborCodes}
-                                  patterns={materialDescPatterns}
-                                  onSave={async (materialDescription, laborCode) => {
-                                    await saveOverride.mutateAsync({ categoryName: cat.category, materialDescription, laborCode });
-                                    recordPattern.mutate({ materialDescription, laborCode });
-                                  }}
-                                  onDelete={(materialDescription) =>
-                                    deleteOverride.mutateAsync({ categoryName: cat.category, materialDescription })
-                                  }
-                                />
-                              );
-                            })()}
+                            <BoundMaterialDescSection
+                              categoryName={cat.category}
+                              categoryLaborCode={currentCode ?? null}
+                              materialDescOverrides={materialDescOverrides}
+                              laborCodes={laborCodes}
+                              patterns={materialDescPatterns}
+                              estimateData={data}
+                              onSave={handleSaveOverride}
+                              onDelete={handleDeleteOverride}
+                            />
                           </div>
                         )}
                       </div>
