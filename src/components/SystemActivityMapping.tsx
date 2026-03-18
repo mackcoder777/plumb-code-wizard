@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Activity, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, Sparkles } from 'lucide-react';
+import { Activity, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, Sparkles, ChevronDown, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -19,6 +19,8 @@ import {
 import {
   useSystemActivityMappings,
   useBatchSaveSystemActivityMappings,
+  useSaveSystemActivityMapping,
+  useDeleteSystemActivityMapping,
   SystemActivityMapping,
   ACTIVITY_CODE_SUGGESTIONS,
   suggestActivityCode,
@@ -29,8 +31,15 @@ interface SystemData {
   itemCount: number;
 }
 
+interface CategoryData {
+  category: string;
+  items: number;
+  hours: number;
+  currentCostHead: string | null;
+}
+
 interface SystemActivityMappingPanelProps {
-  estimateData: Array<{ system?: string }>;
+  estimateData: Array<{ system?: string; reportCat?: string; itemType?: string; hours?: number; costCode?: string }>;
   projectId: string | null;
   onMappingsChange?: (mappings: SystemActivityMapping[]) => void;
 }
@@ -210,9 +219,12 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [expandedSystems, setExpandedSystems] = useState<Set<string>>(new Set());
 
   const { data: dbMappings = [], isLoading } = useSystemActivityMappings(projectId);
   const batchSave = useBatchSaveSystemActivityMappings();
+  const saveMapping = useSaveSystemActivityMapping();
+  const deleteMapping = useDeleteSystemActivityMapping();
 
   // Extract unique systems from estimate data with counts
   const systemData = useMemo<SystemData[]>(() => {
@@ -239,7 +251,33 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
     return sugg;
   }, [systemData]);
 
-  // Initialize local mappings from database (blanket rules only)
+  // Build category breakdown per system
+  const systemCategoryData = useMemo(() => {
+    const result: Record<string, CategoryData[]> = {};
+
+    estimateData.forEach(item => {
+      const sys = (item.system || '').trim();
+      const cat = item.reportCat || item.itemType || 'Unknown';
+      if (!sys) return;
+
+      if (!result[sys]) result[sys] = [];
+      let entry = result[sys].find(e => e.category === cat);
+      if (!entry) {
+        entry = { category: cat, items: 0, hours: 0, currentCostHead: null };
+        result[sys].push(entry);
+      }
+      entry.items++;
+      entry.hours += item.hours || 0;
+      if (!entry.currentCostHead && item.costCode) {
+        const parts = item.costCode.trim().split(/\s+/);
+        entry.currentCostHead = parts.length >= 1 ? parts[parts.length - 1] : null;
+      }
+    });
+
+    Object.values(result).forEach(cats => cats.sort((a, b) => b.hours - a.hours));
+    return result;
+  }, [estimateData]);
+
   useEffect(() => {
     if (dbMappings.length > 0) {
       const mappingsFromDb: Record<string, string> = {};
@@ -438,26 +476,126 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
                   const currentCode = localMappings[key] || '';
                   const suggestion = suggestions[key];
                   const isMapped = currentCode && currentCode !== '0000';
+                  const isExpanded = expandedSystems.has(system);
+                  const categories = systemCategoryData[system] || [];
+                  const hasCategories = categories.length > 1;
 
                   return (
-                    <TableRow key={system} className={isMapped ? 'bg-primary/5' : ''}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {isMapped && <Check className="h-4 w-4 text-primary" />}
-                          {system}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <ActivityCodeInput
-                          value={currentCode}
-                          onChange={(value) => handleActivityChange(system, value)}
-                          suggestion={suggestion}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {itemCount.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
+                    <React.Fragment key={system}>
+                      <TableRow className={isMapped ? 'bg-primary/5' : ''}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {hasCategories && (
+                              <button
+                                onClick={() => setExpandedSystems(prev => {
+                                  const next = new Set(prev);
+                                  next.has(system) ? next.delete(system) : next.add(system);
+                                  return next;
+                                })}
+                                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                                title="Show category overrides"
+                              >
+                                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                              </button>
+                            )}
+                            {!hasCategories && <div className="w-4" />}
+                            {isMapped && <Check className="h-4 w-4 text-primary" />}
+                            {system}
+                            {hasCategories && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {categories.length} cats
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <ActivityCodeInput
+                            value={currentCode}
+                            onChange={(value) => handleActivityChange(system, value)}
+                            suggestion={suggestion}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {itemCount.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && categories.map(cat => {
+                        const existingOverride = dbMappings.find(
+                          m => m.system_pattern === key && m.cost_head_filter === cat.category
+                        );
+                        const currentActivity = existingOverride?.activity_code ?? '';
+
+                        return (
+                          <TableRow key={`${system}::${cat.category}`} className="bg-accent/30">
+                            <TableCell className="pl-12">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">↳</span>
+                                <span className="text-xs font-medium">{cat.category}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {cat.items} items · {cat.hours.toFixed(0)} hrs
+                                </span>
+                                {cat.currentCostHead && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
+                                    → {cat.currentCostHead}
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <ActivityCodeInput
+                                  value={currentActivity}
+                                  onChange={async (code) => {
+                                    if (!projectId) return;
+                                    if (!code || code === '0000') {
+                                      if (existingOverride) {
+                                        await deleteMapping.mutateAsync({
+                                          projectId,
+                                          systemPattern: key,
+                                          costHeadFilter: cat.category,
+                                        });
+                                        toast({ title: "Override Removed", description: `${cat.category} will inherit system activity code.` });
+                                      }
+                                    } else {
+                                      await saveMapping.mutateAsync({
+                                        projectId,
+                                        systemPattern: key,
+                                        activityCode: code,
+                                        costHeadFilter: cat.category,
+                                      });
+                                      toast({ title: "Override Saved", description: `${cat.category} → ${code}` });
+                                    }
+                                  }}
+                                  suggestion={null}
+                                />
+                                {currentActivity && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!projectId || !existingOverride) return;
+                                      await deleteMapping.mutateAsync({
+                                        projectId,
+                                        systemPattern: key,
+                                        costHeadFilter: cat.category,
+                                      });
+                                      toast({ title: "Override Removed" });
+                                    }}
+                                    className="text-muted-foreground hover:text-destructive transition-colors"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {!currentActivity && isMapped && (
+                                  <span className="text-xs text-muted-foreground">
+                                    inherits {currentCode}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
               </TableBody>

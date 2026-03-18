@@ -49,29 +49,28 @@ export const suggestActivityCode = (systemName: string): string | null => {
 };
 
 // Helper to get activity code for a system from mappings
-// Priority: exact system + cost head match > system-wide (no filter) > default '0000'
+// Priority: system + category override > system-wide blanket rule > default '0000'
 export const getActivityFromSystem = (
   system: string,
   mappings: SystemActivityMapping[],
-  costHead?: string
+  category?: string
 ): string => {
   const norm = (system || '').toLowerCase().trim();
-  const headUpper = (costHead || '').toUpperCase().trim();
 
-  // Priority 1: exact system + exact cost head filter match
-  if (headUpper) {
+  // Priority 1: system + category-specific override (stored in cost_head_filter)
+  if (category) {
     const specific = mappings.find(
       m =>
-        m.system_pattern.toLowerCase().trim() === norm &&
-        m.cost_head_filter?.toUpperCase().trim() === headUpper
+        m.system_pattern === norm &&
+        m.cost_head_filter === category
     );
     if (specific) return specific.activity_code;
   }
 
-  // Priority 2: system match with no cost head filter (blanket rule)
+  // Priority 2: system-wide blanket rule (no cost_head_filter)
   const general = mappings.find(
     m =>
-      m.system_pattern.toLowerCase().trim() === norm &&
+      m.system_pattern === norm &&
       !m.cost_head_filter
   );
   return general?.activity_code || '0000';

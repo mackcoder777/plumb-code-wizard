@@ -519,11 +519,11 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [suggestions]);
 
   // Helper to build full labor code with zone-aware section resolution
-  const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string }): string => {
+  const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string }): string => {
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
     const activity = resolved.activity !== '0000'
       ? resolved.activity
-      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings, costHead) : '0000');
+      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000');
     return `${resolved.section} ${activity} ${costHead}`;
   }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile]);
 
@@ -559,7 +559,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Build new full code with floor activity priority over system activity
       const activityCode = resolved.activity !== '0000'
         ? resolved.activity
-        : getActivityFromSystem(item.system, systemActivityMappings, costHead);
+        : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
