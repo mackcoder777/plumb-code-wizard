@@ -133,6 +133,7 @@ const SUGGESTIONS = [
 
 export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
