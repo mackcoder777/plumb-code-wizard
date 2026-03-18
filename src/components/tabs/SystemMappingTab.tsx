@@ -825,6 +825,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   return (
     <div className="space-y-6">
+      {hasUnappliedChanges && (
+        <div className="sticky top-0 z-50 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-6 py-3 text-amber-800">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <span>⚠️</span>
+            <span>You have unapplied mapping changes. Click "Apply All Mappings" before leaving this tab.</span>
+          </div>
+          <Button
+            size="sm"
+            onClick={applyMappings}
+            className="shrink-0 bg-amber-500 text-white hover:bg-amber-600"
+          >
+            Apply All Now
+          </Button>
+        </div>
+      )}
       {/* Progress Header */}
       <SystemMappingHeader stats={stats} totalItems={totalItems} />
 
