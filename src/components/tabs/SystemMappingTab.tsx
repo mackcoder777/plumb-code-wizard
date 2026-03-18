@@ -617,13 +617,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let changed = false;
       let assignmentSource: 'item-type-override' | 'category' | 'system' | 'itemType' | null = null;
       
-      // Tier 0: Item-type override within category (highest priority)
-      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
-      if (itemTypeCode) {
+      // Tier 0: Keyword rule within category (highest priority)
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
+      if (keywordCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== itemTypeCode) {
-          costHead = itemTypeCode;
+        if (existingCostHead !== keywordCode) {
+          costHead = keywordCode;
           changed = true;
           assignmentSource = 'item-type-override';
         }
