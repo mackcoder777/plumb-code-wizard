@@ -15,15 +15,15 @@ export interface SystemActivityMapping {
 // Common activity code suggestions
 export const ACTIVITY_CODE_SUGGESTIONS = [
   { code: '0000', label: 'Default/General' },
-  { code: '00CW', label: 'Cold Water' },
-  { code: '00HW', label: 'Hot Water' },
-  { code: 'WATR', label: 'Combined Water' },
-  { code: '00SD', label: 'Storm Drain' },
-  { code: '00SN', label: 'Sanitary' },
-  { code: '00GS', label: 'Gas' },
-  { code: '00FX', label: 'Fixtures' },
-  { code: '00VT', label: 'Vent' },
-  { code: '00RF', label: 'Roof Drain' },
+  { code: 'DWTR', label: 'Domestic Water' },
+  { code: 'SNWV', label: 'Sanitary / Waste / Vent' },
+  { code: 'STRM', label: 'Storm Drain' },
+  { code: 'GRWV', label: 'Grease Waste' },
+  { code: 'NGAS', label: 'Natural Gas' },
+  { code: 'COND', label: 'Condensate' },
+  { code: 'RCLM', label: 'Reclaimed Water' },
+  { code: 'FIRE', label: 'Fire Protection' },
+  { code: 'DEMO', label: 'Demolition' },
 ];
 
 // Auto-suggest activity code based on system name keywords
