@@ -197,6 +197,10 @@ export const PlumbingEstimateManager: React.FC = () => {
             )}
           </div>
         </div>
+        <BudgetChat
+          projectName={currentFile.name.replace(/\.[^/.]+$/, "")}
+          estimateSummary={estimateSummary}
+        />
       </div>
     </div>
   );
