@@ -7,6 +7,7 @@ import {
   useSaveCategoryMaterialDescOverride,
   useDeleteCategoryMaterialDescOverride,
 } from '@/hooks/useCategoryMaterialDescOverrides';
+import { useMaterialDescLaborPatterns, useRecordMaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +52,10 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   const { data: materialDescOverrides = [] } = useCategoryMaterialDescOverrides(projectId);
   const saveOverride = useSaveCategoryMaterialDescOverride(projectId);
   const deleteOverride = useDeleteCategoryMaterialDescOverride(projectId);
+  
+  // Material description learning patterns
+  const { data: materialDescPatterns = [] } = useMaterialDescLaborPatterns();
+  const recordPattern = useRecordMaterialDescLaborPattern();
   
   // Build mappings lookup
   const mappingsLookup = useMemo(() => {
@@ -358,9 +363,11 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                   materialDescGroups={materialDescGroups}
                                   materialDescOverrides={materialDescOverrides}
                                   laborCodes={laborCodes}
-                                  onSave={(materialDescription, laborCode) =>
-                                    saveOverride.mutateAsync({ categoryName: cat.category, materialDescription, laborCode })
-                                  }
+                                  patterns={materialDescPatterns}
+                                  onSave={async (materialDescription, laborCode) => {
+                                    await saveOverride.mutateAsync({ categoryName: cat.category, materialDescription, laborCode });
+                                    recordPattern.mutate({ materialDescription, laborCode });
+                                  }}
                                   onDelete={(materialDescription) =>
                                     deleteOverride.mutateAsync({ categoryName: cat.category, materialDescription })
                                   }

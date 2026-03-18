@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export interface CategoryMaterialDescOverride {
   id: string;
@@ -7,19 +8,16 @@ export interface CategoryMaterialDescOverride {
   category_name: string;
   material_description: string;
   labor_code: string;
-  created_at: string;
-  updated_at: string;
 }
 
 const TABLE = 'category_material_desc_overrides';
-const QUERY_KEY = 'category-material-desc-overrides';
 
 export function useCategoryMaterialDescOverrides(projectId: string | null) {
   return useQuery({
-    queryKey: [QUERY_KEY, projectId],
+    queryKey: [TABLE, projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from(TABLE)
         .select('*')
         .eq('project_id', projectId);
@@ -32,6 +30,7 @@ export function useCategoryMaterialDescOverrides(projectId: string | null) {
 
 export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: async ({
       categoryName,
@@ -43,24 +42,36 @@ export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
       laborCode: string;
     }) => {
       if (!projectId) throw new Error('No project selected');
-      const { error } = await (supabase as any).from(TABLE).upsert(
-        {
-          project_id: projectId,
-          category_name: categoryName,
-          material_description: materialDescription,
-          labor_code: laborCode,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'project_id,category_name,material_description' }
-      );
+      const { error } = await supabase
+        .from(TABLE)
+        .upsert(
+          {
+            project_id: projectId,
+            category_name: categoryName,
+            material_description: materialDescription,
+            labor_code: laborCode,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'project_id,category_name,material_description' }
+        );
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [QUERY_KEY, projectId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to save override',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
   });
 }
 
 export function useDeleteCategoryMaterialDescOverride(projectId: string | null) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: async ({
       categoryName,
@@ -70,7 +81,7 @@ export function useDeleteCategoryMaterialDescOverride(projectId: string | null) 
       materialDescription: string;
     }) => {
       if (!projectId) throw new Error('No project selected');
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from(TABLE)
         .delete()
         .eq('project_id', projectId)
@@ -78,14 +89,19 @@ export function useDeleteCategoryMaterialDescOverride(projectId: string | null) 
         .eq('material_description', materialDescription);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [QUERY_KEY, projectId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to remove override',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
   });
 }
 
-/**
- * Lookup helper — used in apply functions.
- * Returns the labor code override for a given category + materialDesc, or null.
- */
 export function getLaborCodeFromMaterialDesc(
   categoryName: string,
   materialDescription: string,
