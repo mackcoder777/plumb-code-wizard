@@ -2948,6 +2948,35 @@ const EnhancedCostCodeManager = () => {
             preloadedFileName={pendingUploadFileName}
           />
         </div>
+
+        {/* Unapplied mapping changes warning dialog */}
+        {showMappingWarning && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+              <h3 className="text-lg font-semibold text-gray-900">Unapplied Mapping Changes</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                You have mapping changes that haven't been applied to estimate items yet. What would you like to do?
+              </p>
+              <div className="mt-5 flex gap-3 justify-end">
+                <button
+                  onClick={() => { setShowMappingWarning(false); setPendingTab(null); }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMappingWarning(false);
+                    if (pendingTab) { setActiveTab(pendingTab); setPendingTab(null); }
+                  }}
+                  className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Discard &amp; Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
