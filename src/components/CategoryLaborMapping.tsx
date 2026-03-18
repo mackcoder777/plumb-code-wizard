@@ -333,6 +333,19 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 View All {cat.itemCount} Items in Estimates
                               </Button>
                             )}
+                            
+                            {/* Item-Type Overrides Section */}
+                            <ItemTypeOverridesSection
+                              category={cat.category}
+                              currentCategoryCode={currentCode}
+                              data={data}
+                              laborCodes={laborCodes}
+                              itemTypeOverrides={itemTypeOverrides}
+                              saveOverride={saveOverride}
+                              deleteOverride={deleteOverride}
+                              selectedItemTypes={selectedItemTypes}
+                              setSelectedItemTypes={setSelectedItemTypes}
+                            />
                           </div>
                         )}
                       </div>

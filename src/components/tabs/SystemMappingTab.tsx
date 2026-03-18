@@ -7,6 +7,7 @@ import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus,
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatterns } from '@/hooks/useMappingPatterns';
 import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping } from '@/hooks/useCategoryMappings';
+import { useCategoryItemTypeOverrides, getLaborCodeFromItemTypeOverride } from '@/hooks/useCategoryItemTypeOverrides';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
