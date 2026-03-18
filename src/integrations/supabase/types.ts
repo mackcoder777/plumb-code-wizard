@@ -510,6 +510,33 @@ export type Database = {
           },
         ]
       }
+      material_desc_labor_patterns: {
+        Row: {
+          confidence_score: number | null
+          id: string
+          labor_code: string
+          last_used_at: string
+          material_description_pattern: string
+          usage_count: number
+        }
+        Insert: {
+          confidence_score?: number | null
+          id?: string
+          labor_code: string
+          last_used_at?: string
+          material_description_pattern: string
+          usage_count?: number
+        }
+        Update: {
+          confidence_score?: number | null
+          id?: string
+          labor_code?: string
+          last_used_at?: string
+          material_description_pattern?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       material_mapping_patterns: {
         Row: {
           confidence_score: number | null
