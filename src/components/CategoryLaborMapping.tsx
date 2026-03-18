@@ -334,17 +334,14 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               </Button>
                             )}
                             
-                            {/* Item-Type Overrides Section */}
-                            <ItemTypeOverridesSection
+                            {/* Keyword Rules Section */}
+                            <KeywordRulesSection
                               category={cat.category}
-                              currentCategoryCode={currentCode}
                               data={data}
                               laborCodes={laborCodes}
-                              itemTypeOverrides={itemTypeOverrides}
-                              saveOverride={saveOverride}
-                              deleteOverride={deleteOverride}
-                              selectedItemTypes={selectedItemTypes}
-                              setSelectedItemTypes={setSelectedItemTypes}
+                              keywordRules={keywordRules}
+                              saveRule={saveRule}
+                              deleteRule={deleteRule}
                             />
                           </div>
                         )}
