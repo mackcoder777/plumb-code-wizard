@@ -476,26 +476,126 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
                   const currentCode = localMappings[key] || '';
                   const suggestion = suggestions[key];
                   const isMapped = currentCode && currentCode !== '0000';
+                  const isExpanded = expandedSystems.has(system);
+                  const categories = systemCategoryData[system] || [];
+                  const hasCategories = categories.length > 1;
 
                   return (
-                    <TableRow key={system} className={isMapped ? 'bg-primary/5' : ''}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {isMapped && <Check className="h-4 w-4 text-primary" />}
-                          {system}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <ActivityCodeInput
-                          value={currentCode}
-                          onChange={(value) => handleActivityChange(system, value)}
-                          suggestion={suggestion}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {itemCount.toLocaleString()}
-                      </TableCell>
-                    </TableRow>
+                    <React.Fragment key={system}>
+                      <TableRow className={isMapped ? 'bg-primary/5' : ''}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {hasCategories && (
+                              <button
+                                onClick={() => setExpandedSystems(prev => {
+                                  const next = new Set(prev);
+                                  next.has(system) ? next.delete(system) : next.add(system);
+                                  return next;
+                                })}
+                                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                                title="Show category overrides"
+                              >
+                                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                              </button>
+                            )}
+                            {!hasCategories && <div className="w-4" />}
+                            {isMapped && <Check className="h-4 w-4 text-primary" />}
+                            {system}
+                            {hasCategories && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {categories.length} cats
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <ActivityCodeInput
+                            value={currentCode}
+                            onChange={(value) => handleActivityChange(system, value)}
+                            suggestion={suggestion}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {itemCount.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && categories.map(cat => {
+                        const existingOverride = dbMappings.find(
+                          m => m.system_pattern === key && m.cost_head_filter === cat.category
+                        );
+                        const currentActivity = existingOverride?.activity_code ?? '';
+
+                        return (
+                          <TableRow key={`${system}::${cat.category}`} className="bg-accent/30">
+                            <TableCell className="pl-12">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">↳</span>
+                                <span className="text-xs font-medium">{cat.category}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {cat.items} items · {cat.hours.toFixed(0)} hrs
+                                </span>
+                                {cat.currentCostHead && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
+                                    → {cat.currentCostHead}
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <ActivityCodeInput
+                                  value={currentActivity}
+                                  onChange={async (code) => {
+                                    if (!projectId) return;
+                                    if (!code || code === '0000') {
+                                      if (existingOverride) {
+                                        await deleteMapping.mutateAsync({
+                                          projectId,
+                                          systemPattern: key,
+                                          costHeadFilter: cat.category,
+                                        });
+                                        toast({ title: "Override Removed", description: `${cat.category} will inherit system activity code.` });
+                                      }
+                                    } else {
+                                      await saveMapping.mutateAsync({
+                                        projectId,
+                                        systemPattern: key,
+                                        activityCode: code,
+                                        costHeadFilter: cat.category,
+                                      });
+                                      toast({ title: "Override Saved", description: `${cat.category} → ${code}` });
+                                    }
+                                  }}
+                                  suggestion={null}
+                                />
+                                {currentActivity && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!projectId || !existingOverride) return;
+                                      await deleteMapping.mutateAsync({
+                                        projectId,
+                                        systemPattern: key,
+                                        costHeadFilter: cat.category,
+                                      });
+                                      toast({ title: "Override Removed" });
+                                    }}
+                                    className="text-muted-foreground hover:text-destructive transition-colors"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {!currentActivity && isMapped && (
+                                  <span className="text-xs text-muted-foreground">
+                                    inherits {currentCode}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
               </TableBody>
