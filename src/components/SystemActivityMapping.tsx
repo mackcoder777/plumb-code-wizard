@@ -380,11 +380,6 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
             <Badge variant="outline" className="bg-background">
               {stats.mapped}/{stats.total} mapped
             </Badge>
-            {stats.scopedRuleCount > 0 && (
-              <Badge variant="secondary">
-                {stats.scopedRuleCount} cost head rule{stats.scopedRuleCount !== 1 ? 's' : ''}
-              </Badge>
-            )}
             <Button
               variant="outline"
               size="sm"
