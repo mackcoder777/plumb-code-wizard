@@ -2530,6 +2530,7 @@ const EnhancedCostCodeManager = () => {
                   }
                 }}
                 onReanalyzeProfile={() => setDatasetProfile(profileDataset(estimateData))}
+                onUnappliedChangesUpdate={setHasUnappliedMappingChanges}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
