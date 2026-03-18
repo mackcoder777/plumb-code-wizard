@@ -1,77 +1,29 @@
 
 
-# Smart Assign Preview Dialog
+## Make Budget AI Chat Scrollable and Expandable
 
-## Problem
+### Problem
+The chat panel has a fixed `max-h-[600px]` and messages area capped at `max-h-[400px]`. Long AI responses get cut off with no way to scroll through them or expand the panel.
 
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
+### Changes — `src/components/BudgetChat.tsx`
 
-## What 9524 Covers (for reference)
+#### 1. Add expand/collapse toggle
+- Add an `expanded` state boolean
+- Add a maximize/minimize button in the header (next to the X close button)
+- When expanded: panel grows to near-full viewport height (`max-h-[85vh]`, `w-[500px]`) instead of the current `max-h-[600px]`, `w-[400px]`
+- When collapsed: keep current dimensions
 
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
+#### 2. Fix scroll area to fill available space
+- Change the messages `ScrollArea` from `max-h-[400px]` to use flex-grow (`flex-1 min-h-0`) so it fills all available space between header and input
+- The outer panel already uses `flex-col`, so removing the fixed max-height on ScrollArea will let it expand properly
 
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
+#### 3. Icon
+- Import `Maximize2` and `Minimize2` from lucide-react for the toggle button
 
-## Solution: Smart Assign Preview Dialog
-
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
-
-### UI Design
-
-When you click "Smart Assign", a dialog opens with:
-
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
-
-```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
-```
-
-### Technical Changes
-
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
-
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
-
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
-
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
-
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
-
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
-
-### No database changes needed.
+### Summary of line changes
+- **Line 4**: Add `Maximize2, Minimize2` to lucide imports
+- **Line 135**: Add `const [expanded, setExpanded] = useState(false);`
+- **Line 222**: Change panel dimensions to be conditional on `expanded` state
+- **Line 233**: Add expand/collapse button before the close button
+- **Line 239**: Remove `max-h-[400px]` from ScrollArea, keep `flex-1 min-h-0`
 
