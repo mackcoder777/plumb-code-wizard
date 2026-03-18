@@ -136,6 +136,7 @@ interface MaterialDescRowProps {
 const MaterialDescRow = React.memo(function MaterialDescRow({
   desc,
   data,
+  rawItems,
   categoryLaborCode,
   existing,
   laborCodes,
@@ -147,6 +148,7 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
 }: MaterialDescRowProps) {
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const currentCode = existing?.labor_code ?? '__CATEGORY__';
   const isOverridden = !!existing && currentCode !== '__CATEGORY__';
@@ -171,65 +173,97 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
     }
   }, [desc, existing, onSave, onDelete]);
 
-  const handleCheckbox = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onToggleSelect(desc, e.target.checked);
-  }, [desc, onToggleSelect]);
-
   return (
     <div className={cn(
-      "flex items-center gap-2 rounded-lg px-3 py-2 transition-colors",
-      isOverridden ? "bg-primary/5 border border-primary/20" : "bg-muted/30 border border-transparent"
+      'rounded-lg border transition-colors',
+      savedFlash ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800' :
+      isOverridden ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-transparent hover:border-border'
     )}>
-      <input
-        type="checkbox"
-        checked={isSelected}
-        onChange={handleCheckbox}
-        className="rounded border-border shrink-0"
-      />
-
-      <div className="flex-1 min-w-0">
-        <span className={cn("text-xs font-medium block truncate", isOverridden && "text-primary")}>
-          {desc}
-        </span>
-        <span className="text-[10px] text-muted-foreground">
-          {data.items} items · {data.hours.toFixed(1)} hrs
-        </span>
-        {data.samples.length > 0 && (
-          <span className="text-[10px] text-muted-foreground block truncate">
-            e.g. {data.samples.join(', ')}
-          </span>
-        )}
-        {/* Auto-suggestion chip */}
-        {suggestion && (
-          <button
-            onClick={() => handleChange(suggestion.laborCode)}
-            className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/40"
-            title={`Auto-suggested from past assignments (${Math.round(suggestion.confidence * 100)}% confidence). Click to accept.`}
-          >
-            <Sparkles className="h-3 w-3" />
-            Suggest: {suggestion.laborCode}
-            <span className="opacity-60">({Math.round(suggestion.confidence * 100)}%)</span>
-          </button>
+      {/* Main row */}
+      <div className="flex items-center gap-3 px-3 py-2">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={e => onToggleSelect(desc, e.target.checked)}
+          className="rounded border-border shrink-0"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={cn("text-xs font-medium truncate", isOverridden && "text-primary")}>{desc}</span>
+            <span className="text-[10px] text-muted-foreground shrink-0">{data.items} items · {data.hours.toFixed(1)} hrs</span>
+            {rawItems.length > 0 && (
+              <button
+                onClick={() => setExpanded(v => !v)}
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/10 transition-colors shrink-0"
+                title="Preview items in this group"
+              >
+                <ChevronDown className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')} />
+                {expanded ? 'hide' : 'preview'}
+              </button>
+            )}
+          </div>
+          {!expanded && data.samples.length > 0 && (
+            <p className="truncate text-[10px] text-muted-foreground">e.g. {data.samples.join(', ')}</p>
+          )}
+          {suggestion && !expanded && (
+            <button
+              onClick={() => handleChange(suggestion.laborCode)}
+              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/40"
+            >
+              <Sparkles className="h-2.5 w-2.5" />
+              Suggest: {suggestion.laborCode}
+              <span className="opacity-60">({Math.round(suggestion.confidence * 100)}%)</span>
+            </button>
+          )}
+        </div>
+        <CodeCombobox
+          value={currentCode}
+          categoryLaborCode={categoryLaborCode}
+          laborCodes={laborCodes}
+          onChange={handleChange}
+          isOverridden={isOverridden}
+          saving={saving}
+        />
+        {savedFlash && <span className="shrink-0 text-xs font-semibold text-green-600">✓ Saved</span>}
+        {!savedFlash && isOverridden && (
+          <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
+            <Check className="h-2.5 w-2.5 mr-0.5" />
+            {currentCode}
+          </Badge>
         )}
       </div>
 
-      <CodeCombobox
-        value={currentCode}
-        categoryLaborCode={categoryLaborCode}
-        laborCodes={laborCodes}
-        onChange={handleChange}
-        isOverridden={isOverridden}
-        saving={saving}
-      />
-
-      {savedFlash && (
-        <span className="text-xs text-green-600 font-medium shrink-0 animate-in fade-in">✓ Saved</span>
-      )}
-      {!savedFlash && isOverridden && (
-        <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
-          <Check className="h-2.5 w-2.5 mr-0.5" />
-          {currentCode}
-        </Badge>
+      {/* Expanded item preview */}
+      {expanded && (
+        <div className="border-t border-border mx-3 mb-2">
+          <table className="w-full mt-2 text-xs">
+            <thead>
+              <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                <th className="text-left pb-1 font-medium">Item</th>
+                <th className="text-left pb-1 font-medium">System</th>
+                <th className="text-left pb-1 font-medium">Size</th>
+                <th className="text-right pb-1 font-medium">Qty</th>
+                <th className="text-right pb-1 font-medium">Hrs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rawItems.slice(0, 15).map((item, i) => (
+                <tr key={i} className="border-t border-border/50">
+                  <td className="py-1 pr-3 text-foreground max-w-[200px] truncate">{item.itemName || '—'}</td>
+                  <td className="py-1 pr-3 text-muted-foreground max-w-[120px] truncate">{item.system || '—'}</td>
+                  <td className="py-1 pr-3 text-muted-foreground">{item.size || '—'}</td>
+                  <td className="py-1 text-right text-foreground tabular-nums">{item.qty ?? '—'}</td>
+                  <td className="py-1 text-right text-foreground tabular-nums">{item.hours?.toFixed(1) ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rawItems.length > 15 && (
+            <p className="mt-1.5 text-[10px] text-muted-foreground pb-1">
+              Showing 15 of {rawItems.length} items — assign code to route all {rawItems.length}.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
