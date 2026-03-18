@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Check, ChevronsUpDown, ChevronDown } from 'lucide-react';
+import { Check, ChevronsUpDown, ChevronDown, Sparkles } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
+import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
+import { getSuggestionForMaterialDesc } from '@/hooks/useMaterialDescLaborPatterns';
 
 interface LaborCode {
   code: string;
@@ -26,11 +28,12 @@ interface MaterialDescSectionProps {
   materialDescGroups: MaterialDescGroup[];
   materialDescOverrides: CategoryMaterialDescOverride[];
   laborCodes: LaborCode[];
+  patterns: MaterialDescLaborPattern[];
   onSave: (materialDescription: string, laborCode: string) => Promise<void>;
   onDelete: (materialDescription: string) => Promise<void>;
 }
 
-// --- Searchable code combobox (one per row, memoized) ---
+// ── Searchable combobox ──────────────────────────────────────────────────────
 
 interface CodeComboboxProps {
   value: string;
@@ -38,6 +41,7 @@ interface CodeComboboxProps {
   laborCodes: LaborCode[];
   onChange: (code: string) => void;
   isOverridden: boolean;
+  saving?: boolean;
 }
 
 const CodeCombobox = React.memo(function CodeCombobox({
@@ -46,6 +50,7 @@ const CodeCombobox = React.memo(function CodeCombobox({
   laborCodes,
   onChange,
   isOverridden,
+  saving,
 }: CodeComboboxProps) {
   const [open, setOpen] = useState(false);
 
@@ -71,7 +76,7 @@ const CodeCombobox = React.memo(function CodeCombobox({
             isOverridden && "border-primary/50"
           )}
         >
-          <span className="truncate">{displayLabel}</span>
+          <span className="truncate">{saving ? 'Saving…' : displayLabel}</span>
           <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -109,7 +114,7 @@ const CodeCombobox = React.memo(function CodeCombobox({
   );
 });
 
-// --- Single row (memoized) ---
+// ── Single row (memoized) ────────────────────────────────────────────────────
 
 interface MaterialDescRowProps {
   desc: string;
@@ -117,6 +122,7 @@ interface MaterialDescRowProps {
   categoryLaborCode: string | null;
   existing: CategoryMaterialDescOverride | undefined;
   laborCodes: LaborCode[];
+  patterns: MaterialDescLaborPattern[];
   isSelected: boolean;
   onToggleSelect: (desc: string, checked: boolean) => void;
   onSave: (materialDescription: string, laborCode: string) => Promise<void>;
@@ -129,19 +135,35 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
   categoryLaborCode,
   existing,
   laborCodes,
+  patterns,
   isSelected,
   onToggleSelect,
   onSave,
   onDelete,
 }: MaterialDescRowProps) {
+  const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
   const currentCode = existing?.labor_code ?? '__CATEGORY__';
   const isOverridden = !!existing && currentCode !== '__CATEGORY__';
 
+  const suggestion = useMemo(() => {
+    if (isOverridden) return null;
+    return getSuggestionForMaterialDesc(desc, patterns);
+  }, [desc, patterns, isOverridden]);
+
   const handleChange = useCallback(async (code: string) => {
-    if (code === '__CATEGORY__') {
-      if (existing) await onDelete(desc);
-    } else {
-      await onSave(desc, code);
+    setSaving(true);
+    try {
+      if (code === '__CATEGORY__') {
+        if (existing) await onDelete(desc);
+      } else {
+        await onSave(desc, code);
+      }
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1800);
+    } finally {
+      setSaving(false);
     }
   }, [desc, existing, onSave, onDelete]);
 
@@ -173,6 +195,18 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
             e.g. {data.samples.join(', ')}
           </span>
         )}
+        {/* Auto-suggestion chip */}
+        {suggestion && (
+          <button
+            onClick={() => handleChange(suggestion.laborCode)}
+            className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/40"
+            title={`Auto-suggested from past assignments (${Math.round(suggestion.confidence * 100)}% confidence). Click to accept.`}
+          >
+            <Sparkles className="h-3 w-3" />
+            Suggest: {suggestion.laborCode}
+            <span className="opacity-60">({Math.round(suggestion.confidence * 100)}%)</span>
+          </button>
+        )}
       </div>
 
       <CodeCombobox
@@ -181,9 +215,13 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
         laborCodes={laborCodes}
         onChange={handleChange}
         isOverridden={isOverridden}
+        saving={saving}
       />
 
-      {isOverridden && (
+      {savedFlash && (
+        <span className="text-xs text-green-600 font-medium shrink-0 animate-in fade-in">✓ Saved</span>
+      )}
+      {!savedFlash && isOverridden && (
         <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
           <Check className="h-2.5 w-2.5 mr-0.5" />
           {currentCode}
@@ -193,15 +231,13 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
   );
 });
 
-// --- Bulk combobox ---
+// ── Bulk combobox ────────────────────────────────────────────────────────────
 
-interface BulkComboboxProps {
+function BulkCombobox({ categoryLaborCode, laborCodes, onAssign }: {
   categoryLaborCode: string | null;
   laborCodes: LaborCode[];
   onAssign: (code: string) => void;
-}
-
-function BulkCombobox({ categoryLaborCode, laborCodes, onAssign }: BulkComboboxProps) {
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -243,7 +279,7 @@ function BulkCombobox({ categoryLaborCode, laborCodes, onAssign }: BulkComboboxP
   );
 }
 
-// --- Main section ---
+// ── Main section ─────────────────────────────────────────────────────────────
 
 const INITIAL_SHOW = 20;
 
@@ -253,6 +289,7 @@ export function MaterialDescSection({
   materialDescGroups,
   materialDescOverrides,
   laborCodes,
+  patterns,
   onSave,
   onDelete,
 }: MaterialDescSectionProps) {
@@ -293,6 +330,11 @@ export function MaterialDescSection({
     setSelectedDescs(new Set());
   }, [selectedDescs, overrideMap, onSave, onDelete]);
 
+  const suggestionCount = useMemo(
+    () => visibleGroups.filter(g => !overrideMap.has(g.desc) && getSuggestionForMaterialDesc(g.desc, patterns)).length,
+    [visibleGroups, overrideMap, patterns]
+  );
+
   if (materialDescGroups.length === 0) return null;
 
   return (
@@ -311,6 +353,12 @@ export function MaterialDescSection({
           <span className="text-xs text-muted-foreground">
             — override category code by product family
           </span>
+          {suggestionCount > 0 && (
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+              <Sparkles className="h-2.5 w-2.5 mr-0.5" />
+              {suggestionCount} suggestions
+            </Badge>
+          )}
         </div>
 
         {selectedDescs.size > 0 && (
@@ -336,6 +384,7 @@ export function MaterialDescSection({
             categoryLaborCode={categoryLaborCode}
             existing={overrideMap.get(group.desc)}
             laborCodes={laborCodes}
+            patterns={patterns}
             isSelected={selectedDescs.has(group.desc)}
             onToggleSelect={handleToggleSelect}
             onSave={onSave}
