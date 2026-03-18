@@ -58,6 +58,22 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   // Material description learning patterns
   const { data: materialDescPatterns = [] } = useMaterialDescLaborPatterns();
   const recordPattern = useRecordMaterialDescLaborPattern();
+
+  // Stable callbacks for material desc overrides
+  const handleSaveOverride = useCallback(
+    async (categoryName: string, materialDescription: string, laborCode: string) => {
+      await saveOverride.mutateAsync({ categoryName, materialDescription, laborCode });
+      recordPattern.mutate({ materialDescription, laborCode });
+    },
+    [saveOverride, recordPattern]
+  );
+
+  const handleDeleteOverride = useCallback(
+    async (categoryName: string, materialDescription: string) => {
+      await deleteOverride.mutateAsync({ categoryName, materialDescription });
+    },
+    [deleteOverride]
+  );
   
   // Build mappings lookup
   const mappingsLookup = useMemo(() => {

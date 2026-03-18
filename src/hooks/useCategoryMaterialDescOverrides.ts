@@ -109,15 +109,24 @@ export function useDeleteCategoryMaterialDescOverride(projectId: string | null) 
         .eq('material_description', materialDescription);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
+    onMutate: async ({ categoryName, materialDescription }) => {
+      await qc.cancelQueries({ queryKey: [TABLE, projectId] });
+      const previous = qc.getQueryData<CategoryMaterialDescOverride[]>([TABLE, projectId]);
+      qc.setQueryData<CategoryMaterialDescOverride[]>([TABLE, projectId], old =>
+        (old ?? []).filter(
+          o => !(o.category_name === categoryName && o.material_description === materialDescription)
+        )
+      );
+      return { previous };
     },
-    onError: (error: Error) => {
-      toast({
-        title: 'Failed to remove override',
-        description: error.message,
-        variant: 'destructive',
-      });
+    onError: (error: Error, _vars, context) => {
+      if (context?.previous !== undefined) {
+        qc.setQueryData([TABLE, projectId], context.previous);
+      }
+      toast({ title: 'Failed to remove override', description: error.message, variant: 'destructive' });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: [TABLE, projectId] });
     },
   });
 }
