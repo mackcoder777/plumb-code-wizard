@@ -363,9 +363,11 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                   materialDescGroups={materialDescGroups}
                                   materialDescOverrides={materialDescOverrides}
                                   laborCodes={laborCodes}
-                                  onSave={(materialDescription, laborCode) =>
-                                    saveOverride.mutateAsync({ categoryName: cat.category, materialDescription, laborCode })
-                                  }
+                                  patterns={materialDescPatterns}
+                                  onSave={async (materialDescription, laborCode) => {
+                                    await saveOverride.mutateAsync({ categoryName: cat.category, materialDescription, laborCode });
+                                    recordPattern.mutate({ materialDescription, laborCode });
+                                  }}
                                   onDelete={(materialDescription) =>
                                     deleteOverride.mutateAsync({ categoryName: cat.category, materialDescription })
                                   }
