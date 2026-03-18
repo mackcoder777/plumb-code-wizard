@@ -424,8 +424,7 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
         ) : (
           <div className="space-y-2">
             <div className="text-xs text-muted-foreground mb-3">
-              Activity codes appear in the middle of labor codes: <code className="bg-muted px-1 rounded">SECT <strong>ACTIVITY</strong> COSTHEAD</code>
-              <span className="ml-2">• Use <strong>+ Add cost head rule</strong> to scope an activity to a specific cost head (e.g., VALV only).</span>
+              Activity codes are the middle segment: <code className="bg-muted px-1 rounded">SEC · <strong>ACT</strong> · COSTHEAD</code> — e.g., 01 · WATR · VALV. The cost head comes from category mapping; the section comes from floor mapping.
             </div>
             <Table>
               <TableHeader>
