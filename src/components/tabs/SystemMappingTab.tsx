@@ -600,11 +600,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           assignmentSource = 'category';
         }
       }
-      // 2. Fall back to system mapping (only for items without codes)
-      else if (systemMapping?.laborCode && !item.costCode) {
-        costHead = systemMapping.laborCode;
-        changed = true;
-        assignmentSource = 'system';
+      // 2. Fall back to system mapping (overwrite if cost head differs)
+      else if (systemMapping?.laborCode) {
+        const existingParts = item.costCode?.trim().split(/\s+/) || [];
+        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+        if (existingCostHead !== systemMapping.laborCode) {
+          costHead = systemMapping.laborCode;
+          changed = true;
+          assignmentSource = 'system';
+        }
       }
       // 3. Fall back to item type mapping (only for items without codes)
       else if (itemTypeMapping?.laborCode && !item.costCode) {
