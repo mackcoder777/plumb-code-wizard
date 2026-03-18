@@ -656,7 +656,6 @@ const EnhancedCostCodeManager = () => {
 
     // Get activity code: floor activity takes priority over system activity
     const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
     const systemLower = (item.system || '').toLowerCase().trim();
 
     // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
