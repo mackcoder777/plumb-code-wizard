@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { EstimateItem, ProjectStats } from '@/types/estimate';
 import { FileUpload } from './FileUpload';
 import { EstimateHeader } from './EstimateHeader';
@@ -8,6 +8,7 @@ import { CostCodesTab } from './tabs/CostCodesTab';
 import { AutomationTab } from './tabs/AutomationTab';
 import { DashboardTab } from './tabs/DashboardTab';
 import { SystemMappingTab } from './tabs/SystemMappingTab';
+import { BudgetChat } from './BudgetChat';
 import { toast } from '@/components/ui/use-toast';
 
 export const PlumbingEstimateManager: React.FC = () => {
@@ -83,6 +84,47 @@ export const PlumbingEstimateManager: React.FC = () => {
     });
   }, []);
 
+  const estimateSummary = useMemo(() => {
+    if (!estimateData || estimateData.length === 0) return null;
+
+    const systemBreakdown: Record<string, { hours: number; material: number; items: number; laborCode?: string }> = {};
+    const categoryBreakdown: Record<string, { hours: number; items: number }> = {};
+    let totalHours = 0;
+    let totalMaterial = 0;
+    let codedCount = 0;
+
+    estimateData.forEach((item) => {
+      const sys = item.system || "Unknown";
+      const cat = item.reportCat || item.itemType || "Unknown";
+      const hrs = item.hours || 0;
+      const mat = item.materialDollars || 0;
+
+      if (!systemBreakdown[sys]) systemBreakdown[sys] = { hours: 0, material: 0, items: 0 };
+      systemBreakdown[sys].hours += hrs;
+      systemBreakdown[sys].material += mat;
+      systemBreakdown[sys].items += 1;
+      if (item.costCode) systemBreakdown[sys].laborCode = item.costCode.split(" ").pop();
+
+      if (!categoryBreakdown[cat]) categoryBreakdown[cat] = { hours: 0, items: 0 };
+      categoryBreakdown[cat].hours += hrs;
+      categoryBreakdown[cat].items += 1;
+
+      totalHours += hrs;
+      totalMaterial += mat;
+      if (item.costCode) codedCount++;
+    });
+
+    return {
+      totalItems: estimateData.length,
+      totalHours,
+      totalMaterial,
+      codedCount,
+      uncoded: estimateData.length - codedCount,
+      systemBreakdown,
+      categoryBreakdown,
+    };
+  }, [estimateData]);
+
   if (!currentFile) {
     return (
       <div className="min-h-screen p-4 lg:p-8">
@@ -155,6 +197,10 @@ export const PlumbingEstimateManager: React.FC = () => {
             )}
           </div>
         </div>
+        <BudgetChat
+          projectName={currentFile.name.replace(/\.[^/.]+$/, "")}
+          estimateSummary={estimateSummary}
+        />
       </div>
     </div>
   );
