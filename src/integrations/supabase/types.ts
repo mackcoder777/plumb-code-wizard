@@ -617,6 +617,7 @@ export type Database = {
       system_activity_mappings: {
         Row: {
           activity_code: string
+          cost_head_filter: string | null
           created_at: string
           description: string | null
           id: string
@@ -626,6 +627,7 @@ export type Database = {
         }
         Insert: {
           activity_code?: string
+          cost_head_filter?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -635,6 +637,7 @@ export type Database = {
         }
         Update: {
           activity_code?: string
+          cost_head_filter?: string | null
           created_at?: string
           description?: string | null
           id?: string
