@@ -180,27 +180,30 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
       isOverridden ? 'bg-primary/5 border-primary/20' : 'bg-muted/30 border-transparent hover:border-border'
     )}>
       {/* Main row */}
-      <div className="flex items-center gap-3 px-3 py-2">
+      <div className="flex items-center gap-2 px-3 py-2">
+        {/* Expand chevron — dedicated column, always visible */}
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          title={expanded ? 'Collapse' : `Preview ${rawItems.length} items`}
+        >
+          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} />
+        </button>
+
         <input
           type="checkbox"
           checked={isSelected}
           onChange={e => onToggleSelect(desc, e.target.checked)}
-          className="rounded border-border shrink-0"
+          className="shrink-0 rounded border-border"
         />
+
+        {/* Text block — constrained so it never pushes right-side controls off screen */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className={cn("text-xs font-medium truncate", isOverridden && "text-primary")}>{desc}</span>
-            <span className="text-[10px] text-muted-foreground shrink-0">{data.items} items · {data.hours.toFixed(1)} hrs</span>
-            {rawItems.length > 0 && (
-              <button
-                onClick={() => setExpanded(v => !v)}
-                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/10 transition-colors shrink-0"
-                title="Preview items in this group"
-              >
-                <ChevronDown className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')} />
-                {expanded ? 'hide' : 'preview'}
-              </button>
-            )}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={cn("truncate text-xs font-medium", isOverridden && "text-primary")}>{desc}</span>
+            <span className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground">
+              {data.items} items · {data.hours.toFixed(1)} hrs
+            </span>
           </div>
           {!expanded && data.samples.length > 0 && (
             <p className="truncate text-[10px] text-muted-foreground">e.g. {data.samples.join(', ')}</p>
@@ -208,7 +211,7 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
           {suggestion && !expanded && (
             <button
               onClick={() => handleChange(suggestion.laborCode)}
-              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/40"
+              className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/40"
             >
               <Sparkles className="h-2.5 w-2.5" />
               Suggest: {suggestion.laborCode}
@@ -216,21 +219,27 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
             </button>
           )}
         </div>
-        <CodeCombobox
-          value={currentCode}
-          categoryLaborCode={categoryLaborCode}
-          laborCodes={laborCodes}
-          onChange={handleChange}
-          isOverridden={isOverridden}
-          saving={saving}
-        />
-        {savedFlash && <span className="shrink-0 text-xs font-semibold text-green-600">✓ Saved</span>}
-        {!savedFlash && isOverridden && (
-          <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
-            <Check className="h-2.5 w-2.5 mr-0.5" />
-            {currentCode}
-          </Badge>
-        )}
+
+        {/* Right-side controls — shrink-0 so they never get squeezed */}
+        <div className="shrink-0 flex items-center gap-2">
+          <CodeCombobox
+            value={currentCode}
+            categoryLaborCode={categoryLaborCode}
+            laborCodes={laborCodes}
+            onChange={handleChange}
+            isOverridden={isOverridden}
+            saving={saving}
+          />
+          {savedFlash && (
+            <span className="whitespace-nowrap text-xs font-semibold text-green-600">✓ Saved</span>
+          )}
+          {!savedFlash && isOverridden && (
+            <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
+              <Check className="h-2.5 w-2.5 mr-0.5" />
+              {currentCode}
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Expanded item preview */}
