@@ -2,15 +2,22 @@ import React, { useState, useMemo } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
+import {
+  useCategoryItemTypeOverrides,
+  useSaveCategoryItemTypeOverride,
+  useDeleteCategoryItemTypeOverride,
+} from '@/hooks/useCategoryItemTypeOverrides';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { TableRowCombobox } from '@/components/tabs/SystemMappingTab/TableRowCombobox';
 
 interface CategoryLaborMappingPanelProps {
   data: EstimateItem[];
