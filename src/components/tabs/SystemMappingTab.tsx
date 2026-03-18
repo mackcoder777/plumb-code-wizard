@@ -711,7 +711,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mappings Applied Successfully",
       description: `Applied to ${itemsAffected} items${descParts.length > 0 ? ` (${descParts.join(', ')})` : ''}`,
     });
-  }, [data, mappings, itemTypeMappings, categoryMappings, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
+  }, [data, mappings, itemTypeMappings, categoryMappings, itemTypeOverrides, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
 
   const applySystemMapping = useCallback((system: string) => {
     const systemKey = normalizeSystemKey(system);
