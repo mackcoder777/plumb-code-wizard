@@ -15,11 +15,14 @@ interface LaborCode {
   description: string;
 }
 
+type RawItem = { drawing?: string; system?: string; itemName?: string; size?: string; qty?: number; hours?: number };
+
 interface MaterialDescGroup {
   desc: string;
   items: number;
   hours: number;
   samples: string[];
+  rawItems: RawItem[];
 }
 
 interface MaterialDescSectionProps {
