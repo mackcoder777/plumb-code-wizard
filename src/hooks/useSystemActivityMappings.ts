@@ -29,32 +29,22 @@ export const ACTIVITY_CODE_SUGGESTIONS = [
 // Auto-suggest activity code based on system name keywords
 export const suggestActivityCode = (systemName: string): string | null => {
   const lower = systemName.toLowerCase();
-  
-  if (lower.includes('cold water') || lower.includes('dcw') || lower.includes('cw ')) {
-    return '00CW';
-  }
-  if (lower.includes('hot water') || lower.includes('dhw') || lower.includes('hw ')) {
-    return '00HW';
-  }
-  if (lower.includes('storm') || lower.includes('sd ')) {
-    return '00SD';
-  }
-  if (lower.includes('sanitary') || lower.includes('sn ') || lower.includes('waste')) {
-    return '00SN';
-  }
-  if (lower.includes('gas') || lower.includes('ng ') || lower.includes('natural gas')) {
-    return '00GS';
-  }
-  if (lower.includes('fixture') || lower.includes('fx ')) {
-    return '00FX';
-  }
-  if (lower.includes('vent') || lower.includes('vt ')) {
-    return '00VT';
-  }
-  if (lower.includes('roof drain') || lower.includes('rd ')) {
-    return '00RF';
-  }
-  
+
+  if (lower.includes('cold water') || lower.includes('dcw') || lower.includes('cw '))  return 'DWTR';
+  if (lower.includes('hot water')  || lower.includes('dhw') || lower.includes('hw '))  return 'DWTR';
+  if (lower.includes('storm')      || lower.includes('roof drain'))                    return 'STRM';
+  if (lower.includes('sanitary')   || (lower.includes('waste') && !lower.includes('grease'))) return 'SNWV';
+  if (lower.includes('grease')     || lower.includes('gwv'))                           return 'GRWV';
+  if (lower.includes('vent')       && !lower.includes('prevent'))                      return 'SNWV';
+  if (lower.includes('natural gas')|| lower.includes('gas ') || lower.includes('ngas'))return 'NGAS';
+  if (lower.includes('condensate') || lower.includes('cond'))                          return 'COND';
+  if (lower.includes('reclaim')    || lower.includes('recycled') || lower.includes('rw ')) return 'RCLM';
+  if (lower.includes('fire')       || lower.includes('sprinkler'))                     return 'FIRE';
+  if (lower.includes('demo'))                                                           return 'DEMO';
+  if (lower.includes('overflow')   || lower.includes('od '))                           return 'STRM';
+  if (lower.includes('bg waste')   || lower.includes('below grade'))                   return 'SNWV';
+  if (lower.includes('domestic')   || lower.includes('potable'))                       return 'DWTR';
+
   return null;
 };
 

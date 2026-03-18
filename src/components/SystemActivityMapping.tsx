@@ -19,8 +19,6 @@ import {
 import {
   useSystemActivityMappings,
   useBatchSaveSystemActivityMappings,
-  useSaveSystemActivityMapping,
-  useDeleteSystemActivityMapping,
   SystemActivityMapping,
   ACTIVITY_CODE_SUGGESTIONS,
   suggestActivityCode,
