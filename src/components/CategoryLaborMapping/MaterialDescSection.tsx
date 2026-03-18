@@ -419,6 +419,7 @@ export function MaterialDescSection({
             key={group.desc}
             desc={group.desc}
             data={group}
+            rawItems={group.rawItems}
             categoryLaborCode={categoryLaborCode}
             existing={overrideMap.get(group.desc)}
             laborCodes={laborCodes}

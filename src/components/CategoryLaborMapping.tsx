@@ -47,15 +47,30 @@ const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
   estimateData, onSave, onDelete,
 }: BoundMaterialDescSectionProps) {
   const materialDescGroups = useMemo(() => {
-    const groups: Record<string, { items: number; hours: number; samples: string[] }> = {};
+    const groups: Record<string, {
+      items: number;
+      hours: number;
+      samples: string[];
+      rawItems: Array<{ drawing?: string; system?: string; itemName?: string; size?: string; qty?: number; hours?: number }>;
+    }> = {};
     estimateData.forEach(item => {
       if (item.reportCat !== categoryName) return;
       const desc = item.materialDesc || 'No Description';
-      if (!groups[desc]) groups[desc] = { items: 0, hours: 0, samples: [] };
+      if (!groups[desc]) groups[desc] = { items: 0, hours: 0, samples: [], rawItems: [] };
       groups[desc].items++;
       groups[desc].hours += item.hours || 0;
       if (groups[desc].samples.length < 2 && item.itemName) {
         groups[desc].samples.push(item.itemName);
+      }
+      if (groups[desc].rawItems.length < 50) {
+        groups[desc].rawItems.push({
+          drawing: item.drawing,
+          system: item.system,
+          itemName: item.itemName,
+          size: item.size,
+          qty: item.quantity,
+          hours: item.hours,
+        });
       }
     });
     return Object.entries(groups)
