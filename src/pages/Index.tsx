@@ -1610,7 +1610,7 @@ const EnhancedCostCodeManager = () => {
         // Get section from floor mappings for THIS specific item's floor
         const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
+        const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, laborCode || undefined);
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
