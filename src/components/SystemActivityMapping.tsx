@@ -212,14 +212,9 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
-  const [addingRuleFor, setAddingRuleFor] = useState<string | null>(null);
-  const [newRuleCostHead, setNewRuleCostHead] = useState('');
-  const [newRuleActivity, setNewRuleActivity] = useState('');
 
   const { data: dbMappings = [], isLoading } = useSystemActivityMappings(projectId);
   const batchSave = useBatchSaveSystemActivityMappings();
-  const saveMapping = useSaveSystemActivityMapping();
-  const deleteMapping = useDeleteSystemActivityMapping();
 
   // Extract unique systems from estimate data with counts
   const systemData = useMemo<SystemData[]>(() => {
