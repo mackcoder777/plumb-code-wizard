@@ -91,8 +91,30 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
-  
-  // Multi-select state
+
+  // Track unapplied changes
+  const hasUnappliedChanges = useMemo(() => {
+    return Object.keys(mappings).some(system => {
+      const applied = appliedSystems[system];
+      return mappings[system]?.laborCode && applied?.appliedLaborCode !== mappings[system]?.laborCode;
+    });
+  }, [mappings, appliedSystems]);
+
+  useEffect(() => {
+    onUnappliedChangesUpdate?.(hasUnappliedChanges);
+  }, [hasUnappliedChanges, onUnappliedChangesUpdate]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnappliedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnappliedChanges]);
+
   const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set());
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   
