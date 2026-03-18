@@ -3,10 +3,10 @@ import { EstimateItem } from '@/types/estimate';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
-  useCategoryItemTypeOverrides,
-  useSaveCategoryItemTypeOverride,
-  useDeleteCategoryItemTypeOverride,
-} from '@/hooks/useCategoryItemTypeOverrides';
+  useCategoryKeywordRules,
+  useSaveCategoryKeywordRule,
+  useDeleteCategoryKeywordRule,
+} from '@/hooks/useCategoryKeywordRules';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { TableRowCombobox } from '@/components/tabs/SystemMappingTab/TableRowCombobox';
-import { ItemTypeOverridesSection } from '@/components/CategoryLaborMapping/ItemTypeOverridesSection';
+import { KeywordRulesSection } from '@/components/CategoryLaborMapping/KeywordRulesSection';
 
 interface CategoryLaborMappingPanelProps {
   data: EstimateItem[];
@@ -47,11 +47,10 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   // Load labor codes
   const { data: laborCodes = [] } = useLaborCodes();
   
-  // Item-type overrides
-  const { data: itemTypeOverrides = [] } = useCategoryItemTypeOverrides(projectId);
-  const saveOverride = useSaveCategoryItemTypeOverride(projectId);
-  const deleteOverride = useDeleteCategoryItemTypeOverride(projectId);
-  const [selectedItemTypes, setSelectedItemTypes] = useState<Record<string, Set<string>>>({});
+  // Keyword rules
+  const { data: keywordRules = [] } = useCategoryKeywordRules(projectId);
+  const saveRule = useSaveCategoryKeywordRule(projectId);
+  const deleteRule = useDeleteCategoryKeywordRule(projectId);
   
   // Build mappings lookup
   const mappingsLookup = useMemo(() => {
@@ -335,17 +334,14 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               </Button>
                             )}
                             
-                            {/* Item-Type Overrides Section */}
-                            <ItemTypeOverridesSection
+                            {/* Keyword Rules Section */}
+                            <KeywordRulesSection
                               category={cat.category}
-                              currentCategoryCode={currentCode}
                               data={data}
                               laborCodes={laborCodes}
-                              itemTypeOverrides={itemTypeOverrides}
-                              saveOverride={saveOverride}
-                              deleteOverride={deleteOverride}
-                              selectedItemTypes={selectedItemTypes}
-                              setSelectedItemTypes={setSelectedItemTypes}
+                              keywordRules={keywordRules}
+                              saveRule={saveRule}
+                              deleteRule={deleteRule}
                             />
                           </div>
                         )}

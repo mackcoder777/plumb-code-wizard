@@ -7,7 +7,7 @@ import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus,
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatterns } from '@/hooks/useMappingPatterns';
 import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping } from '@/hooks/useCategoryMappings';
-import { useCategoryItemTypeOverrides, getLaborCodeFromItemTypeOverride } from '@/hooks/useCategoryItemTypeOverrides';
+import { useCategoryKeywordRules, getLaborCodeFromKeywordRules } from '@/hooks/useCategoryKeywordRules';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,8 +144,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Category labor mappings (priority over system mappings)
   const { data: categoryMappings = [] } = useCategoryMappings(projectId);
   
-  // Item-type overrides within categories (highest priority)
-  const { data: itemTypeOverrides = [] } = useCategoryItemTypeOverrides(projectId);
+  // Keyword rules within categories (highest priority)
+  const { data: keywordRules = [] } = useCategoryKeywordRules(projectId);
   
   // Learning system hooks
   const { data: mappingPatterns = [] } = useMappingPatterns();
@@ -541,10 +541,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const parts = item.costCode.trim().split(/\s+/);
       let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
       
-      // Tier 0: Item-type override within category
-      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
-      if (itemTypeCode) {
-        costHead = itemTypeCode;
+      // Tier 0: Keyword rule within category
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
+      if (keywordCode) {
+        costHead = keywordCode;
       } else {
         // Tier 1: Check if category has a specific mapping that should override the costHead
         const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
@@ -599,7 +599,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, itemTypeOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
+  }, [data, categoryMappings, keywordRules, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
@@ -617,13 +617,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let changed = false;
       let assignmentSource: 'item-type-override' | 'category' | 'system' | 'itemType' | null = null;
       
-      // Tier 0: Item-type override within category (highest priority)
-      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
-      if (itemTypeCode) {
+      // Tier 0: Keyword rule within category (highest priority)
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
+      if (keywordCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== itemTypeCode) {
-          costHead = itemTypeCode;
+        if (existingCostHead !== keywordCode) {
+          costHead = keywordCode;
           changed = true;
           assignmentSource = 'item-type-override';
         }
@@ -711,7 +711,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mappings Applied Successfully",
       description: `Applied to ${itemsAffected} items${descParts.length > 0 ? ` (${descParts.join(', ')})` : ''}`,
     });
-  }, [data, mappings, itemTypeMappings, categoryMappings, itemTypeOverrides, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
+  }, [data, mappings, itemTypeMappings, categoryMappings, keywordRules, projectId, batchUpdateAppliedStatus, onDataUpdate, buildFullLaborCode]);
 
   const applySystemMapping = useCallback((system: string) => {
     const systemKey = normalizeSystemKey(system);
@@ -722,17 +722,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
       
-      // Tier 0: Item-type override within category
-      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
+      // Tier 0: Keyword rule within category
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
       
       // Determine the cost head to use
       let costHead: string | undefined;
       
-      if (itemTypeCode) {
+      if (keywordCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== itemTypeCode) {
-          costHead = itemTypeCode;
+        if (existingCostHead !== keywordCode) {
+          costHead = keywordCode;
         }
       } else {
         // Check if category has a specific mapping (not deferred to system)
@@ -795,7 +795,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
-  }, [data, mappings, categoryMappings, itemTypeOverrides, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
+  }, [data, mappings, categoryMappings, keywordRules, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
   // Handler to accept a suggestion from the filter cards
   const handleAcceptSuggestion = useCallback((system: string, laborCode: string) => {
