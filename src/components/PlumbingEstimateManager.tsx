@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { EstimateItem, ProjectStats } from '@/types/estimate';
 import { FileUpload } from './FileUpload';
 import { EstimateHeader } from './EstimateHeader';
@@ -8,6 +8,7 @@ import { CostCodesTab } from './tabs/CostCodesTab';
 import { AutomationTab } from './tabs/AutomationTab';
 import { DashboardTab } from './tabs/DashboardTab';
 import { SystemMappingTab } from './tabs/SystemMappingTab';
+import { BudgetChat } from './BudgetChat';
 import { toast } from '@/components/ui/use-toast';
 
 export const PlumbingEstimateManager: React.FC = () => {
