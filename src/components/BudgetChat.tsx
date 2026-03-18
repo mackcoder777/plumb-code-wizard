@@ -231,9 +231,14 @@ export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
                 <div className="text-xs opacity-80 truncate max-w-[240px]">{projectName}</div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} className="text-primary-foreground/70 hover:text-primary-foreground">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setExpanded(e => !e)} className="text-primary-foreground/70 hover:text-primary-foreground">
+                {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button onClick={() => setOpen(false)} className="text-primary-foreground/70 hover:text-primary-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
