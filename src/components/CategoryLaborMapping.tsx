@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { TableRowCombobox } from '@/components/tabs/SystemMappingTab/TableRowCombobox';
+import { ItemTypeOverridesSection } from '@/components/CategoryLaborMapping/ItemTypeOverridesSection';
 
 interface CategoryLaborMappingPanelProps {
   data: EstimateItem[];
