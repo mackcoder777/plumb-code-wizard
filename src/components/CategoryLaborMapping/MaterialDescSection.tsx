@@ -122,6 +122,7 @@ const CodeCombobox = React.memo(function CodeCombobox({
 interface MaterialDescRowProps {
   desc: string;
   data: { items: number; hours: number; samples: string[] };
+  rawItems: RawItem[];
   categoryLaborCode: string | null;
   existing: CategoryMaterialDescOverride | undefined;
   laborCodes: LaborCode[];
