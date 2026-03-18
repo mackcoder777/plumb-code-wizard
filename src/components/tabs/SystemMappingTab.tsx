@@ -144,6 +144,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Category labor mappings (priority over system mappings)
   const { data: categoryMappings = [] } = useCategoryMappings(projectId);
   
+  // Item-type overrides within categories (highest priority)
+  const { data: itemTypeOverrides = [] } = useCategoryItemTypeOverrides(projectId);
+  
   // Learning system hooks
   const { data: mappingPatterns = [] } = useMappingPatterns();
   const recordMappingPattern = useRecordMappingPattern();
