@@ -722,17 +722,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
       
-      // Tier 0: Item-type override within category
-      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
+      // Tier 0: Keyword rule within category
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
       
       // Determine the cost head to use
       let costHead: string | undefined;
       
-      if (itemTypeCode) {
+      if (keywordCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== itemTypeCode) {
-          costHead = itemTypeCode;
+        if (existingCostHead !== keywordCode) {
+          costHead = keywordCode;
         }
       } else {
         // Check if category has a specific mapping (not deferred to system)
