@@ -373,7 +373,7 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
               System to Activity Code Mapping
             </CardTitle>
             <CardDescription>
-              Map systems to activity codes for the middle segment of labor codes (e.g., Cold Water → 00CW). Use cost head rules for targeted overrides.
+              Map systems to their activity code — the middle segment of assembled labor codes. Format: SEC ACT COSTHEAD (e.g., 01 WATR VALV, 01 SNWV PIPE).
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
