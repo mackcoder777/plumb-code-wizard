@@ -6,6 +6,7 @@ export interface SystemActivityMapping {
   project_id: string;
   system_pattern: string;
   activity_code: string;
+  cost_head_filter: string | null;
   description: string | null;
   created_at: string;
   updated_at: string;
@@ -58,15 +59,32 @@ export const suggestActivityCode = (systemName: string): string | null => {
 };
 
 // Helper to get activity code for a system from mappings
+// Priority: exact system + cost head match > system-wide (no filter) > default '0000'
 export const getActivityFromSystem = (
   system: string,
-  mappings: SystemActivityMapping[]
+  mappings: SystemActivityMapping[],
+  costHead?: string
 ): string => {
-  const normalizedSystem = (system || '').toLowerCase().trim();
-  const mapping = mappings.find(
-    m => m.system_pattern.toLowerCase().trim() === normalizedSystem
+  const norm = (system || '').toLowerCase().trim();
+  const headUpper = (costHead || '').toUpperCase().trim();
+
+  // Priority 1: exact system + exact cost head filter match
+  if (headUpper) {
+    const specific = mappings.find(
+      m =>
+        m.system_pattern.toLowerCase().trim() === norm &&
+        m.cost_head_filter?.toUpperCase().trim() === headUpper
+    );
+    if (specific) return specific.activity_code;
+  }
+
+  // Priority 2: system match with no cost head filter (blanket rule)
+  const general = mappings.find(
+    m =>
+      m.system_pattern.toLowerCase().trim() === norm &&
+      !m.cost_head_filter
   );
-  return mapping?.activity_code || '0000';
+  return general?.activity_code || '0000';
 };
 
 // Fetch all activity mappings for a project
@@ -83,7 +101,10 @@ export const useSystemActivityMappings = (projectId: string | null) => {
         .order('system_pattern');
       
       if (error) throw error;
-      return data as SystemActivityMapping[];
+      return (data as any[]).map(d => ({
+        ...d,
+        cost_head_filter: d.cost_head_filter ?? null,
+      })) as SystemActivityMapping[];
     },
     enabled: !!projectId,
   });
@@ -98,11 +119,13 @@ export const useSaveSystemActivityMapping = () => {
       projectId,
       systemPattern,
       activityCode,
+      costHeadFilter,
       description,
     }: {
       projectId: string;
       systemPattern: string;
       activityCode: string;
+      costHeadFilter?: string | null;
       description?: string;
     }) => {
       const { data, error } = await supabase
@@ -112,9 +135,10 @@ export const useSaveSystemActivityMapping = () => {
             project_id: projectId,
             system_pattern: systemPattern.toLowerCase().trim(),
             activity_code: activityCode.toUpperCase(),
+            cost_head_filter: costHeadFilter ?? null,
             description: description || null,
-          },
-          { onConflict: 'project_id,system_pattern' }
+          } as any,
+          { onConflict: 'project_id,system_pattern,cost_head_filter' }
         )
         .select()
         .single();
@@ -130,7 +154,7 @@ export const useSaveSystemActivityMapping = () => {
   });
 };
 
-// Batch save multiple activity mappings
+// Batch save multiple activity mappings (blanket rules only)
 export const useBatchSaveSystemActivityMappings = () => {
   const queryClient = useQueryClient();
   
@@ -150,12 +174,13 @@ export const useBatchSaveSystemActivityMappings = () => {
         project_id: projectId,
         system_pattern: m.systemPattern.toLowerCase().trim(),
         activity_code: m.activityCode.toUpperCase(),
+        cost_head_filter: null,
         description: m.description || null,
       }));
       
       const { data, error } = await supabase
         .from('system_activity_mappings')
-        .upsert(records, { onConflict: 'project_id,system_pattern' })
+        .upsert(records as any[], { onConflict: 'project_id,system_pattern,cost_head_filter' })
         .select();
       
       if (error) throw error;
@@ -177,16 +202,25 @@ export const useDeleteSystemActivityMapping = () => {
     mutationFn: async ({
       projectId,
       systemPattern,
+      costHeadFilter,
     }: {
       projectId: string;
       systemPattern: string;
+      costHeadFilter?: string | null;
     }) => {
-      const { error } = await supabase
+      let query = supabase
         .from('system_activity_mappings')
         .delete()
         .eq('project_id', projectId)
         .eq('system_pattern', systemPattern.toLowerCase().trim());
+
+      if (costHeadFilter) {
+        query = query.eq('cost_head_filter', costHeadFilter);
+      } else {
+        query = query.is('cost_head_filter', null);
+      }
       
+      const { error } = await query;
       if (error) throw error;
     },
     onSuccess: (_, variables) => {

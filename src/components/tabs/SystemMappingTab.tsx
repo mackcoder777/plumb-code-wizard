@@ -523,7 +523,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
     const activity = resolved.activity !== '0000'
       ? resolved.activity
-      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings) : '0000');
+      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings, costHead) : '0000');
     return `${resolved.section} ${activity} ${costHead}`;
   }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile]);
 
@@ -559,7 +559,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Build new full code with floor activity priority over system activity
       const activityCode = resolved.activity !== '0000'
         ? resolved.activity
-        : getActivityFromSystem(item.system, systemActivityMappings);
+        : getActivityFromSystem(item.system, systemActivityMappings, costHead);
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {

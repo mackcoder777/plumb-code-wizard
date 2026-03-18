@@ -656,7 +656,6 @@ const EnhancedCostCodeManager = () => {
 
     // Get activity code: floor activity takes priority over system activity
     const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
     const systemLower = (item.system || '').toLowerCase().trim();
 
     // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
@@ -705,6 +704,9 @@ const EnhancedCostCodeManager = () => {
                          Object.values(cat).flat()
                        ).find(c => c.code === costHead)?.description || 
                        (costHead ? 'Unknown' : 'Unassigned');
+
+    // Resolve activity AFTER cost head is known so cost-head-scoped rules apply
+    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, costHead || undefined);
 
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
@@ -818,7 +820,7 @@ const EnhancedCostCodeManager = () => {
         if (appliedCode) {
           const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
           const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
+          const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, appliedCode || undefined);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
@@ -1608,7 +1610,7 @@ const EnhancedCostCodeManager = () => {
         // Get section from floor mappings for THIS specific item's floor
         const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings);
+        const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, laborCode || undefined);
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
@@ -2685,7 +2687,7 @@ const EnhancedCostCodeManager = () => {
                       // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
                       const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings));
+                      const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings, costHead || undefined));
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
                       if (!summary[fullCode]) {
