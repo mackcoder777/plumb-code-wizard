@@ -57,6 +57,7 @@ interface SystemMappingTabProps {
   datasetProfile?: DatasetProfile | null;
   onProfileOverride?: (override: any) => void;
   onReanalyzeProfile?: () => void;
+  onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
 }
 
 type ViewMode = 'cards' | 'table';
