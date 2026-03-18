@@ -242,7 +242,7 @@ export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 min-h-0 max-h-[400px]">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-4">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
