@@ -380,6 +380,18 @@ const EnhancedCostCodeManager = () => {
   const [estimateData, setEstimateData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [activeTab, setActiveTab] = useState('upload');
+  const [hasUnappliedMappingChanges, setHasUnappliedMappingChanges] = useState(false);
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  const [showMappingWarning, setShowMappingWarning] = useState(false);
+
+  const handleTabChange = useCallback((tab: string) => {
+    if (hasUnappliedMappingChanges && activeTab === 'mapping' && tab !== 'mapping') {
+      setPendingTab(tab);
+      setShowMappingWarning(true);
+    } else {
+      setActiveTab(tab);
+    }
+  }, [hasUnappliedMappingChanges, activeTab]);
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
