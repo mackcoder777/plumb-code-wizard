@@ -53,6 +53,10 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   const saveOverride = useSaveCategoryMaterialDescOverride(projectId);
   const deleteOverride = useDeleteCategoryMaterialDescOverride(projectId);
   
+  // Material description learning patterns
+  const { data: materialDescPatterns = [] } = useMaterialDescLaborPatterns();
+  const recordPattern = useRecordMaterialDescLaborPattern();
+  
   // Build mappings lookup
   const mappingsLookup = useMemo(() => {
     const lookup: Record<string, string> = {};
