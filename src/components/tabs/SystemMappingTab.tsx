@@ -618,7 +618,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let assignmentSource: 'item-type-override' | 'category' | 'system' | 'itemType' | null = null;
       
       // Tier 0: Keyword rule within category (highest priority)
-      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules, item.materialDesc || '');
       if (keywordCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
