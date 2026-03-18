@@ -47,10 +47,10 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   // Load labor codes
   const { data: laborCodes = [] } = useLaborCodes();
   
-  // Keyword rules
-  const { data: keywordRules = [] } = useCategoryKeywordRules(projectId);
-  const saveRule = useSaveCategoryKeywordRule(projectId);
-  const deleteRule = useDeleteCategoryKeywordRule(projectId);
+  // Material description overrides
+  const { data: materialDescOverrides = [] } = useCategoryMaterialDescOverrides(projectId);
+  const saveOverride = useSaveCategoryMaterialDescOverride(projectId);
+  const deleteOverride = useDeleteCategoryMaterialDescOverride(projectId);
   
   // Build mappings lookup
   const mappingsLookup = useMemo(() => {
