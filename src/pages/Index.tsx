@@ -3003,6 +3003,12 @@ const EnhancedCostCodeManager = () => {
             </div>
           </div>
         )}
+      {currentProject && (
+        <BudgetChat
+          projectName={currentProject.name || "Current Project"}
+          estimateSummary={estimateSummary}
+        />
+      )}
       </div>
     </div>
   );
