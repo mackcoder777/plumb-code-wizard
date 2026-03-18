@@ -542,7 +542,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
       
       // Tier 0: Keyword rule within category
-      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules, item.materialDesc || '');
       if (keywordCode) {
         costHead = keywordCode;
       } else {
