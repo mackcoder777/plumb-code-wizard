@@ -7,6 +7,7 @@ import {
   useSaveCategoryMaterialDescOverride,
   useDeleteCategoryMaterialDescOverride,
 } from '@/hooks/useCategoryMaterialDescOverrides';
+import { useMaterialDescLaborPatterns, useRecordMaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
