@@ -722,26 +722,35 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
       
-      // Check if category has a specific mapping (not deferred to system)
-      const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+      // Tier 0: Item-type override within category
+      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
       
       // Determine the cost head to use
       let costHead: string | undefined;
       
-      if (categoryLaborCode) {
-        // Category mapping takes priority and can OVERRIDE existing codes
+      if (itemTypeCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        
-        // Only update if different
-        if (existingCostHead !== categoryLaborCode) {
-          costHead = categoryLaborCode;
+        if (existingCostHead !== itemTypeCode) {
+          costHead = itemTypeCode;
         }
-      } else if (systemMapping.laborCode) {
-        const existingParts2 = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead2 = existingParts2.length >= 1 ? existingParts2[existingParts2.length - 1] : '';
-        if (existingCostHead2 !== systemMapping.laborCode) {
-          costHead = systemMapping.laborCode;
+      } else {
+        // Check if category has a specific mapping (not deferred to system)
+        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+        
+        if (categoryLaborCode) {
+          // Category mapping takes priority and can OVERRIDE existing codes
+          const existingParts = item.costCode?.trim().split(/\s+/) || [];
+          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+          if (existingCostHead !== categoryLaborCode) {
+            costHead = categoryLaborCode;
+          }
+        } else if (systemMapping.laborCode) {
+          const existingParts2 = item.costCode?.trim().split(/\s+/) || [];
+          const existingCostHead2 = existingParts2.length >= 1 ? existingParts2[existingParts2.length - 1] : '';
+          if (existingCostHead2 !== systemMapping.laborCode) {
+            costHead = systemMapping.laborCode;
+          }
         }
       }
       
