@@ -278,6 +278,25 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
     return result;
   }, [estimateData]);
 
+  // Detect cost heads shared across multiple systems
+  const sharedCostHeadMap = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    estimateData.forEach(item => {
+      const sys = (item.system || '').trim();
+      if (!sys || !item.costCode) return;
+      const parts = item.costCode.trim().split(/\s+/);
+      const costHead = parts[parts.length - 1];
+      if (!costHead) return;
+      if (!map[costHead]) map[costHead] = new Set();
+      map[costHead].add(sys);
+    });
+    const shared: Record<string, string[]> = {};
+    Object.entries(map).forEach(([costHead, systems]) => {
+      if (systems.size >= 2) shared[costHead] = [...systems];
+    });
+    return shared;
+  }, [estimateData]);
+
   useEffect(() => {
     if (dbMappings.length > 0) {
       const mappingsFromDb: Record<string, string> = {};
