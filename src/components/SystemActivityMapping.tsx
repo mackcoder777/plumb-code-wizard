@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Activity, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, Sparkles } from 'lucide-react';
+import { Activity, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, Sparkles, ChevronDown, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -19,6 +19,8 @@ import {
 import {
   useSystemActivityMappings,
   useBatchSaveSystemActivityMappings,
+  useSaveSystemActivityMapping,
+  useDeleteSystemActivityMapping,
   SystemActivityMapping,
   ACTIVITY_CODE_SUGGESTIONS,
   suggestActivityCode,
@@ -29,8 +31,15 @@ interface SystemData {
   itemCount: number;
 }
 
+interface CategoryData {
+  category: string;
+  items: number;
+  hours: number;
+  currentCostHead: string | null;
+}
+
 interface SystemActivityMappingPanelProps {
-  estimateData: Array<{ system?: string }>;
+  estimateData: Array<{ system?: string; reportCat?: string; itemType?: string; hours?: number; costCode?: string }>;
   projectId: string | null;
   onMappingsChange?: (mappings: SystemActivityMapping[]) => void;
 }
