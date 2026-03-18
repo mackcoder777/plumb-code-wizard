@@ -105,7 +105,7 @@ const ActivityCodeInput: React.FC<ActivityCodeInputProps> = ({ value, onChange, 
                 <Input
                   value={customCode}
                   onChange={(e) => setCustomCode(e.target.value.toUpperCase().slice(0, 4))}
-                  placeholder="e.g., 00CW, WATR"
+                  placeholder="e.g., DWTR, SNWV"
                   className="h-8 font-mono"
                   maxLength={4}
                 />
