@@ -795,7 +795,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${itemsAffected} items`,
     });
-  }, [data, mappings, categoryMappings, keywordRules, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
+  }, [data, mappings, categoryMappings, materialDescOverrides, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
   // Handler to accept a suggestion from the filter cards
   const handleAcceptSuggestion = useCallback((system: string, laborCode: string) => {
