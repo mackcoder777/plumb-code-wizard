@@ -612,42 +612,51 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const systemMapping = mappings[systemKey];
       const itemTypeMapping = itemTypeMappings[item.system]?.[item.itemType];
       
-      // Priority: Category Mapping > System Mapping > Item Type Mapping
-      // Category mapping returns null if set to __SYSTEM__ (defer to system)
+      // Priority: Item-Type Override > Category Mapping > System Mapping > Item Type Mapping
       let costHead: string | undefined;
       let changed = false;
-      let assignmentSource: 'category' | 'system' | 'itemType' | null = null;
+      let assignmentSource: 'item-type-override' | 'category' | 'system' | 'itemType' | null = null;
       
-      // 1. Check category mapping first (highest priority)
+      // Tier 0: Item-type override within category (highest priority)
+      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
+      if (itemTypeCode) {
+        const existingParts = item.costCode?.trim().split(/\s+/) || [];
+        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+        if (existingCostHead !== itemTypeCode) {
+          costHead = itemTypeCode;
+          changed = true;
+          assignmentSource = 'item-type-override';
+        }
+      }
+      // Tier 1: Check category mapping (highest priority after item-type override)
       // Category mappings ALWAYS override existing codes (they take precedence)
-      const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-      if (categoryLaborCode) {
-        // Extract current costHead from existing code if any
-        const existingParts = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        
-        // Only change if different from existing
-        if (existingCostHead !== categoryLaborCode) {
-          costHead = categoryLaborCode;
-          changed = true;
-          assignmentSource = 'category';
+      else {
+        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+        if (categoryLaborCode) {
+          const existingParts = item.costCode?.trim().split(/\s+/) || [];
+          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+          if (existingCostHead !== categoryLaborCode) {
+            costHead = categoryLaborCode;
+            changed = true;
+            assignmentSource = 'category';
+          }
         }
-      }
-      // 2. Fall back to system mapping (overwrite if cost head differs)
-      else if (systemMapping?.laborCode) {
-        const existingParts = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== systemMapping.laborCode) {
-          costHead = systemMapping.laborCode;
-          changed = true;
-          assignmentSource = 'system';
+        // Tier 2: Fall back to system mapping
+        else if (systemMapping?.laborCode) {
+          const existingParts = item.costCode?.trim().split(/\s+/) || [];
+          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
+          if (existingCostHead !== systemMapping.laborCode) {
+            costHead = systemMapping.laborCode;
+            changed = true;
+            assignmentSource = 'system';
+          }
         }
-      }
-      // 3. Fall back to item type mapping (only for items without codes)
-      else if (itemTypeMapping?.laborCode && !item.costCode) {
-        costHead = itemTypeMapping.laborCode;
-        changed = true;
-        assignmentSource = 'itemType';
+        // Tier 3: Fall back to item type mapping (only for items without codes)
+        else if (itemTypeMapping?.laborCode && !item.costCode) {
+          costHead = itemTypeMapping.laborCode;
+          changed = true;
+          assignmentSource = 'itemType';
+        }
       }
       
       if (changed && costHead) {
