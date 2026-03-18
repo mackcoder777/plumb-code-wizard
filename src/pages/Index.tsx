@@ -43,6 +43,7 @@ import AddFileDialog from '@/components/AddFileDialog';
 import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
 import { useQueryClient } from '@tanstack/react-query';
 import { PatternManagement } from '@/components/PatternManagement';
+import { BudgetChat, EstimateSummary } from '@/components/BudgetChat';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -883,7 +884,32 @@ const EnhancedCostCodeManager = () => {
     }
    }, [estimateData, currentProject?.id]);
 
-  // One-shot effect: auto-populate building section mappings from detected drawings
+  // Budget AI chat summary
+  const estimateSummary = useMemo<EstimateSummary | null>(() => {
+    if (!estimateData || estimateData.length === 0) return null;
+    const systemBreakdown: Record<string, { hours: number; material: number; items: number; laborCode?: string }> = {};
+    const categoryBreakdown: Record<string, { hours: number; items: number }> = {};
+    let totalHours = 0, totalMaterial = 0, codedCount = 0;
+    estimateData.forEach((item: any) => {
+      const sys = item.system || "Unknown";
+      const cat = item.reportCat || item.itemType || "Unknown";
+      const hrs = item.hours || 0;
+      const mat = item.materialDollars || 0;
+      if (!systemBreakdown[sys]) systemBreakdown[sys] = { hours: 0, material: 0, items: 0 };
+      systemBreakdown[sys].hours += hrs;
+      systemBreakdown[sys].material += mat;
+      systemBreakdown[sys].items += 1;
+      if (item.costCode) systemBreakdown[sys].laborCode = item.costCode.split(" ").pop();
+      if (!categoryBreakdown[cat]) categoryBreakdown[cat] = { hours: 0, items: 0 };
+      categoryBreakdown[cat].hours += hrs;
+      categoryBreakdown[cat].items += 1;
+      totalHours += hrs;
+      totalMaterial += mat;
+      if (item.costCode) codedCount++;
+    });
+    return { totalItems: estimateData.length, totalHours, totalMaterial, codedCount, uncoded: estimateData.length - codedCount, systemBreakdown, categoryBreakdown };
+  }, [estimateData]);
+
   const buildingsPopulatedRef = useRef<string | null>(null);
   useEffect(() => {
     if (estimateData.length > 0 && dbBuildingMappings.length === 0 
@@ -2977,6 +3003,12 @@ const EnhancedCostCodeManager = () => {
             </div>
           </div>
         )}
+      {currentProject && (
+        <BudgetChat
+          projectName={currentProject.name || "Current Project"}
+          estimateSummary={estimateSummary}
+        />
+      )}
       </div>
     </div>
   );
