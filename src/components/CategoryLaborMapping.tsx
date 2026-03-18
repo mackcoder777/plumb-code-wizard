@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { EstimateItem } from '@/types/estimate';
+import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
+import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
