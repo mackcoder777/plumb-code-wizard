@@ -251,7 +251,33 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
     return sugg;
   }, [systemData]);
 
-  // Initialize local mappings from database (blanket rules only)
+  // Build category breakdown per system
+  const systemCategoryData = useMemo(() => {
+    const result: Record<string, CategoryData[]> = {};
+
+    estimateData.forEach(item => {
+      const sys = (item.system || '').trim();
+      const cat = item.reportCat || item.itemType || 'Unknown';
+      if (!sys) return;
+
+      if (!result[sys]) result[sys] = [];
+      let entry = result[sys].find(e => e.category === cat);
+      if (!entry) {
+        entry = { category: cat, items: 0, hours: 0, currentCostHead: null };
+        result[sys].push(entry);
+      }
+      entry.items++;
+      entry.hours += item.hours || 0;
+      if (!entry.currentCostHead && item.costCode) {
+        const parts = item.costCode.trim().split(/\s+/);
+        entry.currentCostHead = parts.length >= 1 ? parts[parts.length - 1] : null;
+      }
+    });
+
+    Object.values(result).forEach(cats => cats.sort((a, b) => b.hours - a.hours));
+    return result;
+  }, [estimateData]);
+
   useEffect(() => {
     if (dbMappings.length > 0) {
       const mappingsFromDb: Record<string, string> = {};
