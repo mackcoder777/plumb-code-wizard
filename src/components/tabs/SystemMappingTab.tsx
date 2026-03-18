@@ -541,10 +541,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const parts = item.costCode.trim().split(/\s+/);
       let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
       
-      // Tier 0: Keyword rule within category
-      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules, item.materialDesc || '');
-      if (keywordCode) {
-        costHead = keywordCode;
+      // Tier 0: Material description override within category
+      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
+      if (materialDescCode) {
+        costHead = materialDescCode;
       } else {
         // Tier 1: Check if category has a specific mapping that should override the costHead
         const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
