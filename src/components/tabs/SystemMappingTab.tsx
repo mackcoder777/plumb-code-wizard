@@ -599,7 +599,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, itemTypeOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
+  }, [data, categoryMappings, keywordRules, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
