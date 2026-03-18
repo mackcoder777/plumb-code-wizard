@@ -93,6 +93,44 @@ export type Database = {
           },
         ]
       }
+      category_keyword_rules: {
+        Row: {
+          category_name: string
+          created_at: string | null
+          id: string
+          keyword: string
+          labor_code: string
+          priority: number
+          project_id: string
+        }
+        Insert: {
+          category_name: string
+          created_at?: string | null
+          id?: string
+          keyword: string
+          labor_code: string
+          priority?: number
+          project_id: string
+        }
+        Update: {
+          category_name?: string
+          created_at?: string | null
+          id?: string
+          keyword?: string
+          labor_code?: string
+          priority?: number
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_keyword_rules_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       category_labor_mappings: {
         Row: {
           category_name: string
