@@ -541,10 +541,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const parts = item.costCode.trim().split(/\s+/);
       let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
       
-      // Check if category has a specific mapping that should override the costHead
-      const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-      if (categoryLaborCode) {
-        costHead = categoryLaborCode;
+      // Tier 0: Item-type override within category
+      const itemTypeCode = getLaborCodeFromItemTypeOverride(item.reportCat || '', item.itemType || '', itemTypeOverrides);
+      if (itemTypeCode) {
+        costHead = itemTypeCode;
+      } else {
+        // Tier 1: Check if category has a specific mapping that should override the costHead
+        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+        if (categoryLaborCode) {
+          costHead = categoryLaborCode;
+        }
       }
       
       // Get new section and activity from zone-aware resolver
