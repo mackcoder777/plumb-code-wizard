@@ -728,11 +728,11 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Determine the cost head to use
       let costHead: string | undefined;
       
-      if (keywordCode) {
+      if (materialDescCode) {
         const existingParts = item.costCode?.trim().split(/\s+/) || [];
         const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== keywordCode) {
-          costHead = keywordCode;
+        if (existingCostHead !== materialDescCode) {
+          costHead = materialDescCode;
         }
       } else {
         // Check if category has a specific mapping (not deferred to system)
