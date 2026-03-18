@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { Layers, Plus, Trash2, GripVertical } from 'lucide-react';
+import { Layers, Plus, Trash2, Lightbulb } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { CostCode } from '@/hooks/useCostCodes';
 import { UseMutationResult } from '@tanstack/react-query';
@@ -45,18 +45,78 @@ export const KeywordRulesSection: React.FC<KeywordRulesSectionProps> = ({
   const ruleMatchCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     categoryRules.forEach(rule => {
+      const kw = rule.keyword.toLowerCase();
       counts[rule.id] = categoryItems.filter(
-        item => item.itemName?.toLowerCase().includes(rule.keyword.toLowerCase())
+        item =>
+          item.itemName?.toLowerCase().includes(kw) ||
+          item.materialDesc?.toLowerCase().includes(kw)
       ).length;
     });
     return counts;
   }, [categoryRules, categoryItems]);
 
+  // Auto-suggested keywords from item names/descriptions
+  const suggestedKeywords = useMemo(() => {
+    const tokenMap: Record<string, { items: number; hours: number; samples: Set<string> }> = {};
+
+    categoryItems.forEach(item => {
+      const sources = [item.itemName || '', item.materialDesc || ''];
+      const seen = new Set<string>();
+
+      sources.forEach(source => {
+        const tokens = source
+          .split(/[\s\-\/\.\,\(\)]+/)
+          .map(t => t.trim())
+          .filter(t => t.length >= 3 && !/^\d+(\.\d+)?(")?$/.test(t));
+
+        // Also add full item name as candidate
+        if (item.itemName && item.itemName.length >= 3) {
+          tokens.push(item.itemName.trim());
+        }
+
+        tokens.forEach(token => {
+          if (seen.has(token.toLowerCase())) return;
+          seen.add(token.toLowerCase());
+
+          const key = token.toLowerCase();
+          if (!tokenMap[key]) tokenMap[key] = { items: 0, hours: 0, samples: new Set() };
+          tokenMap[key].items++;
+          tokenMap[key].hours += item.hours || 0;
+          if (tokenMap[key].samples.size < 3) tokenMap[key].samples.add(item.itemName || '');
+        });
+      });
+    });
+
+    const total = categoryItems.length;
+    const existingKeywords = new Set(
+      categoryRules.map(r => r.keyword.toLowerCase())
+    );
+
+    return Object.entries(tokenMap)
+      .filter(([key, d]) => {
+        if (existingKeywords.has(key)) return false;
+        if (d.items < 2) return false;
+        if (d.items / total > 0.85) return false;
+        return true;
+      })
+      .sort((a, b) => b[1].hours - a[1].hours)
+      .slice(0, 12)
+      .map(([token, d]) => ({
+        keyword: token,
+        items: d.items,
+        hours: d.hours,
+        samples: [...d.samples],
+      }));
+  }, [categoryItems, categoryRules]);
+
   const previewMatches = useMemo(() => {
     const kw = previewKeyword.trim();
     if (!kw) return [];
+    const kwLower = kw.toLowerCase();
     return categoryItems.filter(
-      item => item.itemName?.toLowerCase().includes(kw.toLowerCase())
+      item =>
+        item.itemName?.toLowerCase().includes(kwLower) ||
+        item.materialDesc?.toLowerCase().includes(kwLower)
     );
   }, [previewKeyword, categoryItems]);
 
@@ -134,10 +194,40 @@ export const KeywordRulesSection: React.FC<KeywordRulesSectionProps> = ({
         </div>
       )}
 
+      {/* Auto-suggested keywords */}
+      {suggestedKeywords.length > 0 && (
+        <div className="mb-3">
+          <p className="mb-2 text-xs text-muted-foreground flex items-center gap-1">
+            <Lightbulb className="h-3 w-3" />
+            Top keywords by labor hours — click to pre-fill:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestedKeywords.map(({ keyword, items, hours, samples }) => (
+              <button
+                key={keyword}
+                onClick={() => {
+                  setNewKeyword(keyword);
+                  setPreviewKeyword(keyword);
+                  document.getElementById(`keyword-input-${category}`)?.focus();
+                }}
+                title={`e.g. ${samples.slice(0, 2).join(', ')}`}
+                className="group flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-foreground shadow-sm hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-colors"
+              >
+                <span className="font-mono font-medium">{keyword}</span>
+                <span className="text-muted-foreground group-hover:text-primary/70">
+                  {items} items · {hours.toFixed(0)}h
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Add new rule */}
       <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2">
         <span className="text-xs text-muted-foreground whitespace-nowrap">If name contains</span>
         <Input
+          id={`keyword-input-${category}`}
           value={newKeyword}
           onChange={(e) => {
             setNewKeyword(e.target.value);

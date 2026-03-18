@@ -723,7 +723,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       if (normalizeSystemKey(item.system) !== systemKey) return item;
       
       // Tier 0: Keyword rule within category
-      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules);
+      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules, item.materialDesc || '');
       
       // Determine the cost head to use
       let costHead: string | undefined;

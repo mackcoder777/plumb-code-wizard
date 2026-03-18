@@ -70,15 +70,20 @@ export function useDeleteCategoryKeywordRule(projectId: string | null) {
 export function getLaborCodeFromKeywordRules(
   categoryName: string,
   itemName: string,
-  rules: CategoryKeywordRule[]
+  rules: CategoryKeywordRule[],
+  materialDesc?: string
 ): string | null {
-  if (!categoryName || !itemName || rules.length === 0) return null;
+  if (!categoryName || rules.length === 0) return null;
+  if (!itemName && !materialDesc) return null;
   const categoryRules = rules
     .filter(r => r.category_name === categoryName)
     .sort((a, b) => a.priority - b.priority);
 
   for (const rule of categoryRules) {
-    if (itemName.toLowerCase().includes(rule.keyword.toLowerCase())) {
+    const kw = rule.keyword.toLowerCase();
+    const matchesName = itemName?.toLowerCase().includes(kw) ?? false;
+    const matchesDesc = materialDesc?.toLowerCase().includes(kw) ?? false;
+    if (matchesName || matchesDesc) {
       return rule.labor_code === '__CATEGORY__' ? null : rule.labor_code;
     }
   }
