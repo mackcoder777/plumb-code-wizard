@@ -144,8 +144,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Category labor mappings (priority over system mappings)
   const { data: categoryMappings = [] } = useCategoryMappings(projectId);
   
-  // Keyword rules within categories (highest priority)
-  const { data: keywordRules = [] } = useCategoryKeywordRules(projectId);
+  // Material description overrides within categories (highest priority)
+  const { data: materialDescOverrides = [] } = useCategoryMaterialDescOverrides(projectId);
   
   // Learning system hooks
   const { data: mappingPatterns = [] } = useMappingPatterns();
