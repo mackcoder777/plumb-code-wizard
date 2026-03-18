@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, X, Send, Loader2, Bot, User } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Bot, User, Maximize2, Minimize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Message {
@@ -133,6 +133,7 @@ const SUGGESTIONS = [
 
 export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -219,7 +220,7 @@ export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex w-[400px] max-h-[600px] flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in">
+        <div className={`fixed bottom-6 right-6 z-50 flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in transition-all duration-200 ${expanded ? "w-[500px] max-h-[85vh]" : "w-[400px] max-h-[600px]"}`}>
 
           {/* Header */}
           <div className="flex items-center justify-between bg-primary px-4 py-3">
@@ -230,13 +231,18 @@ export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
                 <div className="text-xs opacity-80 truncate max-w-[240px]">{projectName}</div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} className="text-primary-foreground/70 hover:text-primary-foreground">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setExpanded(e => !e)} className="text-primary-foreground/70 hover:text-primary-foreground">
+                {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button onClick={() => setOpen(false)} className="text-primary-foreground/70 hover:text-primary-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 min-h-0 max-h-[400px]">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-4 space-y-4">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
