@@ -521,9 +521,31 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
                             {isMapped && <Check className="h-4 w-4 text-primary" />}
                             {system}
                             {hasCategories && (
-                              <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                {categories.length} cats
-                              </Badge>
+                              <>
+                                <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                  {categories.length} cats
+                                </Badge>
+                                {(() => {
+                                  const hasUnresolvedShared = categories.some(cat => {
+                                    if (!cat.currentCostHead) return false;
+                                    const shared = sharedCostHeadMap[cat.currentCostHead];
+                                    if (!shared || shared.length < 2) return false;
+                                    return !dbMappings.some(
+                                      m => m.system_pattern === key &&
+                                           m.cost_head_filter === cat.category &&
+                                           m.activity_code
+                                    );
+                                  });
+                                  return hasUnresolvedShared ? (
+                                    <span
+                                      className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700"
+                                      title="Some categories share cost heads with other systems — expand to review"
+                                    >
+                                      ⚠️ shared codes
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </>
                             )}
                           </div>
                         </TableCell>
