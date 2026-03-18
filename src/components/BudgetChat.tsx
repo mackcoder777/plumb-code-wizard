@@ -220,7 +220,7 @@ export function BudgetChat({ projectName, estimateSummary }: BudgetChatProps) {
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex w-[400px] max-h-[600px] flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in">
+        <div className={`fixed bottom-6 right-6 z-50 flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in transition-all duration-200 ${expanded ? "w-[500px] max-h-[85vh]" : "w-[400px] max-h-[600px]"}`}>
 
           {/* Header */}
           <div className="flex items-center justify-between bg-primary px-4 py-3">
