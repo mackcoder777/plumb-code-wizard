@@ -3,10 +3,10 @@ import { EstimateItem } from '@/types/estimate';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
-  useCategoryItemTypeOverrides,
-  useSaveCategoryItemTypeOverride,
-  useDeleteCategoryItemTypeOverride,
-} from '@/hooks/useCategoryItemTypeOverrides';
+  useCategoryKeywordRules,
+  useSaveCategoryKeywordRule,
+  useDeleteCategoryKeywordRule,
+} from '@/hooks/useCategoryKeywordRules';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
