@@ -380,6 +380,18 @@ const EnhancedCostCodeManager = () => {
   const [estimateData, setEstimateData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [activeTab, setActiveTab] = useState('upload');
+  const [hasUnappliedMappingChanges, setHasUnappliedMappingChanges] = useState(false);
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  const [showMappingWarning, setShowMappingWarning] = useState(false);
+
+  const handleTabChange = useCallback((tab: string) => {
+    if (hasUnappliedMappingChanges && activeTab === 'mapping' && tab !== 'mapping') {
+      setPendingTab(tab);
+      setShowMappingWarning(true);
+    } else {
+      setActiveTab(tab);
+    }
+  }, [hasUnappliedMappingChanges, activeTab]);
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -2021,7 +2033,7 @@ const EnhancedCostCodeManager = () => {
           {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'buyout', 'rules'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={`px-6 py-4 font-medium transition-all ${
                 activeTab === tab
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
@@ -2518,6 +2530,7 @@ const EnhancedCostCodeManager = () => {
                   }
                 }}
                 onReanalyzeProfile={() => setDatasetProfile(profileDataset(estimateData))}
+                onUnappliedChangesUpdate={setHasUnappliedMappingChanges}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
@@ -2935,6 +2948,35 @@ const EnhancedCostCodeManager = () => {
             preloadedFileName={pendingUploadFileName}
           />
         </div>
+
+        {/* Unapplied mapping changes warning dialog */}
+        {showMappingWarning && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+              <h3 className="text-lg font-semibold text-gray-900">Unapplied Mapping Changes</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                You have mapping changes that haven't been applied to estimate items yet. What would you like to do?
+              </p>
+              <div className="mt-5 flex gap-3 justify-end">
+                <button
+                  onClick={() => { setShowMappingWarning(false); setPendingTab(null); }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMappingWarning(false);
+                    if (pendingTab) { setActiveTab(pendingTab); setPendingTab(null); }
+                  }}
+                  className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Discard &amp; Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

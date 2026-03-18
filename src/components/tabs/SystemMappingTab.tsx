@@ -57,6 +57,7 @@ interface SystemMappingTabProps {
   datasetProfile?: DatasetProfile | null;
   onProfileOverride?: (override: any) => void;
   onReanalyzeProfile?: () => void;
+  onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
 }
 
 type ViewMode = 'cards' | 'table';
@@ -78,7 +79,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -90,8 +91,30 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
-  
-  // Multi-select state
+
+  // Track unapplied changes
+  const hasUnappliedChanges = useMemo(() => {
+    return Object.keys(mappings).some(system => {
+      const applied = appliedSystems[system];
+      return mappings[system]?.laborCode && applied?.appliedLaborCode !== mappings[system]?.laborCode;
+    });
+  }, [mappings, appliedSystems]);
+
+  useEffect(() => {
+    onUnappliedChangesUpdate?.(hasUnappliedChanges);
+  }, [hasUnappliedChanges, onUnappliedChangesUpdate]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnappliedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnappliedChanges]);
+
   const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set());
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   
@@ -802,6 +825,21 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   return (
     <div className="space-y-6">
+      {hasUnappliedChanges && (
+        <div className="sticky top-0 z-50 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-6 py-3 text-amber-800">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <span>⚠️</span>
+            <span>You have unapplied mapping changes. Click "Apply All Mappings" before leaving this tab.</span>
+          </div>
+          <Button
+            size="sm"
+            onClick={applyMappings}
+            className="shrink-0 bg-amber-500 text-white hover:bg-amber-600"
+          >
+            Apply All Now
+          </Button>
+        </div>
+      )}
       {/* Progress Header */}
       <SystemMappingHeader stats={stats} totalItems={totalItems} />
 
