@@ -2687,7 +2687,7 @@ const EnhancedCostCodeManager = () => {
                       // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
                       const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings));
+                      const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings, costHead || undefined));
                       const fullCode = `${section} ${activity} ${costHead}`;
                       
                       if (!summary[fullCode]) {

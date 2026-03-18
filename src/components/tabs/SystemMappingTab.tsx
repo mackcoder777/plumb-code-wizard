@@ -559,7 +559,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Build new full code with floor activity priority over system activity
       const activityCode = resolved.activity !== '0000'
         ? resolved.activity
-        : getActivityFromSystem(item.system, systemActivityMappings);
+        : getActivityFromSystem(item.system, systemActivityMappings, costHead);
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
