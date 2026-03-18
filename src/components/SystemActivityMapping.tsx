@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Activity, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, Sparkles, X } from 'lucide-react';
+import { Activity, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -19,8 +19,6 @@ import {
 import {
   useSystemActivityMappings,
   useBatchSaveSystemActivityMappings,
-  useSaveSystemActivityMapping,
-  useDeleteSystemActivityMapping,
   SystemActivityMapping,
   ACTIVITY_CODE_SUGGESTIONS,
   suggestActivityCode,
@@ -107,7 +105,7 @@ const ActivityCodeInput: React.FC<ActivityCodeInputProps> = ({ value, onChange, 
                 <Input
                   value={customCode}
                   onChange={(e) => setCustomCode(e.target.value.toUpperCase().slice(0, 4))}
-                  placeholder="e.g., 00CW, WATR"
+                  placeholder="e.g., DWTR, SNWV"
                   className="h-8 font-mono"
                   maxLength={4}
                 />
@@ -212,14 +210,9 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
-  const [addingRuleFor, setAddingRuleFor] = useState<string | null>(null);
-  const [newRuleCostHead, setNewRuleCostHead] = useState('');
-  const [newRuleActivity, setNewRuleActivity] = useState('');
 
   const { data: dbMappings = [], isLoading } = useSystemActivityMappings(projectId);
   const batchSave = useBatchSaveSystemActivityMappings();
-  const saveMapping = useSaveSystemActivityMapping();
-  const deleteMapping = useDeleteSystemActivityMapping();
 
   // Extract unique systems from estimate data with counts
   const systemData = useMemo<SystemData[]>(() => {
@@ -342,46 +335,6 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
     });
   }, [systemData, localMappings]);
 
-  const handleAddCostHeadRule = useCallback(async (system: string) => {
-    if (!projectId || !newRuleCostHead.trim() || !newRuleActivity.trim()) return;
-
-    try {
-      await saveMapping.mutateAsync({
-        projectId,
-        systemPattern: system.toLowerCase().trim(),
-        activityCode: newRuleActivity.toUpperCase(),
-        costHeadFilter: newRuleCostHead.toUpperCase(),
-      });
-      setAddingRuleFor(null);
-      setNewRuleCostHead('');
-      setNewRuleActivity('');
-      toast({
-        title: "Cost Head Rule Added",
-        description: `When ${system} + ${newRuleCostHead.toUpperCase()} → activity ${newRuleActivity.toUpperCase()}`,
-      });
-    } catch (error) {
-      toast({
-        title: "Failed to Add Rule",
-        description: "Could not save the cost head rule. Please try again.",
-        variant: "destructive",
-      });
-    }
-  }, [projectId, newRuleCostHead, newRuleActivity, saveMapping]);
-
-  const handleDeleteCostHeadRule = useCallback(async (systemPattern: string, costHeadFilter: string) => {
-    if (!projectId) return;
-    try {
-      await deleteMapping.mutateAsync({
-        projectId,
-        systemPattern,
-        costHeadFilter,
-      });
-      toast({ title: "Rule Removed" });
-    } catch (error) {
-      toast({ title: "Failed to Remove Rule", variant: "destructive" });
-    }
-  }, [projectId, deleteMapping]);
-
   // Stats
   const stats = useMemo(() => {
     const total = systemData.length;
@@ -389,9 +342,8 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
       const code = localMappings[s.system.toLowerCase().trim()];
       return code && code !== '0000';
     }).length;
-    const scopedRuleCount = dbMappings.filter(m => m.cost_head_filter).length;
-    return { total, mapped, unmapped: total - mapped, scopedRuleCount };
-  }, [systemData, localMappings, dbMappings]);
+    return { total, mapped, unmapped: total - mapped };
+  }, [systemData, localMappings]);
 
   if (systemData.length === 0) {
     return (
@@ -419,18 +371,13 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
               System to Activity Code Mapping
             </CardTitle>
             <CardDescription>
-              Map systems to activity codes for the middle segment of labor codes (e.g., Cold Water → 00CW). Use cost head rules for targeted overrides.
+              Map systems to their activity code — the middle segment of assembled labor codes. Format: SEC ACT COSTHEAD (e.g., 01 WATR VALV, 01 SNWV PIPE).
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="bg-background">
               {stats.mapped}/{stats.total} mapped
             </Badge>
-            {stats.scopedRuleCount > 0 && (
-              <Badge variant="secondary">
-                {stats.scopedRuleCount} cost head rule{stats.scopedRuleCount !== 1 ? 's' : ''}
-              </Badge>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -475,8 +422,7 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
         ) : (
           <div className="space-y-2">
             <div className="text-xs text-muted-foreground mb-3">
-              Activity codes appear in the middle of labor codes: <code className="bg-muted px-1 rounded">SECT <strong>ACTIVITY</strong> COSTHEAD</code>
-              <span className="ml-2">• Use <strong>+ Add cost head rule</strong> to scope an activity to a specific cost head (e.g., VALV only).</span>
+              Activity codes are the middle segment: <code className="bg-muted px-1 rounded">SEC · <strong>ACT</strong> · COSTHEAD</code> — e.g., 01 · WATR · VALV. The cost head comes from category mapping; the section comes from floor mapping.
             </div>
             <Table>
               <TableHeader>
@@ -492,117 +438,26 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
                   const currentCode = localMappings[key] || '';
                   const suggestion = suggestions[key];
                   const isMapped = currentCode && currentCode !== '0000';
-                  const scopedRules = dbMappings.filter(
-                    m => m.system_pattern.toLowerCase() === key && m.cost_head_filter
-                  );
 
                   return (
-                    <React.Fragment key={system}>
-                      <TableRow className={isMapped ? 'bg-primary/5' : ''}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {isMapped && <Check className="h-4 w-4 text-primary" />}
-                            {system}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <ActivityCodeInput
-                            value={currentCode}
-                            onChange={(value) => handleActivityChange(system, value)}
-                            suggestion={suggestion}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {itemCount.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-
-                      {/* Cost-head-specific override rules */}
-                      {scopedRules.map(rule => (
-                        <TableRow key={`${system}-${rule.cost_head_filter}`} className="bg-accent/30">
-                          <TableCell className="pl-10">
-                            <span className="text-xs text-muted-foreground">when cost head = </span>
-                            <Badge variant="outline" className="font-mono text-xs">
-                              {rule.cost_head_filter}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">→</span>
-                              <Badge className="font-mono">{rule.activity_code}</Badge>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                                onClick={() => handleDeleteCostHeadRule(rule.system_pattern, rule.cost_head_filter!)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell />
-                        </TableRow>
-                      ))}
-
-                      {/* Add new cost head rule inline */}
-                      {addingRuleFor === system ? (
-                        <TableRow className="bg-accent/20">
-                          <TableCell className="pl-10">
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted-foreground">when cost head =</span>
-                              <Input
-                                value={newRuleCostHead}
-                                onChange={(e) => setNewRuleCostHead(e.target.value.toUpperCase().slice(0, 4))}
-                                placeholder="VALV"
-                                maxLength={4}
-                                className="h-7 w-16 font-mono text-xs uppercase"
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">→ activity</span>
-                              <Input
-                                value={newRuleActivity}
-                                onChange={(e) => setNewRuleActivity(e.target.value.toUpperCase().slice(0, 4))}
-                                placeholder="CWVL"
-                                maxLength={4}
-                                className="h-7 w-16 font-mono text-xs uppercase"
-                              />
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => handleAddCostHeadRule(system)}
-                                disabled={!newRuleCostHead.trim() || !newRuleActivity.trim() || saveMapping.isPending}
-                              >
-                                {saveMapping.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Add'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-xs"
-                                onClick={() => { setAddingRuleFor(null); setNewRuleCostHead(''); setNewRuleActivity(''); }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell />
-                        </TableRow>
-                      ) : (
-                        <TableRow className="border-0">
-                          <TableCell colSpan={3} className="py-0 pl-10">
-                            <button
-                              onClick={() => setAddingRuleFor(system)}
-                              className="text-xs text-primary hover:text-primary/80 transition-colors py-1"
-                            >
-                              <Plus className="h-3 w-3 inline mr-1" />
-                              Add cost head rule
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </React.Fragment>
+                    <TableRow key={system} className={isMapped ? 'bg-primary/5' : ''}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {isMapped && <Check className="h-4 w-4 text-primary" />}
+                          {system}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <ActivityCodeInput
+                          value={currentCode}
+                          onChange={(value) => handleActivityChange(system, value)}
+                          suggestion={suggestion}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {itemCount.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
               </TableBody>
