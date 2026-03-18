@@ -337,46 +337,6 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
     });
   }, [systemData, localMappings]);
 
-  const handleAddCostHeadRule = useCallback(async (system: string) => {
-    if (!projectId || !newRuleCostHead.trim() || !newRuleActivity.trim()) return;
-
-    try {
-      await saveMapping.mutateAsync({
-        projectId,
-        systemPattern: system.toLowerCase().trim(),
-        activityCode: newRuleActivity.toUpperCase(),
-        costHeadFilter: newRuleCostHead.toUpperCase(),
-      });
-      setAddingRuleFor(null);
-      setNewRuleCostHead('');
-      setNewRuleActivity('');
-      toast({
-        title: "Cost Head Rule Added",
-        description: `When ${system} + ${newRuleCostHead.toUpperCase()} → activity ${newRuleActivity.toUpperCase()}`,
-      });
-    } catch (error) {
-      toast({
-        title: "Failed to Add Rule",
-        description: "Could not save the cost head rule. Please try again.",
-        variant: "destructive",
-      });
-    }
-  }, [projectId, newRuleCostHead, newRuleActivity, saveMapping]);
-
-  const handleDeleteCostHeadRule = useCallback(async (systemPattern: string, costHeadFilter: string) => {
-    if (!projectId) return;
-    try {
-      await deleteMapping.mutateAsync({
-        projectId,
-        systemPattern,
-        costHeadFilter,
-      });
-      toast({ title: "Rule Removed" });
-    } catch (error) {
-      toast({ title: "Failed to Remove Rule", variant: "destructive" });
-    }
-  }, [projectId, deleteMapping]);
-
   // Stats
   const stats = useMemo(() => {
     const total = systemData.length;
@@ -384,9 +344,8 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
       const code = localMappings[s.system.toLowerCase().trim()];
       return code && code !== '0000';
     }).length;
-    const scopedRuleCount = dbMappings.filter(m => m.cost_head_filter).length;
-    return { total, mapped, unmapped: total - mapped, scopedRuleCount };
-  }, [systemData, localMappings, dbMappings]);
+    return { total, mapped, unmapped: total - mapped };
+  }, [systemData, localMappings]);
 
   if (systemData.length === 0) {
     return (
