@@ -722,8 +722,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
       
-      // Tier 0: Keyword rule within category
-      const keywordCode = getLaborCodeFromKeywordRules(item.reportCat || '', item.itemName || '', keywordRules, item.materialDesc || '');
+      // Tier 0: Material description override within category
+      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
       
       // Determine the cost head to use
       let costHead: string | undefined;
