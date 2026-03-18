@@ -438,117 +438,26 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
                   const currentCode = localMappings[key] || '';
                   const suggestion = suggestions[key];
                   const isMapped = currentCode && currentCode !== '0000';
-                  const scopedRules = dbMappings.filter(
-                    m => m.system_pattern.toLowerCase() === key && m.cost_head_filter
-                  );
 
                   return (
-                    <React.Fragment key={system}>
-                      <TableRow className={isMapped ? 'bg-primary/5' : ''}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {isMapped && <Check className="h-4 w-4 text-primary" />}
-                            {system}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <ActivityCodeInput
-                            value={currentCode}
-                            onChange={(value) => handleActivityChange(system, value)}
-                            suggestion={suggestion}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {itemCount.toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-
-                      {/* Cost-head-specific override rules */}
-                      {scopedRules.map(rule => (
-                        <TableRow key={`${system}-${rule.cost_head_filter}`} className="bg-accent/30">
-                          <TableCell className="pl-10">
-                            <span className="text-xs text-muted-foreground">when cost head = </span>
-                            <Badge variant="outline" className="font-mono text-xs">
-                              {rule.cost_head_filter}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">→</span>
-                              <Badge className="font-mono">{rule.activity_code}</Badge>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                                onClick={() => handleDeleteCostHeadRule(rule.system_pattern, rule.cost_head_filter!)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell />
-                        </TableRow>
-                      ))}
-
-                      {/* Add new cost head rule inline */}
-                      {addingRuleFor === system ? (
-                        <TableRow className="bg-accent/20">
-                          <TableCell className="pl-10">
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted-foreground">when cost head =</span>
-                              <Input
-                                value={newRuleCostHead}
-                                onChange={(e) => setNewRuleCostHead(e.target.value.toUpperCase().slice(0, 4))}
-                                placeholder="VALV"
-                                maxLength={4}
-                                className="h-7 w-16 font-mono text-xs uppercase"
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">→ activity</span>
-                              <Input
-                                value={newRuleActivity}
-                                onChange={(e) => setNewRuleActivity(e.target.value.toUpperCase().slice(0, 4))}
-                                placeholder="CWVL"
-                                maxLength={4}
-                                className="h-7 w-16 font-mono text-xs uppercase"
-                              />
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => handleAddCostHeadRule(system)}
-                                disabled={!newRuleCostHead.trim() || !newRuleActivity.trim() || saveMapping.isPending}
-                              >
-                                {saveMapping.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Add'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-xs"
-                                onClick={() => { setAddingRuleFor(null); setNewRuleCostHead(''); setNewRuleActivity(''); }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell />
-                        </TableRow>
-                      ) : (
-                        <TableRow className="border-0">
-                          <TableCell colSpan={3} className="py-0 pl-10">
-                            <button
-                              onClick={() => setAddingRuleFor(system)}
-                              className="text-xs text-primary hover:text-primary/80 transition-colors py-1"
-                            >
-                              <Plus className="h-3 w-3 inline mr-1" />
-                              Add cost head rule
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </React.Fragment>
+                    <TableRow key={system} className={isMapped ? 'bg-primary/5' : ''}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {isMapped && <Check className="h-4 w-4 text-primary" />}
+                          {system}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <ActivityCodeInput
+                          value={currentCode}
+                          onChange={(value) => handleActivityChange(system, value)}
+                          suggestion={suggestion}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {itemCount.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
               </TableBody>
