@@ -43,6 +43,7 @@ import AddFileDialog from '@/components/AddFileDialog';
 import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
 import { useQueryClient } from '@tanstack/react-query';
 import { PatternManagement } from '@/components/PatternManagement';
+import { BudgetChat, EstimateSummary } from '@/components/BudgetChat';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
