@@ -566,19 +566,66 @@ export const SystemActivityMappingPanel: React.FC<SystemActivityMappingPanelProp
                         );
                         const currentActivity = existingOverride?.activity_code ?? '';
 
+                        const isShared = !!(cat.currentCostHead &&
+                          (sharedCostHeadMap[cat.currentCostHead]?.length ?? 0) >= 2);
+                        const otherSystems = isShared
+                          ? (sharedCostHeadMap[cat.currentCostHead!] ?? []).filter(s => s !== system)
+                          : [];
+
                         return (
-                          <TableRow key={`${system}::${cat.category}`} className="bg-accent/30">
+                          <TableRow
+                            key={`${system}::${cat.category}`}
+                            className={cn(
+                              isShared && !currentActivity && 'bg-amber-50/60',
+                              isShared && currentActivity && 'bg-green-50/60',
+                              !isShared && 'bg-accent/30'
+                            )}
+                          >
                             <TableCell className="pl-12">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">↳</span>
-                                <span className="text-xs font-medium">{cat.category}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {cat.items} items · {cat.hours.toFixed(0)} hrs
-                                </span>
-                                {cat.currentCostHead && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
-                                    → {cat.currentCostHead}
-                                  </Badge>
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">↳</span>
+                                  <span className="text-xs font-medium">{cat.category}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {cat.items} items · {cat.hours.toFixed(0)} hrs
+                                  </span>
+                                  {cat.currentCostHead && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
+                                      → {cat.currentCostHead}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {isShared && otherSystems.length > 0 && (
+                                  <div className={cn(
+                                    'flex items-start gap-1.5 rounded px-2 py-1 text-xs border',
+                                    currentActivity
+                                      ? 'bg-green-50 border-green-200 text-green-700'
+                                      : 'bg-amber-50 border-amber-200 text-amber-700'
+                                  )}>
+                                    <span className="shrink-0 mt-0.5">
+                                      {currentActivity ? '✓' : '⚠️'}
+                                    </span>
+                                    <span>
+                                      {currentActivity ? (
+                                        <>
+                                          <span className="font-mono font-semibold">{cat.currentCostHead}</span>
+                                          {' '}now distinguished from{' '}
+                                          <span className="font-mono">{otherSystems.join(', ')}</span>
+                                          {' '}via ACT{' '}
+                                          <span className="font-mono font-semibold">{currentActivity}</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="font-mono font-semibold">{cat.currentCostHead}</span>
+                                          {' '}is shared by{' '}
+                                          <span className="font-semibold">{otherSystems.length + 1} systems</span>
+                                          {': '}
+                                          <span className="font-mono">{[system, ...otherSystems].join(', ')}</span>
+                                          {' — set an ACT code here to distinguish'}
+                                        </>
+                                      )}
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             </TableCell>
