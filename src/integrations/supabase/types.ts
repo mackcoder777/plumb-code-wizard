@@ -93,44 +93,6 @@ export type Database = {
           },
         ]
       }
-      category_keyword_rules: {
-        Row: {
-          category_name: string
-          created_at: string | null
-          id: string
-          keyword: string
-          labor_code: string
-          priority: number
-          project_id: string
-        }
-        Insert: {
-          category_name: string
-          created_at?: string | null
-          id?: string
-          keyword: string
-          labor_code: string
-          priority?: number
-          project_id: string
-        }
-        Update: {
-          category_name?: string
-          created_at?: string | null
-          id?: string
-          keyword?: string
-          labor_code?: string
-          priority?: number
-          project_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "category_keyword_rules_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "estimate_projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       category_labor_mappings: {
         Row: {
           category_name: string
@@ -159,6 +121,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "category_labor_mappings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      category_material_desc_overrides: {
+        Row: {
+          category_name: string
+          created_at: string | null
+          id: string
+          labor_code: string
+          material_description: string
+          project_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          category_name: string
+          created_at?: string | null
+          id?: string
+          labor_code: string
+          material_description: string
+          project_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          category_name?: string
+          created_at?: string | null
+          id?: string
+          labor_code?: string
+          material_description?: string
+          project_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_material_desc_overrides_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "estimate_projects"
