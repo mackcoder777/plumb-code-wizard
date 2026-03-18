@@ -705,6 +705,9 @@ const EnhancedCostCodeManager = () => {
                        ).find(c => c.code === costHead)?.description || 
                        (costHead ? 'Unknown' : 'Unassigned');
 
+    // Resolve activity AFTER cost head is known so cost-head-scoped rules apply
+    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, costHead || undefined);
+
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
       section: section,
