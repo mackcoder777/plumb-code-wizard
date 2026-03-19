@@ -762,12 +762,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       return item;
     });
 
+    // Count total items belonging to this system (not just changed ones)
+    const totalSystemItems = data.filter(item => normalizeSystemKey(item.system) === systemKey).length;
+    const appliedCount = Math.max(itemsAffected, totalSystemItems);
+
     // Track this system as applied
     setAppliedSystems(prev => ({
       ...prev,
       [systemKey]: {
         appliedAt: new Date(),
-        appliedItemCount: itemsAffected,
+        appliedItemCount: appliedCount,
         appliedLaborCode: systemMapping.laborCode,
       }
     }));
