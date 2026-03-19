@@ -1,77 +1,35 @@
 
 
-# Smart Assign Preview Dialog
+## Issues Found
 
-## Problem
-
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
-
-## What 9524 Covers (for reference)
-
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
-
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
-
-## Solution: Smart Assign Preview Dialog
-
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
-
-### UI Design
-
-When you click "Smart Assign", a dialog opens with:
-
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
-
-```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
+### 1. Code not shown in the dropdown display
+In `SystemCard.tsx` line 221-226, `getCodeDisplay` only shows the description:
+```typescript
+return found ? found.description : effectiveCode;
 ```
+Should show both code and description, e.g. `"DIWA - DOMESTIC & INDUSTRIAL WATER"`.
 
-### Technical Changes
+### 2. "Applied: 0 items" problem
+In `applySystemMapping` (SystemMappingTab.tsx line 716-798), items are only counted as "affected" when their cost head **changes**. If the same code was already applied, the comparison `existingCostHead !== systemMapping.laborCode` returns false, so `itemsAffected` stays 0. The system then records `appliedItemCount: 0`.
 
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
+This happens when a user clicks "Apply" a second time, or when the items already had that cost head from a previous apply. The fix: count all items that **match** the system and have the correct code, not just those that changed.
 
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
+## Plan
 
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
+### File: `src/components/tabs/SystemMappingTab/SystemCard.tsx`
 
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
+**Fix 1 — Show code in dropdown display**
+- Line 225: Change `return found ? found.description : effectiveCode;` to `return found ? \`${found.code} - ${found.description}\` : effectiveCode;`
 
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
+### File: `src/components/tabs/SystemMappingTab.tsx`
 
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+**Fix 2 — Count all matching items, not just changed items**
+- In `applySystemMapping` (around line 716), after the map loop, count total items belonging to the system regardless of whether they changed:
+  ```typescript
+  const totalSystemItems = data.filter(item => normalizeSystemKey(item.system) === systemKey).length;
+  ```
+- Use `Math.max(itemsAffected, totalSystemItems)` when recording the applied count, so re-applying shows the correct total rather than 0.
 
-### No database changes needed.
+**Fix 3 — Same issue in bulk `applyMappings`** (around line 677)
+- Similarly, for each mapped system, count total items belonging to that system so the applied count reflects the actual item count even when codes haven't changed.
 
