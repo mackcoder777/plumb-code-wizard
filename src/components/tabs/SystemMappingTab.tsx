@@ -781,7 +781,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       updateAppliedStatus.mutate({ 
         projectId, 
         systemName: system, 
-        appliedItemCount: itemsAffected 
+        appliedItemCount: appliedCount 
       });
     }
     
