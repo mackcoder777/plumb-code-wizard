@@ -222,7 +222,7 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
     const effectiveCode = code || suggested;
     if (!effectiveCode) return 'Select labor code...';
     const found = codes.find(c => c.code === effectiveCode);
-    return found ? found.description : effectiveCode;
+    return found ? `${found.code} - ${found.description}` : effectiveCode;
   };
 
   const handleLaborSelect = useCallback((value: string) => {
