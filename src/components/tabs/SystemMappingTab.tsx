@@ -670,20 +670,28 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       return item;
     });
 
+    // Count total items per system for accurate applied counts
+    const totalItemsPerSystem: Record<string, number> = {};
+    data.forEach(item => {
+      const sk = normalizeSystemKey(item.system);
+      if (sk) totalItemsPerSystem[sk] = (totalItemsPerSystem[sk] || 0) + 1;
+    });
+
     // Track which systems were applied
     const newAppliedSystems: Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string }> = {};
     const systemsToUpdate: Array<{ systemName: string; appliedItemCount: number }> = [];
     
     Object.keys(mappings).forEach(system => {
       if (systemItemCounts[system] || mappings[system]?.laborCode) {
+        const appliedCount = Math.max(systemItemCounts[system] || 0, totalItemsPerSystem[system] || 0);
         newAppliedSystems[system] = {
           appliedAt: new Date(),
-          appliedItemCount: systemItemCounts[system] || 0,
+          appliedItemCount: appliedCount,
           appliedLaborCode: mappings[system]?.laborCode,
         };
         systemsToUpdate.push({
           systemName: system,
-          appliedItemCount: systemItemCounts[system] || 0,
+          appliedItemCount: appliedCount,
         });
       }
     });
@@ -762,12 +770,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       return item;
     });
 
+    // Count total items belonging to this system (not just changed ones)
+    const totalSystemItems = data.filter(item => normalizeSystemKey(item.system) === systemKey).length;
+    const appliedCount = Math.max(itemsAffected, totalSystemItems);
+
     // Track this system as applied
     setAppliedSystems(prev => ({
       ...prev,
       [systemKey]: {
         appliedAt: new Date(),
-        appliedItemCount: itemsAffected,
+        appliedItemCount: appliedCount,
         appliedLaborCode: systemMapping.laborCode,
       }
     }));
@@ -777,7 +789,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       updateAppliedStatus.mutate({ 
         projectId, 
         systemName: system, 
-        appliedItemCount: itemsAffected 
+        appliedItemCount: appliedCount 
       });
     }
     
@@ -793,7 +805,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     
     toast({
       title: "Mapping Applied",
-      description: `Applied labor code for "${system}" to ${itemsAffected} items`,
+      description: `Applied labor code for "${system}" to ${appliedCount} items${itemsAffected < appliedCount ? ` (${itemsAffected} changed)` : ''}`,
     });
   }, [data, mappings, categoryMappings, materialDescOverrides, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
