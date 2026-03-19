@@ -797,7 +797,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     
     toast({
       title: "Mapping Applied",
-      description: `Applied labor code for "${system}" to ${itemsAffected} items`,
+      description: `Applied labor code for "${system}" to ${appliedCount} items${itemsAffected < appliedCount ? ` (${itemsAffected} changed)` : ''}`,
     });
   }, [data, mappings, categoryMappings, materialDescOverrides, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
