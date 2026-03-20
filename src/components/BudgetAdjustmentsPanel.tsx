@@ -1225,7 +1225,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     }
 
     return result;
-  }, [calculations.adjustedLaborSummary, savedMergesData]);
+  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
 
   // Small Code Consolidation Analysis — runs against finalLaborSummary
   const smallCodeAnalysis = useMemo(() => {
