@@ -2928,7 +2928,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                                     className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
                                                   />
                                                   <span className="font-mono w-20 text-right text-muted-foreground">
-                                                    ({delta > 0 ? '+' : ''}{delta.toFixed(1)}h)
+                                                    ({delta > 0 ? '+' : ''}{delta.toFixed(0)}h)
                                                   </span>
                                                 </div>
                                               );
