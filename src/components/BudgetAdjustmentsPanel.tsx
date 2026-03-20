@@ -1026,9 +1026,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     return savedMergesData
       .filter(merge => {
-        const hasMatch = [...liveKeys].some(lk =>
-          lk.includes(merge.cost_head) && lk.startsWith(merge.sec_code)
-        );
+        const hasMatch = [...liveKeys].some(lk => {
+          const parts = lk.trim().split(/\s+/);
+          const keyHead = parts[parts.length - 1];
+          const keySec = parts[0];
+          return keySec === merge.sec_code && keyHead === merge.cost_head;
+        });
         return !hasMatch;
       })
       .map(merge => {
