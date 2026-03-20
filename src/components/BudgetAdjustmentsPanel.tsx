@@ -1088,10 +1088,24 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const reassignTo = (merge as any).reassign_to_head as string | null;
       const redistAdj = (merge as any).redistribute_adjustments as Record<string, number> | null;
 
-      const matchingKeys = Object.keys(result).filter(key => {
+      let matchingKeys = Object.keys(result).filter(key => {
         const parts = (result[key].code ?? '').trim().split(/\s+/);
         return parts[0] === sec && parts.slice(2).join(' ') === head;
       });
+
+      // If no direct key match, attempt fuzzy match by section + similar cost head
+      if (matchingKeys.length === 0 && head) {
+        const fuzzyKeys = Object.keys(result).filter(k => {
+          const parts = (result[k]?.code ?? '').trim().split(/\s+/);
+          const kHead = parts.slice(2).join(' ');
+          const kSec = parts[0];
+          return kSec === sec && kHead !== head &&
+            staleMergeUpdates.some(u => u?.oldCostHead === head && u?.newCostHead === kHead);
+        });
+        if (fuzzyKeys.length > 0) {
+          matchingKeys = fuzzyKeys;
+        }
+      }
 
       // Redistribute: apply per-activity hour deltas
       if (redistAdj && Object.keys(redistAdj).length > 0) {
