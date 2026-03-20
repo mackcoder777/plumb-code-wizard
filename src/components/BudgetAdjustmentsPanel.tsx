@@ -551,6 +551,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: e.redistribute_adjustments ?? null,
       }));
 
+      // Deduplicate by (sec_code, cost_head) — keep last entry per key to prevent constraint violations
+      const seen = new Set<string>();
+      const dedupedRows = [...rows].reverse().filter(r => {
+        const k = `${r.sec_code}|${r.cost_head}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).reverse();
+
       // Delete existing entries for this project, then upsert in one go
       const { error: deleteError } = await supabase
         .from('project_small_code_merges')
@@ -559,10 +568,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       if (deleteError) throw new Error(`Failed to clear existing merges: ${deleteError.message}`);
 
-      if (rows.length > 0) {
+      if (dedupedRows.length > 0) {
         const { error: insertError } = await supabase
           .from('project_small_code_merges')
-          .insert(rows);
+          .insert(dedupedRows);
         if (insertError) throw new Error(`Failed to save merges: ${insertError.message}`);
       }
     },
