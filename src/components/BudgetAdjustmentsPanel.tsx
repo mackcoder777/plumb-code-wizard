@@ -1406,41 +1406,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return rows;
   }, [savedMergesData, smallCodeAnalysis, calculations?.adjustedLaborSummary]);
 
-  // Auto-update stale merges when detected
-  useEffect(() => {
-    if (!staleMergeUpdates.length || !projectId || projectId === 'default') return;
-    if (!savedMergesData?.length) return;
-
-    const apply = async () => {
-      const updatedEntries = savedMergesData.map(merge => {
-        const update = staleMergeUpdates.find(u => u.mergeId === merge.id);
-        return {
-          sec_code: merge.sec_code,
-          cost_head: update ? update.newCostHead : merge.cost_head,
-          reassign_to_head: merge.reassign_to_head ?? null,
-          redistribute_adjustments: (merge as any).redistribute_adjustments ?? null,
-        };
-      });
-
-      try {
-        await saveMergeMutation.mutateAsync(updatedEntries);
-
-        const summary = staleMergeUpdates
-          .map(u => `${u.oldCostHead} → ${u.newCostHead}`)
-          .join(', ');
-
-        toast({
-          title: `${staleMergeUpdates.length} saved rule${staleMergeUpdates.length > 1 ? 's' : ''} updated`,
-          description: `Merge rules updated to match new system mappings: ${summary}`,
-        });
-      } catch (e) {
-        console.warn('Failed to update stale merges', e);
-      }
-    };
-
-    apply();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staleMergeUpdates.length]);
+  // DISABLED: auto-update was too aggressive and caused duplicate key errors + data loss
+  // Stale merges are now surfaced as a warning banner for the user to handle manually
+  // useEffect(() => { ... }, [staleMergeUpdates.length]);
 
 
   // Filtered view for standalone hour threshold
