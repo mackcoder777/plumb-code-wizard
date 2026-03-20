@@ -3007,20 +3007,24 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     {row.combinedHours.toFixed(1)}h
                                   </TableCell>
                                   <TableCell>
-                                    {isSaved ? (
-                                      <span
-                                        className={`text-xs font-mono ${
-                                          !(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
-                                            ? 'text-amber-400'
-                                            : 'text-green-400'
-                                        }`}
-                                      >
-                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head === '__keep__'
-                                          ? '→ kept as-is'
-                                          : (savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
-                                          ? `→ ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
-                                          : '⚠ No target — undo & reassign'}
-                                      </span>
+                                    {isSaved ? (() => {
+                                      const savedMerge = savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any;
+                                      const hasTarget = !!savedMerge?.reassign_to_head;
+                                      const isRedistribute = !!savedMerge?.redistribute_adjustments;
+                                      const isKeep = savedMerge?.reassign_to_head === '__keep__';
+                                      const showWarning = !hasTarget && !isRedistribute;
+                                      return (
+                                        <span className={`text-xs font-mono ${showWarning ? 'text-amber-400' : 'text-green-400'}`}>
+                                          {isKeep
+                                            ? '→ kept as-is'
+                                            : isRedistribute
+                                            ? '→ redistributed'
+                                            : hasTarget
+                                            ? `→ ${savedMerge.reassign_to_head}`
+                                            : '⚠ No target — undo & reassign'}
+                                        </span>
+                                      );
+                                    })()
                                     ) : (consolidations[mergeKey]) ? (
                                       <select
                                         className="text-xs bg-background border border-border rounded px-1 py-0.5"
