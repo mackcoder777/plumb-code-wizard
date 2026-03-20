@@ -1380,12 +1380,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
         // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
-        const sourceGroup = smallCodeAnalysis.find(
-          (r) => r.key === `${sec}|${head}`
-        );
-        const isStandaloneNoTarget =
-          sourceGroup && sourceGroup.lines.length === 1 && !reassignTo;
-        if (isStandaloneNoTarget) return null;
+        if (!reassignTo) return null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
@@ -1419,6 +1414,19 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
 
     console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
+    const skippedCount = Object.keys(consolidations).filter(key => {
+      const t = reassignTargets[key];
+      return consolidations[key] && (!t || t === '__reassign__' || t === '__merge__');
+    }).length;
+
+    if (skippedCount > 0) {
+      toast({
+        title: `${skippedCount} ${skippedCount === 1 ? 'entry' : 'entries'} skipped`,
+        description: 'Select a reassign target or uncheck before saving.',
+        variant: 'destructive',
+      });
+    }
+
     saveMergeMutation.mutate(dedupedRows, {
       onSuccess: () => {
         if (invalidRows.length > 0) {
@@ -2999,21 +3007,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     {row.combinedHours.toFixed(1)}h
                                   </TableCell>
                                   <TableCell>
-                                    {isSaved ? (
-                                      <span
-                                        className={`text-xs font-mono ${
-                                          !(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
-                                            ? 'text-amber-400'
-                                            : 'text-green-400'
-                                        }`}
-                                      >
-                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head === '__keep__'
-                                          ? '→ kept as-is'
-                                          : (savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
-                                          ? `→ ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
-                                          : '⚠ No target — undo & reassign'}
-                                      </span>
-                                    ) : (consolidations[mergeKey]) ? (
+                                    {isSaved ? (() => {
+                                      const savedMerge = savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any;
+                                      const hasTarget = !!savedMerge?.reassign_to_head;
+                                      const isRedistribute = !!savedMerge?.redistribute_adjustments;
+                                      const isKeep = savedMerge?.reassign_to_head === '__keep__';
+                                      const showWarning = !hasTarget && !isRedistribute;
+                                      return (
+                                        <span className={`text-xs font-mono ${showWarning ? 'text-amber-400' : 'text-green-400'}`}>
+                                          {isKeep
+                                            ? '→ kept as-is'
+                                            : isRedistribute
+                                            ? '→ redistributed'
+                                            : hasTarget
+                                            ? `→ ${savedMerge.reassign_to_head}`
+                                            : '⚠ No target — undo & reassign'}
+                                        </span>
+                                      );
+                                    })()
+                                    : (consolidations[mergeKey]) ? (
                                       <select
                                         className="text-xs bg-background border border-border rounded px-1 py-0.5"
                                         value={reassignTargets[mergeKey] ?? '__reassign__'}
