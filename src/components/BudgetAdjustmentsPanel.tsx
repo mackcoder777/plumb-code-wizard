@@ -1360,6 +1360,85 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return rows;
   }, [savedMergesData, smallCodeAnalysis, calculations?.adjustedLaborSummary]);
 
+  // Stale merge detection — find saved merges whose cost_head no longer exists in live data
+  const staleMergeUpdates = useMemo(() => {
+    if (!savedMergesData?.length || !calculations.adjustedLaborSummary) return [];
+
+    const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary));
+
+    return savedMergesData
+      .filter(merge => {
+        const hasMatch = [...liveKeys].some(lk =>
+          lk.includes(merge.cost_head) && lk.startsWith(merge.sec_code)
+        );
+        return !hasMatch;
+      })
+      .map(merge => {
+        const sameSection = [...liveKeys].filter(lk =>
+          lk.startsWith(merge.sec_code) && !lk.includes(merge.cost_head)
+        );
+        const replacement = sameSection
+          .map(k => ({ key: k, hours: calculations.adjustedLaborSummary![k]?.hours ?? 0 }))
+          .sort((a, b) => b.hours - a.hours)[0];
+
+        if (!replacement) return null;
+
+        const parts = replacement.key.trim().split(/\s+/);
+        const newCostHead = parts.slice(2).join(' ');
+
+        return {
+          mergeId: merge.id,
+          secCode: merge.sec_code,
+          oldCostHead: merge.cost_head,
+          newCostHead,
+          mergeRecord: merge,
+        };
+      })
+      .filter(Boolean) as Array<{
+        mergeId: string;
+        secCode: string;
+        oldCostHead: string;
+        newCostHead: string;
+        mergeRecord: typeof savedMergesData[0];
+      }>;
+  }, [savedMergesData, calculations.adjustedLaborSummary]);
+
+  // Auto-update stale merges when detected
+  useEffect(() => {
+    if (!staleMergeUpdates.length || !projectId || projectId === 'default') return;
+    if (!savedMergesData?.length) return;
+
+    const apply = async () => {
+      const updatedEntries = savedMergesData.map(merge => {
+        const update = staleMergeUpdates.find(u => u.mergeId === merge.id);
+        return {
+          sec_code: merge.sec_code,
+          cost_head: update ? update.newCostHead : merge.cost_head,
+          reassign_to_head: merge.reassign_to_head ?? null,
+          redistribute_adjustments: (merge as any).redistribute_adjustments ?? null,
+        };
+      });
+
+      try {
+        await saveMergeMutation.mutateAsync(updatedEntries);
+
+        const summary = staleMergeUpdates
+          .map(u => `${u.oldCostHead} → ${u.newCostHead}`)
+          .join(', ');
+
+        toast({
+          title: `${staleMergeUpdates.length} saved rule${staleMergeUpdates.length > 1 ? 's' : ''} updated`,
+          description: `Merge rules updated to match new system mappings: ${summary}`,
+        });
+      } catch (e) {
+        console.warn('Failed to update stale merges', e);
+      }
+    };
+
+    apply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staleMergeUpdates.length]);
+
   // Filtered view for standalone hour threshold
   const filteredSmallCodeAnalysis = useMemo(() => {
     return smallCodeAnalysis.filter(row => {
