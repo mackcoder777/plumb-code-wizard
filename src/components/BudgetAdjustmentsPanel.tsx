@@ -1188,6 +1188,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
       }
     });
+
+    // Clean up entries with effectively zero hours after merges
+    Object.keys(result).forEach(k => {
+      if (Math.abs(result[k]?.hours ?? 0) < 0.05) delete result[k];
+    });
+
     // Reconciliation check — warn if hours were lost during merge application
     const inputHours = Object.values(calculations.adjustedLaborSummary ?? {}).reduce(
       (s: number, e: any) => s + (e.hours ?? 0),

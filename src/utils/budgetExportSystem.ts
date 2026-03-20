@@ -989,13 +989,15 @@ export function exportAuditReport(
   // Summary tab — use adjustedLaborSummary if available (matches Budget Packet)
   let laborSummaryRows: { costCode: string; description: string; hours: number; laborDollars: number; itemCount: number }[];
   if (budgetAdjustments?.adjustedLaborSummary && Object.keys(budgetAdjustments.adjustedLaborSummary).length > 0) {
-    laborSummaryRows = Object.values(budgetAdjustments.adjustedLaborSummary).map(item => ({
-      costCode: item.code,
-      description: item.description,
-      hours: item.hours,
-      laborDollars: item.dollars,
-      itemCount: 0, // not available from adjusted summary
-    }));
+    laborSummaryRows = Object.values(budgetAdjustments.adjustedLaborSummary)
+      .filter(item => Math.abs(item.hours ?? 0) >= 0.05)
+      .map(item => ({
+        costCode: item.code,
+        description: item.description,
+        hours: item.hours,
+        laborDollars: item.dollars,
+        itemCount: 0, // not available from adjusted summary
+      }));
   } else {
     laborSummaryRows = aggregateLaborByCostCode(items, floorMappings, { buildingMappings, dbFloorMappings });
   }
