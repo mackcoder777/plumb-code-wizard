@@ -551,6 +551,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: e.redistribute_adjustments ?? null,
       }));
 
+      // Deduplicate by (sec_code, cost_head) — keep last entry per key to prevent constraint violations
+      const seen = new Set<string>();
+      const dedupedRows = [...rows].reverse().filter(r => {
+        const k = `${r.sec_code}|${r.cost_head}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).reverse();
+
       // Delete existing entries for this project, then upsert in one go
       const { error: deleteError } = await supabase
         .from('project_small_code_merges')
@@ -559,10 +568,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       if (deleteError) throw new Error(`Failed to clear existing merges: ${deleteError.message}`);
 
-      if (rows.length > 0) {
+      if (dedupedRows.length > 0) {
         const { error: insertError } = await supabase
           .from('project_small_code_merges')
-          .insert(rows);
+          .insert(dedupedRows);
         if (insertError) throw new Error(`Failed to save merges: ${insertError.message}`);
       }
     },
@@ -1026,9 +1035,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     return savedMergesData
       .filter(merge => {
-        const hasMatch = [...liveKeys].some(lk =>
-          lk.includes(merge.cost_head) && lk.startsWith(merge.sec_code)
-        );
+        const hasMatch = [...liveKeys].some(lk => {
+          const parts = lk.trim().split(/\s+/);
+          const keyHead = parts[parts.length - 1];
+          const keySec = parts[0];
+          return keySec === merge.sec_code && keyHead === merge.cost_head;
+        });
         return !hasMatch;
       })
       .map(merge => {
@@ -1403,41 +1415,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return rows;
   }, [savedMergesData, smallCodeAnalysis, calculations?.adjustedLaborSummary]);
 
-  // Auto-update stale merges when detected
-  useEffect(() => {
-    if (!staleMergeUpdates.length || !projectId || projectId === 'default') return;
-    if (!savedMergesData?.length) return;
-
-    const apply = async () => {
-      const updatedEntries = savedMergesData.map(merge => {
-        const update = staleMergeUpdates.find(u => u.mergeId === merge.id);
-        return {
-          sec_code: merge.sec_code,
-          cost_head: update ? update.newCostHead : merge.cost_head,
-          reassign_to_head: merge.reassign_to_head ?? null,
-          redistribute_adjustments: (merge as any).redistribute_adjustments ?? null,
-        };
-      });
-
-      try {
-        await saveMergeMutation.mutateAsync(updatedEntries);
-
-        const summary = staleMergeUpdates
-          .map(u => `${u.oldCostHead} → ${u.newCostHead}`)
-          .join(', ');
-
-        toast({
-          title: `${staleMergeUpdates.length} saved rule${staleMergeUpdates.length > 1 ? 's' : ''} updated`,
-          description: `Merge rules updated to match new system mappings: ${summary}`,
-        });
-      } catch (e) {
-        console.warn('Failed to update stale merges', e);
-      }
-    };
-
-    apply();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staleMergeUpdates.length]);
+  // DISABLED: auto-update was too aggressive and caused duplicate key errors + data loss
+  // Stale merges are now surfaced as a warning banner for the user to handle manually
+  // useEffect(() => { ... }, [staleMergeUpdates.length]);
 
 
   // Filtered view for standalone hour threshold
@@ -2654,6 +2634,48 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         </Button>
                       </div>
                     ))}
+                </div>
+              )}
+
+              {staleMergeUpdates.filter(Boolean).length > 0 && (
+                <div className="mb-3 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                  <span className="mt-0.5 shrink-0 text-amber-500">⚠️</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-800">
+                      {staleMergeUpdates.filter(Boolean).length} saved merge{staleMergeUpdates.filter(Boolean).length > 1 ? 's' : ''} reference cost heads that no longer exist
+                    </p>
+                    <p className="mt-0.5 text-xs text-amber-700">
+                      These were likely renamed by a system mapping change:
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {staleMergeUpdates.filter(Boolean).map((u, i) => (
+                        <li key={i} className="text-xs font-mono text-amber-700">
+                          {u!.secCode} {u!.oldCostHead} → <span className="text-amber-500">not found</span>
+                          {u!.newCostHead ? ` (possible replacement: ${u!.newCostHead})` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="shrink-0 flex flex-col gap-1.5">
+                    <button
+                      onClick={async () => {
+                        for (const u of staleMergeUpdates.filter(Boolean)) {
+                          if (!u || !projectId) continue;
+                          await supabase
+                            .from('project_small_code_merges')
+                            .delete()
+                            .eq('project_id', projectId)
+                            .eq('sec_code', u.secCode)
+                            .eq('cost_head', u.oldCostHead);
+                        }
+                        queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+                        toast({ title: 'Stale merges cleared', description: 'Re-apply your merge decisions for the updated cost heads.' });
+                      }}
+                      className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
+                    >
+                      Clear stale entries
+                    </button>
+                  </div>
                 </div>
               )}
 
