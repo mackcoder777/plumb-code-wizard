@@ -2637,6 +2637,48 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 </div>
               )}
 
+              {staleMergeUpdates.filter(Boolean).length > 0 && (
+                <div className="mb-3 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                  <span className="mt-0.5 shrink-0 text-amber-500">⚠️</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-800">
+                      {staleMergeUpdates.filter(Boolean).length} saved merge{staleMergeUpdates.filter(Boolean).length > 1 ? 's' : ''} reference cost heads that no longer exist
+                    </p>
+                    <p className="mt-0.5 text-xs text-amber-700">
+                      These were likely renamed by a system mapping change:
+                    </p>
+                    <ul className="mt-1 space-y-0.5">
+                      {staleMergeUpdates.filter(Boolean).map((u, i) => (
+                        <li key={i} className="text-xs font-mono text-amber-700">
+                          {u!.secCode} {u!.oldCostHead} → <span className="text-amber-500">not found</span>
+                          {u!.newCostHead ? ` (possible replacement: ${u!.newCostHead})` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="shrink-0 flex flex-col gap-1.5">
+                    <button
+                      onClick={async () => {
+                        for (const u of staleMergeUpdates.filter(Boolean)) {
+                          if (!u || !projectId) continue;
+                          await supabase
+                            .from('project_small_code_merges')
+                            .delete()
+                            .eq('project_id', projectId)
+                            .eq('sec_code', u.secCode)
+                            .eq('cost_head', u.oldCostHead);
+                        }
+                        queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+                        toast({ title: 'Stale merges cleared', description: 'Re-apply your merge decisions for the updated cost heads.' });
+                      }}
+                      className="rounded bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
+                    >
+                      Clear stale entries
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {filteredSmallCodeAnalysis.length > 0 && (
                 <>
 
