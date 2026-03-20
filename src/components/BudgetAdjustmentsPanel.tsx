@@ -1445,6 +1445,28 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         } else {
           toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
         }
+
+        // Warn about remaining small codes that still have no merge/keep action
+        const SMALL_THRESHOLD = 8;
+        const savedKeys = new Set(dedupedRows.map(r => `${r.sec_code}|${r.cost_head}`));
+        const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
+        if (summary) {
+          const remainingSmall = Object.values(summary).filter(entry => {
+            const hrs = entry.hours ?? 0;
+            if (hrs < 0.05 || hrs >= SMALL_THRESHOLD) return false;
+            const parts = (entry.code ?? '').trim().split(/\s+/);
+            const sec = parts[0] ?? '';
+            const head = parts.slice(2).join(' ');
+            return !savedKeys.has(`${sec}|${head}`);
+          }).length;
+          if (remainingSmall > 0) {
+            toast({
+              title: `${remainingSmall} small codes still unassigned`,
+              description: `${remainingSmall} cost codes under ${SMALL_THRESHOLD}h have no action saved. Review Standalone Codes tab.`,
+              variant: 'destructive',
+            });
+          }
+        }
       },
     });
   };
