@@ -356,7 +356,7 @@ const buildRoundedDeltas = (
     const actKey = toActKeyGlobal(l.code);
     const targetVal = parseFloat(String(targets[actKey] ?? targets[l.code] ?? l.hours));
     const raw = targetVal - l.hours;
-    const rounded = parseFloat(raw.toFixed(2));
+    const rounded = Math.round(raw);
     netRounded += rounded;
     if (Math.abs(rounded) > 0.001) {
       deltas[actKey] = rounded;
@@ -2875,16 +2875,31 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             row.lines.forEach(l => { newTargets[toActKey2(l.code)] = l.hours; });
                                           } else {
                                             const actualDeficit = Math.min(deficit, totalExcess);
-                                            row.lines.forEach(l => {
-                                              if (l.hours < MIN_HOURS) {
-                                                const need = MIN_HOURS - l.hours;
-                                                newTargets[toActKey2(l.code)] = l.hours + Math.min(need, need * (actualDeficit / deficit));
-                                              } else {
-                                                const excess = l.hours - MIN_HOURS;
-                                                const contribution = actualDeficit * (excess / totalExcess);
-                                                newTargets[toActKey2(l.code)] = l.hours - contribution;
-                                              }
+                                            // Round deficit lines up to whole numbers (minimum target 8h)
+                                            const deficitLines = row.lines.filter(l => l.hours < MIN_HOURS);
+                                            const donorLines = row.lines.filter(l => l.hours >= MIN_HOURS);
+                                            deficitLines.forEach(l => {
+                                              const need = MIN_HOURS - l.hours;
+                                              const raw = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                              newTargets[toActKey2(l.code)] = Math.ceil(raw);
                                             });
+                                            // Compute how many hours were actually added after rounding
+                                            const actualAdded = deficitLines.reduce(
+                                              (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
+                                            );
+                                            // Round donor lines down to whole numbers
+                                            donorLines.forEach(l => {
+                                              const contribution = l.hours * (actualAdded / totalExcess);
+                                              newTargets[toActKey2(l.code)] = Math.floor(l.hours - contribution);
+                                            });
+                                            // Fix residual: sum of all deltas must be zero
+                                            const rebalanceNet = [...deficitLines, ...donorLines].reduce(
+                                              (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
+                                            );
+                                            if (rebalanceNet !== 0 && donorLines.length > 0) {
+                                              const largestDonor = [...donorLines].sort((a, b) => b.hours - a.hours)[0];
+                                              newTargets[toActKey2(largestDonor.code)] = Math.round(newTargets[toActKey2(largestDonor.code)] - rebalanceNet);
+                                            }
                                           }
                                           setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
                                         };
@@ -2900,9 +2915,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                                   <span className="text-muted-foreground px-1">→</span>
                                                   <input
                                                     type="number"
-                                                    step={0.5}
-                                                    value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(1))}
-                                                    placeholder={line.hours.toFixed(1)}
+                                                    step={1}
+                                                    value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(0))}
+                                                    placeholder={line.hours.toFixed(0)}
                                                     onChange={(e) => {
                                                       const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
                                                       setRedistributeAdjustments((prev) => ({
@@ -2913,7 +2928,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                                     className="w-16 bg-background border border-border rounded px-1 py-0.5 text-xs text-center"
                                                   />
                                                   <span className="font-mono w-20 text-right text-muted-foreground">
-                                                    ({delta > 0 ? '+' : ''}{delta.toFixed(1)}h)
+                                                    ({delta > 0 ? '+' : ''}{delta.toFixed(0)}h)
                                                   </span>
                                                 </div>
                                               );
@@ -2922,9 +2937,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                               {isBalanced ? (
                                                 <span className="text-xs font-semibold text-green-500">✓ Balanced</span>
                                               ) : netDelta > 0 ? (
-                                                <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(1)}h over — reduce some lines</span>
+                                                <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(0)}h over — reduce some lines</span>
                                               ) : (
-                                                <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(1)}h under — increase some lines</span>
+                                                <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(0)}h under — increase some lines</span>
                                               )}
                                               <button
                                                 type="button"
