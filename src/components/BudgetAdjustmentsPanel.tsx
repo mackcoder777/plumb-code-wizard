@@ -2875,16 +2875,31 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             row.lines.forEach(l => { newTargets[toActKey2(l.code)] = l.hours; });
                                           } else {
                                             const actualDeficit = Math.min(deficit, totalExcess);
-                                            row.lines.forEach(l => {
-                                              if (l.hours < MIN_HOURS) {
-                                                const need = MIN_HOURS - l.hours;
-                                                newTargets[toActKey2(l.code)] = l.hours + Math.min(need, need * (actualDeficit / deficit));
-                                              } else {
-                                                const excess = l.hours - MIN_HOURS;
-                                                const contribution = actualDeficit * (excess / totalExcess);
-                                                newTargets[toActKey2(l.code)] = l.hours - contribution;
-                                              }
+                                            // Round deficit lines up to whole numbers (minimum target 8h)
+                                            const deficitLines = row.lines.filter(l => l.hours < MIN_HOURS);
+                                            const donorLines = row.lines.filter(l => l.hours >= MIN_HOURS);
+                                            deficitLines.forEach(l => {
+                                              const need = MIN_HOURS - l.hours;
+                                              const raw = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                              newTargets[toActKey2(l.code)] = Math.ceil(raw);
                                             });
+                                            // Compute how many hours were actually added after rounding
+                                            const actualAdded = deficitLines.reduce(
+                                              (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
+                                            );
+                                            // Round donor lines down to whole numbers
+                                            donorLines.forEach(l => {
+                                              const contribution = l.hours * (actualAdded / totalExcess);
+                                              newTargets[toActKey2(l.code)] = Math.floor(l.hours - contribution);
+                                            });
+                                            // Fix residual: sum of all deltas must be zero
+                                            const rebalanceNet = [...deficitLines, ...donorLines].reduce(
+                                              (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
+                                            );
+                                            if (rebalanceNet !== 0 && donorLines.length > 0) {
+                                              const largestDonor = [...donorLines].sort((a, b) => b.hours - a.hours)[0];
+                                              newTargets[toActKey2(largestDonor.code)] = Math.round(newTargets[toActKey2(largestDonor.code)] - rebalanceNet);
+                                            }
                                           }
                                           setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
                                         };
