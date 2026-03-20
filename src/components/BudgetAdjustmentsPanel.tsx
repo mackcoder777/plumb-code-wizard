@@ -1018,6 +1018,49 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return { fabLrcnAmount, breakdown };
   }, [calculations.generatedFabCodes, fabRates, shopRate]);
 
+  // Stale merge detection — find saved merges whose cost_head no longer exists in live data
+  const staleMergeUpdates = useMemo(() => {
+    if (!savedMergesData?.length || !calculations.adjustedLaborSummary) return [];
+
+    const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary));
+
+    return savedMergesData
+      .filter(merge => {
+        const hasMatch = [...liveKeys].some(lk =>
+          lk.includes(merge.cost_head) && lk.startsWith(merge.sec_code)
+        );
+        return !hasMatch;
+      })
+      .map(merge => {
+        const sameSection = [...liveKeys].filter(lk =>
+          lk.startsWith(merge.sec_code) && !lk.includes(merge.cost_head)
+        );
+        const replacement = sameSection
+          .map(k => ({ key: k, hours: calculations.adjustedLaborSummary![k]?.hours ?? 0 }))
+          .sort((a, b) => b.hours - a.hours)[0];
+
+        if (!replacement) return null;
+
+        const parts = replacement.key.trim().split(/\s+/);
+        const newCostHead = parts.slice(2).join(' ');
+
+        return {
+          mergeId: merge.id,
+          secCode: merge.sec_code,
+          oldCostHead: merge.cost_head,
+          newCostHead,
+          mergeRecord: merge,
+        };
+      })
+      .filter(Boolean) as Array<{
+        mergeId: string;
+        secCode: string;
+        oldCostHead: string;
+        newCostHead: string;
+        mergeRecord: typeof savedMergesData[0];
+      }>;
+  }, [savedMergesData, calculations.adjustedLaborSummary]);
+
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
     const summary = calculations.adjustedLaborSummary;
