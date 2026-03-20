@@ -2937,9 +2937,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                               {isBalanced ? (
                                                 <span className="text-xs font-semibold text-green-500">✓ Balanced</span>
                                               ) : netDelta > 0 ? (
-                                                <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(1)}h over — reduce some lines</span>
+                                                <span className="text-xs font-semibold text-amber-400">+{netDelta.toFixed(0)}h over — reduce some lines</span>
                                               ) : (
-                                                <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(1)}h under — increase some lines</span>
+                                                <span className="text-xs font-semibold text-amber-400">{netDelta.toFixed(0)}h under — increase some lines</span>
                                               )}
                                               <button
                                                 type="button"
