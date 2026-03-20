@@ -356,7 +356,7 @@ const buildRoundedDeltas = (
     const actKey = toActKeyGlobal(l.code);
     const targetVal = parseFloat(String(targets[actKey] ?? targets[l.code] ?? l.hours));
     const raw = targetVal - l.hours;
-    const rounded = parseFloat(raw.toFixed(2));
+    const rounded = Math.round(raw);
     netRounded += rounded;
     if (Math.abs(rounded) > 0.001) {
       deltas[actKey] = rounded;
