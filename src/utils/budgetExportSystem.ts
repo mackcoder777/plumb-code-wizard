@@ -340,6 +340,7 @@ export function exportBudgetPacket(
   if (budgetAdjustments && Object.keys(budgetAdjustments.adjustedLaborSummary || {}).length > 0) {
     // USE BUDGET BUILDER ADJUSTMENTS (includes FAB codes, strips already applied)
     laborData = Object.values(budgetAdjustments.adjustedLaborSummary)
+      .filter(item => Math.abs(item.hours ?? 0) >= 0.05)
       .map(item => ({
         code: item.code,
         description: item.description,
