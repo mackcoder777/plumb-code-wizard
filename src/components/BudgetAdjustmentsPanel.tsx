@@ -2915,9 +2915,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                                   <span className="text-muted-foreground px-1">→</span>
                                                   <input
                                                     type="number"
-                                                    step={0.5}
-                                                    value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(1))}
-                                                    placeholder={line.hours.toFixed(1)}
+                                                    step={1}
+                                                    value={target === line.hours && !(mergeKey in targets) ? '' : parseFloat(target.toFixed(0))}
+                                                    placeholder={line.hours.toFixed(0)}
                                                     onChange={(e) => {
                                                       const val = e.target.value === '' ? line.hours : parseFloat(e.target.value) || 0;
                                                       setRedistributeAdjustments((prev) => ({
