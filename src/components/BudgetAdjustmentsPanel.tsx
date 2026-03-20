@@ -3025,7 +3025,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         </span>
                                       );
                                     })()
-                                    ) : (consolidations[mergeKey]) ? (
+                                    : (consolidations[mergeKey]) ? (
                                       <select
                                         className="text-xs bg-background border border-border rounded px-1 py-0.5"
                                         value={reassignTargets[mergeKey] ?? '__reassign__'}
