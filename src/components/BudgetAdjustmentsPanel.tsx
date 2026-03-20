@@ -1414,6 +1414,19 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
 
     console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
+    const skippedCount = Object.keys(consolidations).filter(key => {
+      const t = reassignTargets[key];
+      return consolidations[key] && (!t || t === '__reassign__' || t === '__merge__');
+    }).length;
+
+    if (skippedCount > 0) {
+      toast({
+        title: `${skippedCount} ${skippedCount === 1 ? 'entry' : 'entries'} skipped`,
+        description: 'Select a reassign target or uncheck before saving.',
+        variant: 'destructive',
+      });
+    }
+
     saveMergeMutation.mutate(dedupedRows, {
       onSuccess: () => {
         if (invalidRows.length > 0) {
