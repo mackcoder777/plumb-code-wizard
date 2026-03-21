@@ -1474,7 +1474,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
         // __keep__ passes through as reassign_to_head = '__keep__'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
-        if (!reassignTo) return null;
+        // Only block __reassign__ entries with no target selected — merges have null reassignTo by design
+        if (!reassignTo && target === '__reassign__') return null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
@@ -1510,7 +1511,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
     const skippedCount = Object.keys(consolidations).filter(key => {
       const t = reassignTargets[key];
-      return consolidations[key] && (!t || t === '__reassign__' || t === '__merge__');
+      // Only count as skipped: user explicitly chose reassign but didn't pick a target
+      return consolidations[key] && t === '__reassign__';
     }).length;
 
     if (skippedCount > 0) {
