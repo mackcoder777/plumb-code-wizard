@@ -2868,7 +2868,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     <div>
                                       <select
                                         className="text-xs bg-background border border-border rounded px-1 py-0.5"
-                                        value={reassignTargets[mergeKey] ?? '__merge__'}
+                                        value={reassignTargets[mergeKey] ?? (() => {
+                                          const saved = savedMergesData?.find(
+                                            m => (m.sec_code || '').trim() === (row.sec || '').trim() &&
+                                                 (m.cost_head || '').trim() === (row.head || '').trim()
+                                          );
+                                          return saved ? getSavedAction(saved) : '__merge__';
+                                        })()}
                                         onChange={(e) => {
                                           const newVal = e.target.value;
                                           setReassignTargets((prev) => ({ ...prev, [mergeKey]: newVal }));
