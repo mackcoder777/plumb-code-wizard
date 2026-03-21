@@ -3261,11 +3261,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              className={`h-5 px-1.5 text-xs ${saveMergeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                              disabled={saveMergeMutation.isPending}
+                                              className={`h-5 px-1.5 text-xs ${undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                              disabled={undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}`}
                                               onClick={() => handleUndoMerge(row.sec, row.head)}
                                             >
-                                              <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                              <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'Undoing...' : 'Undo'}
                                             </Button>
                                           </div>
                                         );
