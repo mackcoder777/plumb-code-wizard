@@ -377,23 +377,30 @@ const EnhancedCostCodeManager = () => {
   
   // Project state
   const [currentProject, setCurrentProject] = useState<EstimateProject | null>(null);
+  const [pendingProjectId] = useState<string | null>(
+    () => localStorage.getItem('lastSelectedProjectId')
+  );
   const { data: projects = [] } = useEstimateProjects();
 
   // Persist selected project to localStorage
   useEffect(() => {
     if (currentProject?.id) {
       localStorage.setItem('lastSelectedProjectId', currentProject.id);
+      console.log('[Persist] Saved project to localStorage:', currentProject.id);
     }
   }, [currentProject?.id]);
 
   // Restore project selection on mount / after auth refresh
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
-    const lastId = localStorage.getItem('lastSelectedProjectId');
+    const lastId = pendingProjectId || localStorage.getItem('lastSelectedProjectId');
     if (!lastId) return;
     const match = projects.find(p => p.id === lastId);
-    if (match) setCurrentProject(match);
-  }, [projects, currentProject]);
+    if (match) {
+      console.log('[Restore] Auto-selecting project from localStorage:', match.name);
+      setCurrentProject(match);
+    }
+  }, [projects, currentProject, pendingProjectId]);
   
   // Estimate data
   const [estimateData, setEstimateData] = useState([]);
@@ -484,8 +491,9 @@ const EnhancedCostCodeManager = () => {
   const [bidLaborRateInput, setBidLaborRateInput] = useState('85'); // String for input
 
   // Database hooks for persistence
-  const { data: savedMappings = [] } = useSystemMappings(currentProject?.id || null);
-  const { data: savedItems = [], isLoading: itemsLoading } = useEstimateItems(currentProject?.id || null);
+  const activeProjectId = currentProject?.id || pendingProjectId;
+  const { data: savedMappings = [] } = useSystemMappings(activeProjectId || null);
+  const { data: savedItems = [], isLoading: itemsLoading } = useEstimateItems(activeProjectId || null);
   const saveMapping = useSaveMapping();
   const verifyMappingMutation = useVerifyMapping();
   const batchSaveMappings = useBatchSaveMappings();
@@ -500,16 +508,16 @@ const EnhancedCostCodeManager = () => {
   const { data: dbCostCodes = [] } = useCostCodes();
   
   // Fetch floor-to-section mappings for labor code section derivation
-  const { data: dbFloorMappings = [] } = useFloorSectionMappings(currentProject?.id || null);
+  const { data: dbFloorMappings = [] } = useFloorSectionMappings(activeProjectId || null);
   
   // Fetch system-to-activity mappings for labor code activity segment
-  const { data: dbActivityMappings = [] } = useSystemActivityMappings(currentProject?.id || null);
+  const { data: dbActivityMappings = [] } = useSystemActivityMappings(activeProjectId || null);
   
   // Fetch category labor mappings for priority-based code assignment
-  const { data: dbCategoryMappings = [] } = useCategoryMappings(currentProject?.id || null);
+  const { data: dbCategoryMappings = [] } = useCategoryMappings(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
-  const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(currentProject?.id || null);
+  const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
   
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
