@@ -3007,14 +3007,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           ? `→ ${row.sec} * ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
                                           : `${row.sec} 0000 ${row.head}`}
                                       </span>
-                                      <Button
+                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className={`h-5 px-1.5 text-xs ${saveMergeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        disabled={saveMergeMutation.isPending}
+                                        className={`h-5 px-1.5 text-xs ${undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        disabled={undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}`}
                                         onClick={() => handleUndoMerge(row.sec, row.head)}
                                       >
-                                        <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                        <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'Undoing...' : 'Undo'}
                                       </Button>
                                     </div>
                                   ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
