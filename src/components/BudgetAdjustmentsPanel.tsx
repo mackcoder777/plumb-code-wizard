@@ -3019,24 +3019,58 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   )}
                                 </TableCell>
                                 <TableCell className="font-mono text-xs">
-                                  {isSaved ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-green-400">
-                                        {(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any)?.reassign_to_head
-                                          ? `→ ${row.sec} * ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
-                                          : `${row.sec} 0000 ${row.head}`}
-                                      </span>
-                                       <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className={`h-5 px-1.5 text-xs ${undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        disabled={undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}`}
-                                        onClick={() => handleUndoMerge(row.sec, row.head)}
-                                      >
-                                        <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'Undoing...' : 'Undo'}
-                                      </Button>
-                                    </div>
-                                  ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
+                                  {isSaved ? (() => {
+                                    const savedMerge = savedMergesData?.find(
+                                      m => (m.sec_code || '').trim() === (row.sec || '').trim() &&
+                                           (m.cost_head || '').trim() === (row.head || '').trim()
+                                    );
+                                    const action = savedMerge ? getSavedAction(savedMerge) : '__merge__';
+                                    const isRedistribute = action === '__redistribute__';
+                                    const isKeep = action === '__keep__';
+                                    const isReassign = action !== '__merge__' && !isRedistribute && !isKeep;
+
+                                    return (
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-green-400 text-sm font-medium">
+                                          {isKeep
+                                            ? '↔ Kept as-is'
+                                            : isRedistribute
+                                            ? `⇄ Redistribute — ${(row.sec || '').trim()} 0000 ${(row.head || '').trim()}`
+                                            : isReassign
+                                            ? `→ Reassign to ${(row.sec || '').trim()} ${action}`
+                                            : `⊕ Merge — ${(row.sec || '').trim()} 0000 ${(row.head || '').trim()}`}
+                                        </span>
+                                        {isRedistribute && savedMerge?.redistribute_adjustments && (() => {
+                                          const adjustments = savedMerge.redistribute_adjustments as Record<string, number>;
+                                          return (
+                                            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                              {Object.entries(adjustments).map(([act, delta]) => (
+                                                <span
+                                                  key={act}
+                                                  className={`text-xs font-mono ${
+                                                    (delta as number) > 0 ? 'text-green-400' : (delta as number) < 0 ? 'text-red-400' : 'text-muted-foreground'
+                                                  }`}
+                                                >
+                                                  {act}: {(delta as number) > 0 ? '+' : ''}{delta as number}h
+                                                </span>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
+                                        <button
+                                          onClick={() => handleUndoMerge(row.sec, row.head)}
+                                          disabled={undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}`}
+                                          className={cn(
+                                            'ml-1 flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors',
+                                            undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` && 'opacity-50 cursor-not-allowed'
+                                          )}
+                                        >
+                                          <Undo2 className="h-3 w-3" />
+                                          {undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'Undoing...' : 'Undo'}
+                                        </button>
+                                      </div>
+                                    );
+                                  })() : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
                                     const targets = redistributeAdjustments[mergeKey] ?? {};
                                     const toActKey3 = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
                                     const getTarget = (line: typeof row.lines[0]) => targets[toActKey3(line.code)] ?? targets[line.code] ?? line.hours;
