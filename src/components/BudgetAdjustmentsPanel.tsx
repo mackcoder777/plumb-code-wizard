@@ -1561,6 +1561,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
   };
 
+  const getSavedAction = (merge: { redistribute_adjustments?: unknown; reassign_to_head?: string | null }) => {
+    if (
+      merge.redistribute_adjustments &&
+      typeof merge.redistribute_adjustments === 'object' &&
+      Object.keys(merge.redistribute_adjustments as object).length > 0
+    ) return '__redistribute__';
+    if (merge.reassign_to_head === '__keep__') return '__keep__';
+    if (merge.reassign_to_head && merge.reassign_to_head !== '__keep__') return merge.reassign_to_head;
+    return '__merge__';
+  };
+
   const handleUndoMerge = async (sec: string, head: string) => {
     const targetSec = (sec || '').trim();
     const targetHead = (head || '').trim();
