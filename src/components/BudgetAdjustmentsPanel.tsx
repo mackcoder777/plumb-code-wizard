@@ -513,6 +513,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
 const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
+const [undoingKey, setUndoingKey] = useState<string | null>(null);
 const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
   const shiftKeyRef = useRef<boolean>(false);
@@ -1559,28 +1560,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   const handleUndoMerge = async (sec: string, head: string) => {
-    console.log('[Undo] Attempting to undo:', {
-      sec,
-      head,
-      savedCount: savedMergesData?.length,
-      savedKeys: savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`),
-    });
-
     const targetSec = (sec || '').trim();
     const targetHead = (head || '').trim();
+    const key = `${targetSec}|${targetHead}`;
 
-    const remaining = (savedMergesData ?? []).filter(m => {
-      const mSec = (m.sec_code || '').trim();
-      const mHead = (m.cost_head || '').trim();
-      return !(mSec === targetSec && mHead === targetHead);
-    });
+    if (!projectId || projectId === 'default') {
+      toast({
+        title: 'No project selected',
+        description: 'Select a project before undoing merges.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    console.log('[Undo] Remaining after filter:', remaining.length,
-      'removed:', (savedMergesData?.length ?? 0) - remaining.length);
+    console.log('[Undo] Direct delete:', { projectId, targetSec, targetHead });
+    setUndoingKey(key);
 
-    // If filter didn't match anything, fall back to direct DB delete
-    if (remaining.length === (savedMergesData ?? []).length) {
-      console.warn(`[Undo] Filter matched nothing for ${targetSec}|${targetHead} — trying direct DB delete`);
+    try {
       const { error } = await supabase
         .from('project_small_code_merges')
         .delete()
@@ -1589,7 +1585,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .eq('cost_head', targetHead);
 
       if (error) {
-        console.error('[Undo] Direct delete failed:', error);
+        console.error('[Undo] Delete failed:', error);
         toast({
           title: 'Undo failed',
           description: error.message,
@@ -1599,33 +1595,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
         toast({
           title: 'Merge undone',
-          description: `${targetSec} ${targetHead} has been restored.`,
+          description: `${targetSec} ${targetHead} restored.`,
         });
       }
-      return;
-    }
-
-    // Normal path — re-save without the undone entry
-    const mappedRemaining = remaining.map(m => ({
-      sec_code: m.sec_code,
-      cost_head: m.cost_head,
-      reassign_to_head: (m as any).reassign_to_head ?? null,
-      redistribute_adjustments: (m as any).redistribute_adjustments ?? null,
-    }));
-
-    try {
-      await saveMergeMutation.mutateAsync(mappedRemaining);
-      toast({
-        title: 'Merge undone',
-        description: `${targetSec} ${targetHead} has been restored.`,
-      });
-    } catch (err) {
-      console.error('[Undo] Save after filter failed:', err);
-      toast({
-        title: 'Undo failed',
-        description: err instanceof Error ? err.message : 'Unknown error',
-        variant: 'destructive',
-      });
+    } finally {
+      setUndoingKey(null);
     }
   };
 
@@ -2680,11 +2654,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         <Button
                           variant="ghost"
                           size="sm"
-                          className={`h-6 px-2 text-xs ${saveMergeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          disabled={saveMergeMutation.isPending}
+                          className={`h-6 px-2 text-xs ${undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}`}
                           onClick={() => handleUndoMerge(m.sec_code, m.cost_head)}
                         >
-                          <Undo2 className="h-3 w-3 mr-1" /> Undo
+                          <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}` ? 'Undoing...' : 'Undo'}
                         </Button>
                       </div>
                     ))}
@@ -3033,14 +3007,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           ? `→ ${row.sec} * ${(savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any).reassign_to_head}`
                                           : `${row.sec} 0000 ${row.head}`}
                                       </span>
-                                      <Button
+                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className={`h-5 px-1.5 text-xs ${saveMergeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        disabled={saveMergeMutation.isPending}
+                                        className={`h-5 px-1.5 text-xs ${undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        disabled={undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}`}
                                         onClick={() => handleUndoMerge(row.sec, row.head)}
                                       >
-                                        <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                        <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'Undoing...' : 'Undo'}
                                       </Button>
                                     </div>
                                   ) : consolidations[mergeKey] && reassignTargets[mergeKey] === '__redistribute__' ? (() => {
@@ -3287,11 +3261,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              className={`h-5 px-1.5 text-xs ${saveMergeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                              disabled={saveMergeMutation.isPending}
+                                              className={`h-5 px-1.5 text-xs ${undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                              disabled={undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}`}
                                               onClick={() => handleUndoMerge(row.sec, row.head)}
                                             >
-                                              <Undo2 className="h-3 w-3 mr-1" /> Undo
+                                              <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(row.sec || '').trim()}|${(row.head || '').trim()}` ? 'Undoing...' : 'Undo'}
                                             </Button>
                                           </div>
                                         );
