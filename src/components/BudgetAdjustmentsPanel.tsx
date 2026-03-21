@@ -1511,7 +1511,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
     const skippedCount = Object.keys(consolidations).filter(key => {
       const t = reassignTargets[key];
-      return consolidations[key] && (!t || t === '__reassign__' || t === '__merge__');
+      // Only count as skipped: user explicitly chose reassign but didn't pick a target
+      return consolidations[key] && t === '__reassign__';
     }).length;
 
     if (skippedCount > 0) {
