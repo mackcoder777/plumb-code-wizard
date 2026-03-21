@@ -3287,7 +3287,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              className="h-5 px-1.5 text-xs"
+                                              className={`h-5 px-1.5 text-xs ${saveMergeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                              disabled={saveMergeMutation.isPending}
                                               onClick={() => handleUndoMerge(row.sec, row.head)}
                                             >
                                               <Undo2 className="h-3 w-3 mr-1" /> Undo
