@@ -998,6 +998,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     const totalMaterialWithTax = totalMaterialPreTax + totalMaterialTax;
 
+    // Round at source using Largest Remainder Method.
+    // Must happen before small code thresholds, merge detection, and export
+    // so every downstream consumer sees only whole numbers.
+    const summaryKeys = Object.keys(adjustedLaborSummary);
+    if (summaryKeys.length > 0) {
+      const rawHours = summaryKeys.map(k => adjustedLaborSummary[k].hours ?? 0);
+      const roundedHours = roundHoursPreservingTotal(rawHours);
+      summaryKeys.forEach((k, i) => {
+        adjustedLaborSummary[k] = { ...adjustedLaborSummary[k], hours: roundedHours[i] };
+      });
+    }
+
     return {
       foremanBonusHours,
       foremanBonusDollars,

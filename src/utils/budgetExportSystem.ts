@@ -168,6 +168,26 @@ function getLaborCodeFromCategory(reportCat: string | undefined, categoryMapping
  * @param floorMappings - Optional floor-to-section mappings to derive section from floor
  * @param categoryMappings - Optional category-to-labor-code mappings (takes priority over item's costCode)
  */
+/**
+ * Rounds fractional hours to whole numbers while preserving the exact integer
+ * total (Largest Remainder Method). Always round the full set together —
+ * never round individual lines in isolation.
+ */
+export function roundHoursPreservingTotal(values: number[]): number[] {
+  if (values.length === 0) return [];
+  const target = Math.round(values.reduce((s, v) => s + v, 0));
+  const floored = values.map(v => Math.floor(v));
+  const remainders = values.map((v, i) => ({ i, r: v - floored[i] }));
+  const distributed = floored.reduce((s, v) => s + v, 0);
+  const leftover = target - distributed;
+  remainders.sort((a, b) => b.r - a.r || a.i - b.i);
+  const result = [...floored];
+  for (let k = 0; k < leftover && k < remainders.length; k++) {
+    result[remainders[k].i] += 1;
+  }
+  return result;
+}
+
 export function aggregateLaborByCostCode(
   items: ExportEstimateItem[],
   floorMappings: FloorSectionMap = {},
