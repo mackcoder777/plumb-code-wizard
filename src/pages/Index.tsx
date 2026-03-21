@@ -2057,6 +2057,7 @@ const EnhancedCostCodeManager = () => {
           onSelectProject={(project) => {
             setCurrentProject(project);
             if (!project) {
+              localStorage.removeItem('lastSelectedProjectId');
               // Clear data when no project selected
               setEstimateData([]);
               setFilteredData([]);
