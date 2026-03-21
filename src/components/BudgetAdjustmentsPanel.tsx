@@ -1560,28 +1560,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   const handleUndoMerge = async (sec: string, head: string) => {
-    console.log('[Undo] Attempting to undo:', {
-      sec,
-      head,
-      savedCount: savedMergesData?.length,
-      savedKeys: savedMergesData?.map(m => `${m.sec_code}|${m.cost_head}`),
-    });
-
     const targetSec = (sec || '').trim();
     const targetHead = (head || '').trim();
+    const key = `${targetSec}|${targetHead}`;
 
-    const remaining = (savedMergesData ?? []).filter(m => {
-      const mSec = (m.sec_code || '').trim();
-      const mHead = (m.cost_head || '').trim();
-      return !(mSec === targetSec && mHead === targetHead);
-    });
+    if (!projectId || projectId === 'default') {
+      toast({
+        title: 'No project selected',
+        description: 'Select a project before undoing merges.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    console.log('[Undo] Remaining after filter:', remaining.length,
-      'removed:', (savedMergesData?.length ?? 0) - remaining.length);
+    console.log('[Undo] Direct delete:', { projectId, targetSec, targetHead });
+    setUndoingKey(key);
 
-    // If filter didn't match anything, fall back to direct DB delete
-    if (remaining.length === (savedMergesData ?? []).length) {
-      console.warn(`[Undo] Filter matched nothing for ${targetSec}|${targetHead} — trying direct DB delete`);
+    try {
       const { error } = await supabase
         .from('project_small_code_merges')
         .delete()
@@ -1590,7 +1585,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .eq('cost_head', targetHead);
 
       if (error) {
-        console.error('[Undo] Direct delete failed:', error);
+        console.error('[Undo] Delete failed:', error);
         toast({
           title: 'Undo failed',
           description: error.message,
@@ -1600,33 +1595,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
         toast({
           title: 'Merge undone',
-          description: `${targetSec} ${targetHead} has been restored.`,
+          description: `${targetSec} ${targetHead} restored.`,
         });
       }
-      return;
-    }
-
-    // Normal path — re-save without the undone entry
-    const mappedRemaining = remaining.map(m => ({
-      sec_code: m.sec_code,
-      cost_head: m.cost_head,
-      reassign_to_head: (m as any).reassign_to_head ?? null,
-      redistribute_adjustments: (m as any).redistribute_adjustments ?? null,
-    }));
-
-    try {
-      await saveMergeMutation.mutateAsync(mappedRemaining);
-      toast({
-        title: 'Merge undone',
-        description: `${targetSec} ${targetHead} has been restored.`,
-      });
-    } catch (err) {
-      console.error('[Undo] Save after filter failed:', err);
-      toast({
-        title: 'Undo failed',
-        description: err instanceof Error ? err.message : 'Unknown error',
-        variant: 'destructive',
-      });
+    } finally {
+      setUndoingKey(null);
     }
   };
 
