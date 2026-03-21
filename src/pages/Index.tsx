@@ -376,6 +376,23 @@ const EnhancedCostCodeManager = () => {
   
   // Project state
   const [currentProject, setCurrentProject] = useState<EstimateProject | null>(null);
+  const { data: projects = [] } = useEstimateProjects();
+
+  // Persist selected project to localStorage
+  useEffect(() => {
+    if (currentProject?.id) {
+      localStorage.setItem('lastSelectedProjectId', currentProject.id);
+    }
+  }, [currentProject?.id]);
+
+  // Restore project selection on mount / after auth refresh
+  useEffect(() => {
+    if (currentProject || projects.length === 0) return;
+    const lastId = localStorage.getItem('lastSelectedProjectId');
+    if (!lastId) return;
+    const match = projects.find(p => p.id === lastId);
+    if (match) setCurrentProject(match);
+  }, [projects, currentProject]);
   
   // Estimate data
   const [estimateData, setEstimateData] = useState([]);
