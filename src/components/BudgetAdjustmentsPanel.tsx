@@ -1479,12 +1479,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       return !hasLiveHours;
     });
 
-    if (toDelete.length === 0) return;
+    // Also clean up null/null rows that aren't valid merge outputs
+    const nullNullOrphans = savedMergesData.filter(m => {
+      if (m.reassign_to_head !== null || m.redistribute_adjustments !== null) return false;
+      const sec = (m.sec_code || '').trim();
+      const head = (m.cost_head || '').trim();
+      // Valid merge = a 0000 key for this sec+head exists in final summary
+      const mergeTargetKey = `${sec} 0000 ${head}`;
+      return !finalLaborSummary[mergeTargetKey];
+    });
+
+    const allToDelete = [...toDelete, ...nullNullOrphans];
+    // Deduplicate by id
+    const uniqueToDelete = allToDelete.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+
+    if (uniqueToDelete.length === 0) return;
 
     cleanupRanRef.current = true;
 
     const cleanup = async () => {
-      const ids = toDelete.map(m => m.id);
+      const ids = uniqueToDelete.map(m => m.id);
       const { error } = await supabase
         .from('project_small_code_merges')
         .delete()
@@ -1498,8 +1512,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
       toast({
-        title: `Cleaned up ${toDelete.length} orphaned merge${toDelete.length > 1 ? 's' : ''}`,
-        description: `Removed saved rules for folded sections: ${[...new Set(toDelete.map(m => m.sec_code))].join(', ')}`,
+        title: `Cleaned up ${uniqueToDelete.length} orphaned merge${uniqueToDelete.length > 1 ? 's' : ''}`,
+        description: `Removed saved rules for folded/orphaned sections: ${[...new Set(uniqueToDelete.map(m => m.sec_code))].join(', ')}`,
       });
     };
 
