@@ -386,20 +386,21 @@ const fixResidual = (
 };
 // ─────────────────────────────────────────────────────────────
 
-// Primary mapping — first entry is preferred, subsequent entries are fallbacks in order
 const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
-  BGWT: ['WATR'],
-  BGSD: ['STRM'],
-  BGWV: ['SNWV'],
-  BGNG: ['NGAS'],
-  BGTP: ['TRAP', 'WATR'],
-  BGAW: ['AWST', 'SNWV'],
-  BGCN: ['COND', 'WATR'],
-  BGGW: ['GRWV', 'SNWV'],
-  BGPD: ['PMPD'],
-  BGCM: ['COMA'],
-  INDR: ['SNWV'],
-  TRAP: ['WATR'],
+  BGWT: ['DWTR', 'WATR'],        // Below Grade Water → Domestic Water, fallback WATR
+  BGSD: ['STRM'],                 // Below Grade Storm → Storm Drain
+  BGWV: ['SNWV'],                 // Below Grade Waste & Vent → Sanitary Waste & Vent
+  BGNG: ['NGAS'],                 // Below Grade Gas → Natural Gas
+  BGTP: ['TRAP', 'WATR'],         // Below Grade Trap Primers → Trap, fallback WATR
+  BGAW: ['AWST', 'SNWV'],         // Below Grade Acid Waste → Acid Waste, fallback SNWV
+  BGCN: ['COND', 'DWTR', 'WATR'], // Below Grade Condensate → Cond, fallback DWTR/WATR
+  BGGW: ['GRWV', 'SNWV'],         // Below Grade Grease Waste → Grease, fallback SNWV
+  BGPD: ['PMPD'],                 // Below Grade Pumped Discharge → PMPD (dynamic fallback)
+  BGCM: ['COMA'],                 // Below Grade Compressed Air → Compressed Air
+  INDR: ['SNWV'],                 // Indoor drain → Sanitary Waste & Vent
+  TRAP: ['WATR', 'DWTR'],         // Standalone Trap → WATR, fallback DWTR
+  COND: ['DWTR', 'WATR'],         // Condensate → Domestic Water, fallback WATR
+  AWST: ['SNWV'],                 // Acid Waste → Sanitary Waste & Vent
 };
 
 // These sections are 100% zone-resolved to building sections — never user-intended as standalone
