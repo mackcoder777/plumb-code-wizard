@@ -35,6 +35,8 @@ interface SystemCardProps {
     subcategory?: string;
     units?: string;
   }>;
+  /** When set, shows a warning that the auto-pattern would assign a different code */
+  autoPatternConflict?: string;
 }
 
 const SystemCardComponent: React.FC<SystemCardProps> = ({
