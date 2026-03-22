@@ -615,12 +615,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
-      setConsolidations({});
-      setReassignTargets({});
-      setRedistributeAdjustments({});
-      setManuallyOverridden(new Set());
-      // Toast is handled per-callsite in .mutate({ onSuccess })
+      // State clearing moved to callsite onSuccess — after refetch completes
+      // to prevent the "flash of unsaved" between state clear and cache refresh
     },
     onError: (error: Error) => {
       console.error('Save merge failed:', error);
