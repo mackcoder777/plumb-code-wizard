@@ -1119,6 +1119,59 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }>;
   }, [savedMergesData, calculations.adjustedLaborSummary]);
 
+  // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
+  const cleanupRanRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !savedMergesData?.length ||
+      !finalLaborSummary ||
+      !projectId ||
+      projectId === 'default' ||
+      cleanupRanRef.current
+    ) return;
+
+    const fallbackMerges = savedMergesData.filter(m =>
+      FALLBACK_SECTIONS.has((m.sec_code || '').trim().toUpperCase())
+    );
+
+    if (fallbackMerges.length === 0) return;
+
+    const toDelete = fallbackMerges.filter(merge => {
+      const sec = (merge.sec_code || '').trim();
+      const hasLiveHours = Object.keys(finalLaborSummary).some(k =>
+        k.trim().startsWith(sec) && (finalLaborSummary[k].hours ?? 0) > 0
+      );
+      return !hasLiveHours;
+    });
+
+    if (toDelete.length === 0) return;
+
+    cleanupRanRef.current = true;
+
+    const cleanup = async () => {
+      const ids = toDelete.map(m => m.id);
+      const { error } = await supabase
+        .from('project_small_code_merges')
+        .delete()
+        .in('id', ids);
+
+      if (error) {
+        console.error('[AutoCleanup] Failed to delete orphaned merges:', error);
+        cleanupRanRef.current = false;
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+      toast({
+        title: `Cleaned up ${toDelete.length} orphaned merge${toDelete.length > 1 ? 's' : ''}`,
+        description: `Removed saved rules for folded sections: ${[...new Set(toDelete.map(m => m.sec_code))].join(', ')}`,
+      });
+    };
+
+    cleanup();
+  }, [savedMergesData, finalLaborSummary, projectId]);
+
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
     const summary = calculations.adjustedLaborSummary;
