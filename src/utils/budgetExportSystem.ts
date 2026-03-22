@@ -1062,7 +1062,7 @@ export function exportAuditReport(
           ? 'Kept as-is'
           : `${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`;
         const targetEntry = merge.reassign_to_head !== '__keep__' ? adjSummary[`${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`] : null;
-        finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
+        finalHours = targetEntry ? String(Math.round(targetEntry.hours)) : '';
       } else if (merge.redistribute_adjustments && Object.keys(merge.redistribute_adjustments).length > 0) {
         actionType = 'Redistribute';
         const redist = merge.redistribute_adjustments;
