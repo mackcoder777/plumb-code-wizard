@@ -326,6 +326,8 @@ interface BudgetAdjustmentsPanelProps {
   bidLaborRate: number;
   projectId?: string;
   onAdjustmentsChange: (adjustments: BudgetAdjustments) => void;
+  estimateData?: EstimateItem[];
+  systemMappings?: Array<{ system: string; laborCode?: string }>;
 }
 
 const FAB_SECTION = 'FP';
