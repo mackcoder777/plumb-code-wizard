@@ -323,12 +323,20 @@ const STANDARD_COST_CODES = {
 // Default pattern-based mappings
 const DEFAULT_COST_HEAD_MAPPING = {
   'SNWV': {
-    patterns: [/^sanitary/i, /waste.*vent/i, /^dwv$/i, /soil/i, /^vent$/i],
+    patterns: [
+      /^sanitary/i, /waste.*vent/i, /^dwv$/i, /soil/i, /^vent$/i,
+      /^waste$/i, /^bg\s+waste/i, /^waste\s+abs/i, /acid.*waste/i,
+      /trap.*primer/i, /trp.*primer/i, /bg\s+vent/i, /bg\s+acid/i,
+    ],
     description: 'SANITARY WASTE AND VENT'
   },
   'STRM': {
-    patterns: [/storm/i, /overflow.*dr/i, /roof.*drain/i, /rain/i],
+    patterns: [/storm/i, /overflow.*dr/i, /roof.*drain/i, /rain/i, /^bg\s+storm/i],
     description: 'STORM DRAIN'
+  },
+  'DRNS': {
+    patterns: [/^drains?$/i, /floor.*drain/i, /cleanout/i, /floor.*sink/i, /drain.*cleanout/i],
+    description: 'DRAINS AND FLOOR SINKS'
   },
   'GRWV': {
     patterns: [/grease/i, /interceptor/i, /grey.*waste/i],
@@ -347,7 +355,7 @@ const DEFAULT_COST_HEAD_MAPPING = {
     description: 'CONDENSATE'
   },
   'NGAS': {
-    patterns: [/natural.*gas/i, /fuel.*gas/i, /^gas$/i],
+    patterns: [/natural.*gas/i, /fuel.*gas/i, /^gas$/i, /^bg\s+.*gas/i, /m\.?p\.?\s*gas/i],
     description: 'NATURAL GAS'
   },
   'FNSH': {
