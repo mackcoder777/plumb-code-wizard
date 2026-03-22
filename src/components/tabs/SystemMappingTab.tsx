@@ -1021,6 +1021,28 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             onAcceptSuggestion={handleAcceptSuggestion}
           />
 
+  // Detect auto-pattern conflicts: where user mapping differs from DEFAULT_COST_HEAD_MAPPING
+  const autoPatternConflicts = useMemo(() => {
+    const conflicts: Record<string, string> = {}; // normalizedSystem -> autoPatternCode
+    if (!defaultCostHeadMapping || Object.keys(defaultCostHeadMapping).length === 0) return conflicts;
+    
+    for (const entry of systemIndex) {
+      const systemName = entry.system || '';
+      const userCode = mappings[normalizeSystemKey(systemName)]?.laborCode;
+      if (!userCode) continue;
+      
+      for (const [head, config] of Object.entries(defaultCostHeadMapping)) {
+        if (config.patterns.some(p => p.test(systemName))) {
+          if (head !== userCode) {
+            conflicts[normalizeSystemKey(systemName)] = head;
+          }
+          break;
+        }
+      }
+    }
+    return conflicts;
+  }, [defaultCostHeadMapping, systemIndex, mappings]);
+
 
           {/* System Mapping Content */}
           <Card>
