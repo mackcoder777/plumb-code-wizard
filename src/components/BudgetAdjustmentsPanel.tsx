@@ -3145,36 +3145,58 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
                   {/* Inner tab switcher */}
                   <div className="flex items-center gap-2 mb-4 border-b border-border pb-2">
-                    <button
-                      onClick={() => setSmallCodeTab('merge')}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        smallCodeTab === 'merge'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Merge Groups
-                      {mergeGroups.length > 0 && (
-                        <span className="ml-1.5 opacity-70 text-[0.65rem]">
-                          ({mergeGroups.length})
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setSmallCodeTab('standalone')}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        smallCodeTab === 'standalone'
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-muted text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Standalone Codes
-                      {standaloneGroups.length > 0 && (
-                        <span className="ml-1.5 opacity-70 text-[0.65rem]">
-                          ({standaloneGroups.length})
-                        </span>
-                      )}
-                    </button>
+                    {(() => {
+                      const mergeOpenCount = mergeGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
+                      const mergeSavedCount = mergeGroups.filter(g => savedMergeKeySet.has(g.key)).length;
+                      const standaloneOpenCount = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
+                      const standaloneSavedCount = standaloneGroups.filter(g => savedMergeKeySet.has(g.key)).length;
+                      return (
+                        <>
+                          <button
+                            onClick={() => setSmallCodeTab('merge')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              smallCodeTab === 'merge'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              Merge Groups
+                              <span className={cn(
+                                'rounded-full px-2 py-0.5 text-xs font-semibold',
+                                mergeOpenCount > 0
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-green-100 text-green-700'
+                              )}>
+                                {mergeOpenCount > 0 ? `${mergeOpenCount} open` : '✓ all saved'}
+                                {mergeSavedCount > 0 && mergeOpenCount > 0 ? `, ${mergeSavedCount} saved` : ''}
+                              </span>
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => setSmallCodeTab('standalone')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              smallCodeTab === 'standalone'
+                                ? 'bg-orange-600 text-white'
+                                : 'bg-muted text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              Standalone Codes
+                              <span className={cn(
+                                'rounded-full px-2 py-0.5 text-xs font-semibold',
+                                standaloneOpenCount > 0
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-green-100 text-green-700'
+                              )}>
+                                {standaloneOpenCount > 0 ? `${standaloneOpenCount} open` : '✓ all saved'}
+                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount} saved` : ''}
+                              </span>
+                            </span>
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* ── MERGE GROUPS TAB ── */}
