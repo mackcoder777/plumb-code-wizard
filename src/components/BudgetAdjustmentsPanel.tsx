@@ -402,8 +402,9 @@ const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
   TRAP: ['WATR'],
 };
 
-// Only CS is guaranteed to fully resolve via zone — all other sections are user-assigned
-const FALLBACK_SECTIONS = new Set(['CS']);
+// These sections are 100% zone-resolved to building sections — never user-intended as standalone
+// ST is explicitly excluded — it is a real user-assigned section (Site)
+const FALLBACK_SECTIONS = new Set(['CS', 'UG', 'RF', 'AG']);
 
 // For BGPD: determine storm vs sanitary fallback from source system names
 const getBgpdFallback = (sourceSystems: Set<string>): string => {
@@ -1185,8 +1186,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     fallbackKeys.forEach(fbKey => {
       const parts = fbKey.trim().split(/\s+/);
+      const fbSec = parts[0];
       const fbAct = parts.length >= 3 ? parts[1] : '';
       const fbHead = parts[parts.length - 1];
+
+      // AG (Site Above Grade) always folds into ST, not a building section
+      if (fbSec === 'AG') {
+        const stKey = Object.keys(result).find(k => {
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === 'ST' && kParts[kParts.length - 1] === fbHead;
+        });
+        if (stKey) {
+          result[stKey] = {
+            ...result[stKey],
+            hours: (result[stKey].hours ?? 0) + (result[fbKey].hours ?? 0),
+            materialDollars: (result[stKey].materialDollars ?? 0) + (result[fbKey].materialDollars ?? 0),
+          };
+          delete result[fbKey];
+        }
+        return; // skip normal folding for AG
+      }
 
       // Try 1: exact activity + cost head match in any canonical section
       let canonicalKey = Object.keys(result).find(k => {
