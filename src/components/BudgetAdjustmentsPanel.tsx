@@ -1176,7 +1176,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // Fold standalone fallback sections (CS, RF, ST, UG, AG) into their
     // zone-resolved canonical sections. Prevents timing-gap transients from
     // surviving to export when zone resolution has already placed items correctly.
-    const FALLBACK_SECTIONS = new Set(['CS', 'RF', 'ST', 'UG', 'AG']);
 
     const fallbackKeys = Object.keys(result).filter(k => {
       const sec = k.trim().split(/\s+/)[0];
