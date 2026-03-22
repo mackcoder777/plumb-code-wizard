@@ -402,6 +402,8 @@ const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
   TRAP: ['WATR'],
 };
 
+const FALLBACK_SECTIONS = new Set(['CS', 'RF', 'ST', 'UG', 'AG']);
+
 // For BGPD: determine storm vs sanitary fallback from source system names
 const getBgpdFallback = (sourceSystems: Set<string>): string => {
   for (const sys of sourceSystems) {
@@ -1174,7 +1176,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // Fold standalone fallback sections (CS, RF, ST, UG, AG) into their
     // zone-resolved canonical sections. Prevents timing-gap transients from
     // surviving to export when zone resolution has already placed items correctly.
-    const FALLBACK_SECTIONS = new Set(['CS', 'RF', 'ST', 'UG', 'AG']);
 
     const fallbackKeys = Object.keys(result).filter(k => {
       const sec = k.trim().split(/\s+/)[0];
@@ -1451,6 +1452,59 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     }
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
+
+  // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
+  const cleanupRanRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      !savedMergesData?.length ||
+      !finalLaborSummary ||
+      !projectId ||
+      projectId === 'default' ||
+      cleanupRanRef.current
+    ) return;
+
+    const fallbackMerges = savedMergesData.filter(m =>
+      FALLBACK_SECTIONS.has((m.sec_code || '').trim().toUpperCase())
+    );
+
+    if (fallbackMerges.length === 0) return;
+
+    const toDelete = fallbackMerges.filter(merge => {
+      const sec = (merge.sec_code || '').trim();
+      const hasLiveHours = Object.keys(finalLaborSummary).some(k =>
+        k.trim().startsWith(sec) && (finalLaborSummary[k].hours ?? 0) > 0
+      );
+      return !hasLiveHours;
+    });
+
+    if (toDelete.length === 0) return;
+
+    cleanupRanRef.current = true;
+
+    const cleanup = async () => {
+      const ids = toDelete.map(m => m.id);
+      const { error } = await supabase
+        .from('project_small_code_merges')
+        .delete()
+        .in('id', ids);
+
+      if (error) {
+        console.error('[AutoCleanup] Failed to delete orphaned merges:', error);
+        cleanupRanRef.current = false;
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+      toast({
+        title: `Cleaned up ${toDelete.length} orphaned merge${toDelete.length > 1 ? 's' : ''}`,
+        description: `Removed saved rules for folded sections: ${[...new Set(toDelete.map(m => m.sec_code))].join(', ')}`,
+      });
+    };
+
+    cleanup();
+  }, [savedMergesData, finalLaborSummary, projectId]);
 
   // Detect saved redistributions that can't be applied against live data
   const inapplicableSavedKeys = useMemo(() => {
