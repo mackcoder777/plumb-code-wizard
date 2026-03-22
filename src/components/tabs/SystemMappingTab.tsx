@@ -1146,7 +1146,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                               if (selectedSystems.size !== 1) {
                                 return <span className="text-muted-foreground">Select a labor code to apply...</span>;
                               }
-                              const singleSystem = filteredSystems.find(s => selectedSystems.has(s.system));
+                              const singleSystem = filteredSystems.find(s => selectedSystems.has(normalizeSystemKey(s.system)));
                               const singleCode = singleSystem?.laborCode;
                               const singleCodeInfo = singleCode
                                 ? allLaborCodes.find(c => c.code === singleCode)
