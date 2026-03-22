@@ -575,6 +575,7 @@ export const SystemCard = memo(SystemCardComponent, (prevProps, nextProps) => {
     prevProps.suggestedLaborCode === nextProps.suggestedLaborCode &&
     prevProps.appliedInfo?.appliedAt === nextProps.appliedInfo?.appliedAt &&
     prevProps.appliedInfo?.appliedItemCount === nextProps.appliedInfo?.appliedItemCount &&
-    prevProps.appliedInfo?.isVerified === nextProps.appliedInfo?.isVerified
+    prevProps.appliedInfo?.isVerified === nextProps.appliedInfo?.isVerified &&
+    prevProps.autoPatternConflict === nextProps.autoPatternConflict
   );
 });
