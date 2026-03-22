@@ -1480,12 +1480,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   useEffect(() => {
     if (
       !savedMergesData?.length ||
-      !finalLaborSummary ||
+      !calculations.adjustedLaborSummary ||  // use PRE-merge data
       !projectId ||
       projectId === 'default' ||
       cleanupRanRef.current
     ) return;
 
+    const rawSummary = calculations.adjustedLaborSummary;
+    const rawKeys = Object.keys(rawSummary);
+
+    // Only clean up merges for fallback sections where the cost head
+    // has ZERO hours across ALL sections in the raw pre-merge data
     const fallbackMerges = savedMergesData.filter(m =>
       FALLBACK_SECTIONS.has((m.sec_code || '').trim().toUpperCase())
     );
@@ -1493,53 +1498,64 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     if (fallbackMerges.length === 0) return;
 
     const toDelete = fallbackMerges.filter(merge => {
-      const sec = (merge.sec_code || '').trim();
-      const hasLiveHours = Object.keys(finalLaborSummary).some(k =>
-        k.trim().startsWith(sec) && (finalLaborSummary[k].hours ?? 0) > 0
-      );
-      return !hasLiveHours;
+      const head = (merge.cost_head || '').trim();
+      // Check if this cost head has ANY hours anywhere in the raw summary
+      const hasAnyHours = rawKeys.some(k => {
+        const kHead = k.trim().split(/\s+/).pop();
+        return kHead === head && (rawSummary[k]?.hours ?? 0) > 0;
+      });
+      return !hasAnyHours; // only delete if truly zero across all sections
     });
 
-    // Also clean up null/null rows that aren't valid merge outputs
+    // nullNullOrphans: merge records with no action AND no source in raw data
     const nullNullOrphans = savedMergesData.filter(m => {
       if (m.reassign_to_head !== null || m.redistribute_adjustments !== null) return false;
       const sec = (m.sec_code || '').trim();
       const head = (m.cost_head || '').trim();
-      // Valid merge = a 0000 key for this sec+head exists in final summary
-      const mergeTargetKey = `${sec} 0000 ${head}`;
-      return !finalLaborSummary[mergeTargetKey];
+      // Check if ANY key with this sec+head exists in raw pre-merge data
+      const hasSourceInRaw = rawKeys.some(k => {
+        const kParts = k.trim().split(/\s+/);
+        return kParts[0] === sec && kParts[kParts.length - 1] === head;
+      });
+      return !hasSourceInRaw;
     });
 
-    const allToDelete = [...toDelete, ...nullNullOrphans];
-    // Deduplicate by id
-    const uniqueToDelete = allToDelete.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+    // Combine but deduplicate by id
+    const seen = new Set<string>();
+    const allToDelete = [...toDelete, ...nullNullOrphans].filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
 
-    if (uniqueToDelete.length === 0) return;
+    if (allToDelete.length === 0) return;
 
     cleanupRanRef.current = true;
 
     const cleanup = async () => {
-      const ids = uniqueToDelete.map(m => m.id);
+      const ids = allToDelete.map(m => m.id);
+      console.log('[AutoCleanup] Deleting orphaned merges:', ids.length, allToDelete.map(m => `${m.sec_code}|${m.cost_head}`));
+
       const { error } = await supabase
         .from('project_small_code_merges')
         .delete()
         .in('id', ids);
 
       if (error) {
-        console.error('[AutoCleanup] Failed to delete orphaned merges:', error);
+        console.error('[AutoCleanup] Failed:', error);
         cleanupRanRef.current = false;
         return;
       }
 
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
       toast({
-        title: `Cleaned up ${uniqueToDelete.length} orphaned merge${uniqueToDelete.length > 1 ? 's' : ''}`,
-        description: `Removed saved rules for folded/orphaned sections: ${[...new Set(uniqueToDelete.map(m => m.sec_code))].join(', ')}`,
+        title: `Cleaned up ${allToDelete.length} orphaned merge${allToDelete.length > 1 ? 's' : ''}`,
+        description: `Removed rules for sections with no source data: ${[...new Set(allToDelete.map(m => m.sec_code))].join(', ')}`,
       });
     };
 
     cleanup();
-  }, [savedMergesData, finalLaborSummary, projectId]);
+  }, [savedMergesData, calculations.adjustedLaborSummary, projectId]);
 
   // Detect saved redistributions that can't be applied against live data
   const inapplicableSavedKeys = useMemo(() => {
