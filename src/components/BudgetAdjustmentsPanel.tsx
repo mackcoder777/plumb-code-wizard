@@ -1602,6 +1602,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const suggestions: Record<string, { targetHead: string; targetKey: string; reason: string }> = {};
     const liveKeys = Object.keys(finalLaborSummary);
 
+    // These are peer system codes — no valid auto-merge target exists
+    const ABOVE_GRADE_SYSTEM_CODES = new Set([
+      'DWTR', 'WATR', 'SNWV', 'STRM', 'NGAS', 'GRWV', 'RCLM',
+      'PMPD', 'FIRE', 'DEMO',
+    ]);
+
     const findTargetKey = (sec: string, candidates: string[]) => {
       for (const candidate of candidates) {
         const match = liveKeys.find(k => {
@@ -1618,10 +1624,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const sec = parts[0] || '';
       const head = parts[1] || '';
 
-      // Rule 1: Known alias/BG variant with fallback chain
+      // Rule 1: Known alias / BG variant with fallback chain
       const chain = BG_TO_ABOVE_GRADE[head];
       if (chain) {
         let candidates = [...chain];
+
+        // BGPD: dynamic fallback based on source system name
         if (head === 'BGPD') {
           const sourceSystems = new Set<string>();
           estimateData.forEach(item => {
@@ -1631,30 +1639,38 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           });
           candidates = ['PMPD', getBgpdFallback(sourceSystems)];
         }
+
         const found = findTargetKey(sec, candidates);
         if (found) {
           const isPrimary = found.head === candidates[0];
           suggestions[entry.key] = {
             targetHead: found.head,
             targetKey: found.key,
-            reason: isPrimary ? `${head} → ${found.head}` : `${head} → ${candidates[0]} not found, using fallback ${found.head}`,
+            reason: isPrimary
+              ? `${head} → ${found.head}`
+              : `${head} → ${candidates[0]} not found, using fallback ${found.head}`,
           };
           return;
         }
       }
 
-      // Rule 2: Non-alias standalone → infer from source systems
+      // Rule 2: Category override codes → infer target from source systems
+      // Above-grade peer system codes are excluded — they cannot merge into each other
+      if (ABOVE_GRADE_SYSTEM_CODES.has(head)) return;
+
       const sourceSystems = new Set<string>();
       estimateData.forEach(item => {
         if (!item.costCode) return;
         const ip = (item.costCode || '').trim().split(/\s+/);
         if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
       });
+
       const systemTargetHeads = new Set<string>();
       sourceSystems.forEach(sys => {
         const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
         if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
       });
+
       for (const targetHead of systemTargetHeads) {
         const found = findTargetKey(sec, [targetHead]);
         if (found) {
