@@ -1796,7 +1796,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const reassignTo = target && target !== '__merge__' && target !== '__reassign__' ? target : null;
         // Block any entry with no actionable decision:
         // must have an explicit target (reassign/keep) OR be a redistribute action
-        if (!reassignTo && target !== '__redistribute__') return null;
+        if (!reassignTo && target !== '__redistribute__' && target !== '__merge__') return null;
         return { sec_code: sec!, cost_head: head, reassign_to_head: reassignTo, redistribute_adjustments: null as Record<string, number> | null };
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
