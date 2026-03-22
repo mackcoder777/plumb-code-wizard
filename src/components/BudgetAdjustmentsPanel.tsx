@@ -1140,6 +1140,42 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
+    // Fold standalone fallback sections (CS, RF, ST, UG, AG) into their
+    // zone-resolved canonical sections. Prevents timing-gap transients from
+    // surviving to export when zone resolution has already placed items correctly.
+    const FALLBACK_SECTIONS = new Set(['CS', 'RF', 'ST', 'UG', 'AG']);
+
+    const fallbackKeys = Object.keys(result).filter(k => {
+      const sec = k.trim().split(/\s+/)[0];
+      return FALLBACK_SECTIONS.has(sec);
+    });
+
+    fallbackKeys.forEach(fbKey => {
+      const parts = fbKey.trim().split(/\s+/);
+      const fbSec = parts[0];
+      const fbAct = parts[1];
+      const fbHead = parts[parts.length - 1];
+
+      // Find a canonical (non-fallback) key with same activity + cost head
+      const canonicalKey = Object.keys(result).find(k => {
+        const kParts = k.trim().split(/\s+/);
+        const kSec = kParts[0];
+        const kAct = kParts[1];
+        const kHead = kParts[kParts.length - 1];
+        return !FALLBACK_SECTIONS.has(kSec) && kAct === fbAct && kHead === fbHead;
+      });
+
+      if (canonicalKey) {
+        // Merge hours and material into canonical key
+        result[canonicalKey] = {
+          ...result[canonicalKey],
+          hours: (result[canonicalKey].hours ?? 0) + (result[fbKey].hours ?? 0),
+          materialDollars: (result[canonicalKey].materialDollars ?? 0) + (result[fbKey].materialDollars ?? 0),
+        };
+        delete result[fbKey];
+      }
+    });
+
     if (!savedMergesData?.length) return result;
 
     // Normalize merge sec_codes using the alias map
@@ -1150,7 +1186,38 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         : merge.sec_code,
     }));
 
-    normalizedMerges.forEach(merge => {
+    // Remap stale merge sec_codes: if a saved merge references a fallback section
+    // (e.g. CS) but no live keys exist under that section, find the canonical
+    // section where the same cost head now lives and remap before applying.
+    const remappedMerges = normalizedMerges.map(merge => {
+      const mergeSecUpper = (merge.sec_code || '').trim().toUpperCase();
+      if (!FALLBACK_SECTIONS.has(mergeSecUpper)) return merge;
+
+      // Check if any live key exists under this fallback section
+      const hasLiveKey = Object.keys(result).some(k => {
+        const kSec = k.trim().split(/\s+/)[0].toUpperCase();
+        const kHead = k.trim().split(/\s+/).pop()?.toUpperCase();
+        return kSec === mergeSecUpper && kHead === (merge.cost_head || '').toUpperCase();
+      });
+
+      if (hasLiveKey) return merge; // fallback section still has live data, keep as-is
+
+      // Find canonical section for this cost head
+      const canonicalKey = Object.keys(result).find(k => {
+        const kSec = k.trim().split(/\s+/)[0];
+        const kHead = k.trim().split(/\s+/).pop();
+        return !FALLBACK_SECTIONS.has(kSec.toUpperCase()) &&
+               kHead?.toUpperCase() === (merge.cost_head || '').toUpperCase();
+      });
+
+      if (!canonicalKey) return merge; // can't remap, leave for stale detection
+
+      const newSec = canonicalKey.trim().split(/\s+/)[0];
+      console.log(`[finalLaborSummary] Remapping stale merge ${merge.sec_code}|${merge.cost_head} → ${newSec}|${merge.cost_head}`);
+      return { ...merge, sec_code: newSec };
+    });
+
+    remappedMerges.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
       const reassignTo = (merge as any).reassign_to_head as string | null;
