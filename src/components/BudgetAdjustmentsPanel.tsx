@@ -1059,17 +1059,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return !hasMatch;
       })
       .map(merge => {
-        const sameSection = [...liveKeys].filter(lk =>
-          lk.startsWith(merge.sec_code) && !lk.includes(merge.cost_head)
-        );
-        const replacement = sameSection
-          .map(k => ({ key: k, hours: calculations.adjustedLaborSummary![k]?.hours ?? 0 }))
-          .sort((a, b) => b.hours - a.hours)[0];
+        const nameMatch = [...liveKeys].find(lk => {
+          const parts = lk.trim().split(/\s+/);
+          const keySec = parts[0];
+          const keyHead = parts[parts.length - 1];
+          return keySec === merge.sec_code && keyHead === merge.cost_head;
+        });
 
-        if (!replacement) return null;
-
-        const parts = replacement.key.trim().split(/\s+/);
-        const newCostHead = parts.slice(2).join(' ');
+        const newCostHead = nameMatch
+          ? nameMatch.trim().split(/\s+/).slice(2).join(' ')
+          : null;
 
         return {
           mergeId: merge.id,
@@ -1078,12 +1077,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           newCostHead,
           mergeRecord: merge,
         };
-      })
-      .filter(Boolean) as Array<{
+      }) as Array<{
         mergeId: string;
         secCode: string;
         oldCostHead: string;
-        newCostHead: string;
+        newCostHead: string | null;
         mergeRecord: typeof savedMergesData[0];
       }>;
   }, [savedMergesData, calculations.adjustedLaborSummary]);
@@ -2777,8 +2775,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     <ul className="mt-1 space-y-0.5">
                       {staleMergeUpdates.filter(Boolean).map((u, i) => (
                         <li key={i} className="text-xs font-mono text-amber-700">
-                          {u!.secCode} {u!.oldCostHead} → <span className="text-amber-500">not found</span>
-                          {u!.newCostHead ? ` (possible replacement: ${u!.newCostHead})` : ''}
+                          {u!.secCode} {u!.oldCostHead}{' '}
+                          <span className="text-amber-500">→ not found in current data</span>
+                          {u!.newCostHead ? (
+                            <span className="text-amber-600"> (possible replacement: {u!.newCostHead})</span>
+                          ) : (
+                            <span className="text-amber-400"> — cost head may have been removed or remapped</span>
+                          )}
                         </li>
                       ))}
                     </ul>
