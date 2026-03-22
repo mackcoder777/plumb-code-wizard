@@ -35,6 +35,8 @@ interface SystemCardProps {
     subcategory?: string;
     units?: string;
   }>;
+  /** When set, shows a warning that the auto-pattern would assign a different code */
+  autoPatternConflict?: string;
 }
 
 const SystemCardComponent: React.FC<SystemCardProps> = ({
@@ -51,6 +53,7 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
   items: legacyItems = [],
   getPreviewItems,
   importedCostCodes = [],
+  autoPatternConflict,
 }) => {
   const [laborOpen, setLaborOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -273,6 +276,18 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
             >
               Apply Suggestion
             </Button>
+          </div>
+        )}
+
+        {/* Auto-pattern conflict warning */}
+        {autoPatternConflict && laborCode && (
+          <div className="flex items-center gap-1.5 p-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-400">
+            <span>⚠️</span>
+            <span>
+              Auto-pattern suggests <span className="font-mono font-semibold">{autoPatternConflict}</span>
+              {' '}but you've mapped to <span className="font-mono font-semibold">{laborCode}</span>
+              {' '}— your mapping will be used.
+            </span>
           </div>
         )}
 
@@ -560,6 +575,7 @@ export const SystemCard = memo(SystemCardComponent, (prevProps, nextProps) => {
     prevProps.suggestedLaborCode === nextProps.suggestedLaborCode &&
     prevProps.appliedInfo?.appliedAt === nextProps.appliedInfo?.appliedAt &&
     prevProps.appliedInfo?.appliedItemCount === nextProps.appliedInfo?.appliedItemCount &&
-    prevProps.appliedInfo?.isVerified === nextProps.appliedInfo?.isVerified
+    prevProps.appliedInfo?.isVerified === nextProps.appliedInfo?.isVerified &&
+    prevProps.autoPatternConflict === nextProps.autoPatternConflict
   );
 });
