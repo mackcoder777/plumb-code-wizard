@@ -59,7 +59,7 @@ interface SystemMappingTabProps {
   onProfileOverride?: (override: any) => void;
   onReanalyzeProfile?: () => void;
   onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
-  defaultCostHeadMapping?: Record<string, { patterns: RegExp[]; description: string }>;
+  
 }
 
 type ViewMode = 'cards' | 'table';
@@ -81,7 +81,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, defaultCostHeadMapping = {} }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -199,27 +199,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return suggestions;
   }, [mappingPatterns, systemIndex, mappings]);
 
-  // Detect auto-pattern conflicts: where user mapping differs from DEFAULT_COST_HEAD_MAPPING
-  const autoPatternConflicts = useMemo(() => {
-    const conflicts: Record<string, string> = {};
-    if (!defaultCostHeadMapping || Object.keys(defaultCostHeadMapping).length === 0) return conflicts;
-    
-    for (const entry of systemIndex) {
-      const systemName = entry.system || '';
-      const userCode = mappings[normalizeSystemKey(systemName)]?.laborCode;
-      if (!userCode) continue;
-      
-      for (const [head, config] of Object.entries(defaultCostHeadMapping)) {
-        if (config.patterns.some(p => p.test(systemName))) {
-          if (head !== userCode) {
-            conflicts[normalizeSystemKey(systemName)] = head;
-          }
-          break;
-        }
-      }
-    }
-    return conflicts;
-  }, [defaultCostHeadMapping, systemIndex, mappings]);
 
 
   useEffect(() => {
@@ -907,17 +886,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       <SystemMappingHeader stats={stats} totalItems={totalItems} />
 
       {/* Priority info banner */}
-      {Object.keys(autoPatternConflicts).length > 0 && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
-          <span className="shrink-0 mt-0.5">ℹ️</span>
-          <span>
-            <strong className="text-foreground">Your mappings always take priority.</strong> When no mapping is set, 
-            the system auto-assigns a code based on the system name (e.g. "Cold Water" → DWTR). 
-            Systems with a conflict between your choice and the auto-pattern 
-            are flagged with ⚠️ below.
-          </span>
-        </div>
-      )}
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+        <span className="shrink-0 mt-0.5">ℹ️</span>
+        <span>
+          <strong className="text-foreground">Your mappings always win.</strong> Auto-assignment only applies to items 
+          whose system name has no mapping here — for example, orphan items with an unrecognized 
+          system name. Every system showing <span className="font-mono bg-muted px-1 rounded">Mapped</span> uses 
+          your explicit assignment, never the fallback.
+        </span>
+      </div>
 
       {/* Mapping Audit Summary - Collapsible */}
       <Collapsible>
@@ -1302,7 +1279,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                       onViewAllItems={onNavigateToEstimates}
                                       importedCostCodes={importedCostCodes}
                                       getPreviewItems={getPreviewItems}
-                                      autoPatternConflict={autoPatternConflicts[normalizeSystemKey(sm.system)]}
+                                      
                                     />
                                   )}
                                 </div>
