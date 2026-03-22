@@ -402,8 +402,9 @@ const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
   TRAP: ['WATR'],
 };
 
-// Only CS is guaranteed to fully resolve via zone — all other sections are user-assigned
-const FALLBACK_SECTIONS = new Set(['CS']);
+// These sections are 100% zone-resolved to building sections — never user-intended as standalone
+// ST is explicitly excluded — it is a real user-assigned section (Site)
+const FALLBACK_SECTIONS = new Set(['CS', 'UG', 'RF', 'AG']);
 
 // For BGPD: determine storm vs sanitary fallback from source system names
 const getBgpdFallback = (sourceSystems: Set<string>): string => {
