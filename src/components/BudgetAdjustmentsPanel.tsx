@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import type { EstimateItem } from '@/types/estimate';
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -326,6 +327,8 @@ interface BudgetAdjustmentsPanelProps {
   bidLaborRate: number;
   projectId?: string;
   onAdjustmentsChange: (adjustments: BudgetAdjustments) => void;
+  estimateData?: EstimateItem[];
+  systemMappings?: Array<{ system: string; laborCode?: string }>;
 }
 
 const FAB_SECTION = 'FP';
@@ -383,6 +386,13 @@ const fixResidual = (
 };
 // ─────────────────────────────────────────────────────────────
 
+// BG cost head → above-grade equivalent for auto-suggest
+const BG_TO_ABOVE_GRADE: Record<string, string> = {
+  BGWT: 'WATR', BGSD: 'STRM', BGTP: 'TRAP', BGCN: 'COND',
+  BGWV: 'SNWV', BGGW: 'GRWV', BGNG: 'NGAS', BGPD: 'PMPD',
+  BGCM: 'COMA', INDR: 'SNWV',
+};
+
 // Maps field labor cost heads → fabrication material cost head
 const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   // Cast Iron → CSTF
@@ -431,6 +441,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   bidLaborRate,
   projectId = 'default',
   onAdjustmentsChange,
+  estimateData = [],
+  systemMappings = [],
 }) => {
   // Load persisted settings from localStorage
   const [jobsiteZipCode, setJobsiteZipCode] = useState(() => {
@@ -1462,6 +1474,56 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return { key, head, sec: sec!, lines, combinedHours };
       });
   }, [finalLaborSummary]);
+
+  // Auto-suggestions for standalone codes
+  const standaloneAutoSuggestions = useMemo(() => {
+    if (!smallCodeAnalysis?.length || !finalLaborSummary) return {};
+    const standalone = smallCodeAnalysis.filter(r => r.lines.length === 1);
+    if (standalone.length === 0) return {};
+    const suggestions: Record<string, { targetHead: string; targetKey: string; reason: string }> = {};
+    const liveKeys = Object.keys(finalLaborSummary);
+    standalone.forEach(entry => {
+      const parts = (entry.key || '').split('|');
+      const sec = parts[0] || '';
+      const head = parts[1] || '';
+      const aboveGradeEquiv = BG_TO_ABOVE_GRADE[head];
+      if (aboveGradeEquiv) {
+        const targetKey = liveKeys.find(k => {
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === sec && kParts[kParts.length - 1] === aboveGradeEquiv;
+        });
+        if (targetKey) {
+          suggestions[entry.key] = { targetHead: aboveGradeEquiv, targetKey, reason: `${head} → above-grade equivalent` };
+          return;
+        }
+      }
+      const sourceSystems = new Set<string>();
+      estimateData.forEach(item => {
+        if (!item.costCode) return;
+        const itemParts = (item.costCode || '').trim().split(/\s+/);
+        const itemSec = itemParts[0];
+        const itemHead = itemParts[itemParts.length - 1];
+        if (itemSec === sec && itemHead === head) sourceSystems.add((item.system || '').trim());
+      });
+      const systemTargetHeads = new Set<string>();
+      sourceSystems.forEach(sys => {
+        const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
+        if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
+      });
+      for (const targetHead of systemTargetHeads) {
+        const targetKey = liveKeys.find(k => {
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === sec && kParts[kParts.length - 1] === targetHead;
+        });
+        if (targetKey) {
+          const sysNames = [...sourceSystems].slice(0, 2).join(', ');
+          suggestions[entry.key] = { targetHead, targetKey, reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}` };
+          break;
+        }
+      }
+    });
+    return suggestions;
+  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings]);
 
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
@@ -3362,6 +3424,29 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               </SelectContent>
                             </Select>
                           </div>
+                          {Object.keys(standaloneAutoSuggestions).length > 0 && (
+                            <button
+                              onClick={() => {
+                                const newTargets: Record<string, string> = { ...reassignTargets };
+                                const newConsolidations: Record<string, boolean> = { ...consolidations };
+                                let count = 0;
+                                Object.entries(standaloneAutoSuggestions).forEach(([key, suggestion]) => {
+                                  const alreadySaved = savedMergeKeySet.has(key);
+                                  if (!alreadySaved) {
+                                    newTargets[key] = suggestion.targetHead;
+                                    newConsolidations[key] = true;
+                                    count++;
+                                  }
+                                });
+                                setReassignTargets(newTargets);
+                                setConsolidations(newConsolidations);
+                                toast({ title: `${count} codes auto-targeted`, description: 'Review suggestions below then click Save to apply.' });
+                              }}
+                              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              ⚡ Auto-resolve ({Object.keys(standaloneAutoSuggestions).length})
+                            </button>
+                          )}
                         </div>
                         <Table>
                           <TableHeader>
@@ -3430,6 +3515,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableCell>
                                   <TableCell className="text-right font-mono font-semibold text-destructive">
                                     {row.combinedHours.toFixed(1)}h
+                                    {standaloneAutoSuggestions[mergeKey] && !isSaved && (() => {
+                                      const suggestion = standaloneAutoSuggestions[mergeKey];
+                                      return (
+                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                          <span className="text-xs text-blue-500 font-normal">
+                                            ⚡ <span className="font-mono font-semibold">{suggestion.targetHead}</span>
+                                          </span>
+                                          <span className="text-xs text-muted-foreground font-normal">— {suggestion.reason}</span>
+                                          <button
+                                            onClick={() => {
+                                              setReassignTargets(prev => ({ ...prev, [mergeKey]: suggestion.targetHead }));
+                                              setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 underline font-normal"
+                                          >
+                                            Apply
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
                                   </TableCell>
                                   <TableCell>
                                     {isSaved ? (() => {
