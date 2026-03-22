@@ -502,7 +502,7 @@ export function exportBudgetPacket(
       
       ws[`B${row}`] = { t: 's', v: item.normalizedCode };
       ws[`D${row}`] = { t: 's', v: item.normalizedDescription };
-      ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
+      ws[`H${row}`] = { t: 'n', v: Math.round(item.hours), z: '#,##0' };
       
       const displayRate = item.rate ?? laborRate;
       if (displayRate > 0) {
@@ -526,8 +526,8 @@ export function exportBudgetPacket(
   ws[`H${TOTALS_ROW}`] = { 
     t: 'n', 
     f: hoursSumParts || '0',
-    v: Math.round(laborData.reduce((s, i) => s + i.hours, 0) * 10) / 10,
-    z: '#,##0.0' 
+    v: Math.round(laborData.reduce((s, i) => s + i.hours, 0)),
+    z: '#,##0' 
   };
   ws[`J${TOTALS_ROW}`] = { 
     t: 'n', 
@@ -1026,14 +1026,14 @@ export function exportAuditReport(
   const summaryData = [
     ['LABOR SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Hours', 'Labor $', 'Items'],
-    ...laborSummaryRows.map(l => [l.costCode, l.description, Math.round(l.hours * 10) / 10, Math.round(l.laborDollars * 100) / 100, l.itemCount || '']),
+    ...laborSummaryRows.map(l => [l.costCode, l.description, Math.round(l.hours), Math.round(l.laborDollars * 100) / 100, l.itemCount || '']),
     [],
     ['MATERIAL SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Material $', 'Items'],
     ...materialSummary.map(m => [m.costCode, m.description, Math.round(m.materialDollars * 100) / 100, m.itemCount]),
     [],
     ['TOTALS'],
-    ['Total Labor Hours:', Math.round(laborSummaryRows.reduce((s, l) => s + l.hours, 0) * 10) / 10],
+    ['Total Labor Hours:', Math.round(laborSummaryRows.reduce((s, l) => s + l.hours, 0))],
     ['Total Labor $:', Math.round(laborSummaryRows.reduce((s, l) => s + l.laborDollars, 0) * 100) / 100],
     ['Total Material $:', Math.round(materialSummary.reduce((s, m) => s + m.materialDollars, 0) * 100) / 100],
   ];
@@ -1062,16 +1062,16 @@ export function exportAuditReport(
           ? 'Kept as-is'
           : `${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`;
         const targetEntry = merge.reassign_to_head !== '__keep__' ? adjSummary[`${merge.sec_code} ${merge.merged_act} ${merge.reassign_to_head}`] : null;
-        finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
+        finalHours = targetEntry ? String(Math.round(targetEntry.hours)) : '';
       } else if (merge.redistribute_adjustments && Object.keys(merge.redistribute_adjustments).length > 0) {
         actionType = 'Redistribute';
         const redist = merge.redistribute_adjustments;
         sourceHours = Object.entries(redist).map(([act, hrs]) => `${act}: ${hrs}h`).join(', ');
         targetCode = `${merge.sec_code} (redistributed) ${merge.cost_head}`;
-        finalHours = Object.values(redist).reduce((s, h) => s + (h as number), 0).toFixed(1);
+        finalHours = String(Math.round(Object.values(redist).reduce((s, h) => s + (h as number), 0)));
       } else {
         const targetEntry = adjSummary[targetCode];
-        finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
+        finalHours = targetEntry ? String(Math.round(targetEntry.hours)) : '';
       }
 
       adjustmentLogData.push([actionType, sourceCode, sourceHours, targetCode, finalHours, new Date().toISOString().split('T')[0]]);
