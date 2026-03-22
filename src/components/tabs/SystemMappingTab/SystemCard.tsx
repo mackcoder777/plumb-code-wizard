@@ -53,6 +53,7 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
   items: legacyItems = [],
   getPreviewItems,
   importedCostCodes = [],
+  autoPatternConflict,
 }) => {
   const [laborOpen, setLaborOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
