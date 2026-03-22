@@ -839,11 +839,31 @@ const EnhancedCostCodeManager = () => {
         if (item.cost_code) {
           const parts = item.cost_code.trim().split(/\s+/);
           if (parts.length >= 3) {
-            const costHead = parts.slice(2).join(' ');
+            const persistedHead = parts.slice(2).join(' ');
             const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             const activity = floorMap.activity !== '0000' ? floorMap.activity : parts[1];
-            const newCode = `${section} ${activity} ${costHead}`;
+
+            // Validate cost head against current system mapping —
+            // if the user changed the mapping (e.g. DWTR → WATR), update on load
+            // so stale DB codes don't survive page refreshes.
+            let resolvedHead = persistedHead;
+            if (item.system && savedMappings.length > 0) {
+              const normalizedSystem = (item.system || '').toLowerCase().trim();
+              const sysMapping = savedMappings.find(
+                m => (m.system_name || '').toLowerCase().trim() === normalizedSystem
+              );
+              if (sysMapping?.cost_head) {
+                const laborCode = sysMapping.cost_head.includes('|')
+                  ? sysMapping.cost_head.split('|')[1]
+                  : sysMapping.cost_head;
+                if (laborCode && laborCode !== persistedHead) {
+                  resolvedHead = laborCode;
+                }
+              }
+            }
+
+            const newCode = `${section} ${activity} ${resolvedHead}`;
             if (newCode !== item.cost_code) {
               baseItem.costCode = newCode;
               itemsNeedingPersist.push({ row_number: item.row_number, cost_code: newCode });
