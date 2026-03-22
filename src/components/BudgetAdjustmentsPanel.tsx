@@ -1183,21 +1183,32 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     fallbackKeys.forEach(fbKey => {
       const parts = fbKey.trim().split(/\s+/);
-      const fbSec = parts[0];
-      const fbAct = parts[1];
+      const fbAct = parts.length >= 3 ? parts[1] : '';
       const fbHead = parts[parts.length - 1];
 
-      // Find a canonical (non-fallback) key with same activity + cost head
-      const canonicalKey = Object.keys(result).find(k => {
+      // Try 1: exact activity + cost head match in any canonical section
+      let canonicalKey = Object.keys(result).find(k => {
         const kParts = k.trim().split(/\s+/);
-        const kSec = kParts[0];
-        const kAct = kParts[1];
-        const kHead = kParts[kParts.length - 1];
-        return !FALLBACK_SECTIONS.has(kSec) && kAct === fbAct && kHead === fbHead;
+        return !FALLBACK_SECTIONS.has(kParts[0]) &&
+               kParts[1] === fbAct &&
+               kParts[kParts.length - 1] === fbHead;
       });
 
+      // Try 2: same cost head only — pick canonical key with highest hours
+      if (!canonicalKey) {
+        const candidates = Object.keys(result).filter(k => {
+          const kParts = k.trim().split(/\s+/);
+          return !FALLBACK_SECTIONS.has(kParts[0]) &&
+                 kParts[kParts.length - 1] === fbHead;
+        });
+        if (candidates.length > 0) {
+          canonicalKey = candidates.sort(
+            (a, b) => (result[b].hours ?? 0) - (result[a].hours ?? 0)
+          )[0];
+        }
+      }
+
       if (canonicalKey) {
-        // Merge hours and material into canonical key
         result[canonicalKey] = {
           ...result[canonicalKey],
           hours: (result[canonicalKey].hours ?? 0) + (result[fbKey].hours ?? 0),
