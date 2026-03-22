@@ -402,6 +402,8 @@ const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
   TRAP: ['WATR'],
 };
 
+const FALLBACK_SECTIONS = new Set(['CS', 'RF', 'ST', 'UG', 'AG']);
+
 // For BGPD: determine storm vs sanitary fallback from source system names
 const getBgpdFallback = (sourceSystems: Set<string>): string => {
   for (const sys of sourceSystems) {
