@@ -386,6 +386,13 @@ const fixResidual = (
 };
 // ─────────────────────────────────────────────────────────────
 
+// BG cost head → above-grade equivalent for auto-suggest
+const BG_TO_ABOVE_GRADE: Record<string, string> = {
+  BGWT: 'WATR', BGSD: 'STRM', BGTP: 'TRAP', BGCN: 'COND',
+  BGWV: 'SNWV', BGGW: 'GRWV', BGNG: 'NGAS', BGPD: 'PMPD',
+  BGCM: 'COMA', INDR: 'SNWV',
+};
+
 // Maps field labor cost heads → fabrication material cost head
 const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   // Cast Iron → CSTF
