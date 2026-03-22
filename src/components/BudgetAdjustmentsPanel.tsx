@@ -3099,7 +3099,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     const isKeep = action === '__keep__';
                                     const isReassign = action !== '__merge__' && !isRedistribute && !isKeep;
 
-                                    return (
+                                    return inapplicableSavedKeys.has(`${(row.sec || '').trim()}|${(row.head || '').trim()}`) ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-amber-500 text-sm font-medium">⚠ Saved but unresolved</span>
+                                        <span className="text-xs text-muted-foreground">Source codes no longer exist</span>
+                                        <button
+                                          onClick={() => handleUndoMerge(row.sec, row.head)}
+                                          className="text-xs text-blue-500 hover:text-blue-700 underline"
+                                        >
+                                          Clear &amp; remap
+                                        </button>
+                                      </div>
+                                    ) : (
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-green-400 text-sm font-medium">
                                           {isKeep
