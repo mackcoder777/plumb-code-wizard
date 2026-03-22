@@ -3150,7 +3150,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         return (
                           <div className="flex justify-between items-center mt-4 pt-4 border-t border-border">
                             <span className="text-xs text-muted-foreground">
-                              {readyCount} selected for merge
+                              {readyCount} selected actions
                             </span>
                             <div className="flex items-center gap-3">
                               <button
