@@ -1279,7 +1279,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                       onViewAllItems={onNavigateToEstimates}
                                       importedCostCodes={importedCostCodes}
                                       getPreviewItems={getPreviewItems}
-                                      autoPatternConflict={autoPatternConflicts[normalizeSystemKey(sm.system)]}
+                                      
                                     />
                                   )}
                                 </div>
