@@ -1068,7 +1068,7 @@ export function exportAuditReport(
         const redist = merge.redistribute_adjustments;
         sourceHours = Object.entries(redist).map(([act, hrs]) => `${act}: ${hrs}h`).join(', ');
         targetCode = `${merge.sec_code} (redistributed) ${merge.cost_head}`;
-        finalHours = Object.values(redist).reduce((s, h) => s + (h as number), 0).toFixed(1);
+        finalHours = String(Math.round(Object.values(redist).reduce((s, h) => s + (h as number), 0)));
       } else {
         const targetEntry = adjSummary[targetCode];
         finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
