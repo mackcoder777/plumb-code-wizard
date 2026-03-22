@@ -1501,28 +1501,54 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     if (standalone.length === 0) return {};
     const suggestions: Record<string, { targetHead: string; targetKey: string; reason: string }> = {};
     const liveKeys = Object.keys(finalLaborSummary);
+
+    const findTargetKey = (sec: string, candidates: string[]) => {
+      for (const candidate of candidates) {
+        const match = liveKeys.find(k => {
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === sec && kParts[kParts.length - 1] === candidate;
+        });
+        if (match) return { key: match, head: candidate };
+      }
+      return null;
+    };
+
     standalone.forEach(entry => {
       const parts = (entry.key || '').split('|');
       const sec = parts[0] || '';
       const head = parts[1] || '';
-      const aboveGradeEquiv = BG_TO_ABOVE_GRADE[head];
-      if (aboveGradeEquiv) {
-        const targetKey = liveKeys.find(k => {
-          const kParts = k.trim().split(/\s+/);
-          return kParts[0] === sec && kParts[kParts.length - 1] === aboveGradeEquiv;
-        });
-        if (targetKey) {
-          suggestions[entry.key] = { targetHead: aboveGradeEquiv, targetKey, reason: `${head} → above-grade equivalent` };
+
+      // Rule 1: Known alias/BG variant with fallback chain
+      const chain = BG_TO_ABOVE_GRADE[head];
+      if (chain) {
+        let candidates = [...chain];
+        if (head === 'BGPD') {
+          const sourceSystems = new Set<string>();
+          estimateData.forEach(item => {
+            if (!item.costCode) return;
+            const ip = (item.costCode || '').trim().split(/\s+/);
+            if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
+          });
+          candidates = ['PMPD', getBgpdFallback(sourceSystems)];
+        }
+        const found = findTargetKey(sec, candidates);
+        if (found) {
+          const isPrimary = found.head === candidates[0];
+          suggestions[entry.key] = {
+            targetHead: found.head,
+            targetKey: found.key,
+            reason: isPrimary ? `${head} → ${found.head}` : `${head} → ${candidates[0]} not found, using fallback ${found.head}`,
+          };
           return;
         }
       }
+
+      // Rule 2: Non-alias standalone → infer from source systems
       const sourceSystems = new Set<string>();
       estimateData.forEach(item => {
         if (!item.costCode) return;
-        const itemParts = (item.costCode || '').trim().split(/\s+/);
-        const itemSec = itemParts[0];
-        const itemHead = itemParts[itemParts.length - 1];
-        if (itemSec === sec && itemHead === head) sourceSystems.add((item.system || '').trim());
+        const ip = (item.costCode || '').trim().split(/\s+/);
+        if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
       });
       const systemTargetHeads = new Set<string>();
       sourceSystems.forEach(sys => {
@@ -1530,13 +1556,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
       });
       for (const targetHead of systemTargetHeads) {
-        const targetKey = liveKeys.find(k => {
-          const kParts = k.trim().split(/\s+/);
-          return kParts[0] === sec && kParts[kParts.length - 1] === targetHead;
-        });
-        if (targetKey) {
+        const found = findTargetKey(sec, [targetHead]);
+        if (found) {
           const sysNames = [...sourceSystems].slice(0, 2).join(', ');
-          suggestions[entry.key] = { targetHead, targetKey, reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}` };
+          suggestions[entry.key] = {
+            targetHead: found.head,
+            targetKey: found.key,
+            reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+          };
           break;
         }
       }
