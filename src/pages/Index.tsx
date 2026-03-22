@@ -2748,7 +2748,7 @@ const EnhancedCostCodeManager = () => {
                     return summary;
                   })()}
                   bidLaborRate={bidLaborRate}
-                  projectId={currentProject?.id || 'default'}
+                  projectId={activeProjectId || 'default'}
                   onAdjustmentsChange={setBudgetAdjustments}
                 />
               </div>

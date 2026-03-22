@@ -1194,9 +1194,48 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         });
 
         if (missingKeys.length > 0) {
-          console.warn(
-            `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. No deltas applied to preserve hour balance.`
-          );
+          // Attempt activity-token drift fallback: match by sec + cost head ignoring activity
+          const remappedAdj: Record<string, number> = {};
+          let remapSuccess = true;
+
+          redistEntries.forEach(([actCode, delta]) => {
+            const isFullCode = actCode.includes(' ');
+            const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            const matchKey =
+              matchingKeys.find((k) => (result[k]?.code ?? '').trim() === fullCode) ?? fullCode;
+            if (result[matchKey]) {
+              remappedAdj[matchKey] = (remappedAdj[matchKey] ?? 0) + (delta as number);
+              return;
+            }
+            // Find a live key with same section and cost head, different activity
+            const fallback = Object.keys(result).find(lk => {
+              const lkParts = (result[lk]?.code ?? '').trim().split(/\s+/);
+              return lkParts[0] === sec && lkParts.slice(2).join(' ') === head;
+            });
+            if (fallback) {
+              remappedAdj[fallback] = (remappedAdj[fallback] ?? 0) + (delta as number);
+            } else {
+              remapSuccess = false;
+            }
+          });
+
+          if (remapSuccess && Object.keys(remappedAdj).length > 0) {
+            Object.entries(remappedAdj).forEach(([key, delta]) => {
+              if (result[key]) {
+                const rate = result[key].hours > 0 ? result[key].dollars / result[key].hours : 0;
+                result[key] = {
+                  ...result[key],
+                  hours: result[key].hours + delta,
+                  dollars: result[key].dollars + delta * rate,
+                };
+                if (result[key].hours <= 0.001) delete result[key];
+              }
+            });
+          } else {
+            console.warn(
+              `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. Remap failed.`
+            );
+          }
         } else {
           redistEntries.forEach(([actCode, delta]) => {
             const isFullCode = actCode.includes(' ');
@@ -1296,6 +1335,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
+
+  // Detect saved redistributions that can't be applied against live data
+  const inapplicableSavedKeys = useMemo(() => {
+    if (!savedMergesData || !calculations.adjustedLaborSummary) return new Set<string>();
+    const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary));
+    const stale = new Set<string>();
+
+    savedMergesData.forEach(merge => {
+      if (merge.redistribute_adjustments && typeof merge.redistribute_adjustments === 'object') {
+        const adjKeys = Object.keys(merge.redistribute_adjustments as object);
+        const anyLive = adjKeys.some(k => liveKeys.has(k));
+        if (!anyLive) stale.add(`${(merge.sec_code || '').trim()}|${(merge.cost_head || '').trim()}`);
+      }
+    });
+    return stale;
+  }, [savedMergesData, calculations.adjustedLaborSummary]);
 
   // Small Code Consolidation Analysis — runs against finalLaborSummary
   const smallCodeAnalysis = useMemo(() => {
@@ -1446,7 +1501,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
   const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
 
-  const handleConsolidate = () => {
+  const handleConsolidate = async () => {
+    if (!projectId || projectId === 'default') {
+      toast({
+        title: 'No project selected',
+        description: 'Select a project before saving merge actions.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const newEntries = Object.entries(consolidations)
       .filter(([, v]) => v)
       .map(([key]) => {
@@ -1525,7 +1589,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     }
 
     saveMergeMutation.mutate(dedupedRows, {
-      onSuccess: () => {
+      onSuccess: async () => {
         if (invalidRows.length > 0) {
           const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
           toast({
@@ -1534,7 +1598,28 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             variant: 'destructive',
           });
         } else {
-          toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
+          // Post-save verification
+          const { data: savedBack } = await supabase
+            .from('project_small_code_merges')
+            .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
+            .eq('project_id', projectId);
+
+          const savedCount = savedBack?.length ?? 0;
+          const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary ?? {}));
+          const inapplicable = (savedBack ?? []).filter(row => {
+            if (row.redistribute_adjustments && typeof row.redistribute_adjustments === 'object') {
+              const adjKeys = Object.keys(row.redistribute_adjustments as object);
+              return !adjKeys.some(k => liveKeys.has(k));
+            }
+            return false;
+          });
+
+          toast({
+            title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
+            description: inapplicable.length > 0
+              ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} saved but unresolved (source codes missing — expand to remap).`
+              : `All ${savedCount} actions applied successfully.`,
+          });
         }
 
         // Warn about remaining small codes that still have no merge/keep action
@@ -3030,7 +3115,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     const isKeep = action === '__keep__';
                                     const isReassign = action !== '__merge__' && !isRedistribute && !isKeep;
 
-                                    return (
+                                    return inapplicableSavedKeys.has(`${(row.sec || '').trim()}|${(row.head || '').trim()}`) ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-amber-500 text-sm font-medium">⚠ Saved but unresolved</span>
+                                        <span className="text-xs text-muted-foreground">Source codes no longer exist</span>
+                                        <button
+                                          onClick={() => handleUndoMerge(row.sec, row.head)}
+                                          className="text-xs text-blue-500 hover:text-blue-700 underline"
+                                        >
+                                          Clear &amp; remap
+                                        </button>
+                                      </div>
+                                    ) : (
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-green-400 text-sm font-medium">
                                           {isKeep
@@ -3120,7 +3216,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         return (
                           <div className="flex justify-between items-center mt-4 pt-4 border-t border-border">
                             <span className="text-xs text-muted-foreground">
-                              {readyCount} selected for merge
+                              {readyCount} selected actions
                             </span>
                             <div className="flex items-center gap-3">
                               <button
