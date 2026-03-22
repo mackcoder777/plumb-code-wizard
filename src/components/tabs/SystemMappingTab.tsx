@@ -886,17 +886,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       <SystemMappingHeader stats={stats} totalItems={totalItems} />
 
       {/* Priority info banner */}
-      {Object.keys(autoPatternConflicts).length > 0 && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
-          <span className="shrink-0 mt-0.5">ℹ️</span>
-          <span>
-            <strong className="text-foreground">Your mappings always take priority.</strong> When no mapping is set, 
-            the system auto-assigns a code based on the system name (e.g. "Cold Water" → DWTR). 
-            Systems with a conflict between your choice and the auto-pattern 
-            are flagged with ⚠️ below.
-          </span>
-        </div>
-      )}
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-border bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
+        <span className="shrink-0 mt-0.5">ℹ️</span>
+        <span>
+          <strong className="text-foreground">Your mappings always win.</strong> Auto-assignment only applies to items 
+          whose system name has no mapping here — for example, orphan items with an unrecognized 
+          system name. Every system showing <span className="font-mono bg-muted px-1 rounded">Mapped</span> uses 
+          your explicit assignment, never the fallback.
+        </span>
+      </div>
 
       {/* Mapping Audit Summary - Collapsible */}
       <Collapsible>
