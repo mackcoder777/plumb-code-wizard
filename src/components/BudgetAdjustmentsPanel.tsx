@@ -2775,8 +2775,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     <ul className="mt-1 space-y-0.5">
                       {staleMergeUpdates.filter(Boolean).map((u, i) => (
                         <li key={i} className="text-xs font-mono text-amber-700">
-                          {u!.secCode} {u!.oldCostHead} → <span className="text-amber-500">not found</span>
-                          {u!.newCostHead ? ` (possible replacement: ${u!.newCostHead})` : ''}
+                          {u!.secCode} {u!.oldCostHead}{' '}
+                          <span className="text-amber-500">→ not found in current data</span>
+                          {u!.newCostHead ? (
+                            <span className="text-amber-600"> (possible replacement: {u!.newCostHead})</span>
+                          ) : (
+                            <span className="text-amber-400"> — cost head may have been removed or remapped</span>
+                          )}
                         </li>
                       ))}
                     </ul>
