@@ -852,11 +852,24 @@ const EnhancedCostCodeManager = () => {
             const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             const activity = floorMap.activity !== '0000' ? floorMap.activity : parts[1];
 
-            // Validate cost head against current system mapping —
-            // if the user changed the mapping (e.g. DWTR → WATR), update on load
-            // so stale DB codes don't survive page refreshes.
+            // Validate cost head against current mappings — respecting priority:
+            // Category mapping > System mapping > keep persisted
             let resolvedHead = persistedHead;
-            if (item.system && savedMappings.length > 0) {
+
+            // Priority 1: Category mapping
+            let categoryHead: string | null = null;
+            if (item.report_cat && dbCategoryMappings.length > 0) {
+              categoryHead = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
+            }
+
+            if (categoryHead && categoryHead === persistedHead) {
+              // Category mapping matches current head — keep it, don't let system override
+              resolvedHead = persistedHead;
+            } else if (categoryHead && categoryHead !== persistedHead) {
+              // Category mapping changed — update to new category code
+              resolvedHead = categoryHead;
+            } else if (item.system && savedMappings.length > 0) {
+              // Priority 2: No category mapping — check system mapping
               const normalizedSystem = (item.system || '').toLowerCase().trim();
               const sysMapping = savedMappings.find(
                 m => (m.system_name || '').toLowerCase().trim() === normalizedSystem
