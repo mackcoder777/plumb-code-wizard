@@ -540,6 +540,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     const saved = localStorage.getItem(`budget_rate_${projectId}`);
     return saved ? parseFloat(saved) : 85;
   });
+  const [budgetRateInput, setBudgetRateInput] = useState(() => budgetRate.toString());
 
   const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>(() => {
     try {
@@ -682,7 +683,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
       
       const savedBudgetRate = localStorage.getItem(`budget_rate_${projectId}`);
-      setBudgetRate(savedBudgetRate ? parseFloat(savedBudgetRate) : 85);
+      const rate = savedBudgetRate ? parseFloat(savedBudgetRate) : 85;
+      setBudgetRate(rate);
+      setBudgetRateInput(rate.toString());
 
       // Reload fab code map
       const savedFabCodeMap = localStorage.getItem(`budget_fab_code_map_${projectId}`);
@@ -2481,11 +2484,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                   <Label htmlFor="budgetRate">Budget Rate ($/hr)</Label>
                   <Input
                     id="budgetRate"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={budgetRate}
-                    onChange={(e) => setBudgetRate(parseFloat(e.target.value) || 0)}
+                    type="text"
+                    inputMode="decimal"
+                    value={budgetRateInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                        setBudgetRateInput(val);
+                        const parsed = parseFloat(val);
+                        if (!isNaN(parsed)) setBudgetRate(parsed);
+                      }
+                    }}
+                    onBlur={() => {
+                      const parsed = parseFloat(budgetRateInput);
+                      if (isNaN(parsed) || budgetRateInput.trim() === '') {
+                        setBudgetRateInput(budgetRate.toString());
+                      } else {
+                        setBudgetRate(parsed);
+                        setBudgetRateInput(parsed.toString());
+                      }
+                    }}
                     className="font-mono text-lg"
                   />
                   <p className="text-xs text-muted-foreground">Single blended rate for budgeting</p>
