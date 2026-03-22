@@ -3424,6 +3424,29 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               </SelectContent>
                             </Select>
                           </div>
+                          {Object.keys(standaloneAutoSuggestions).length > 0 && (
+                            <button
+                              onClick={() => {
+                                const newTargets: Record<string, string> = { ...reassignTargets };
+                                const newConsolidations: Record<string, boolean> = { ...consolidations };
+                                let count = 0;
+                                Object.entries(standaloneAutoSuggestions).forEach(([key, suggestion]) => {
+                                  const alreadySaved = savedMergeKeySet.has(key);
+                                  if (!alreadySaved) {
+                                    newTargets[key] = suggestion.targetHead;
+                                    newConsolidations[key] = true;
+                                    count++;
+                                  }
+                                });
+                                setReassignTargets(newTargets);
+                                setConsolidations(newConsolidations);
+                                toast({ title: `${count} codes auto-targeted`, description: 'Review suggestions below then click Save to apply.' });
+                              }}
+                              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              ⚡ Auto-resolve ({Object.keys(standaloneAutoSuggestions).length})
+                            </button>
+                          )}
                         </div>
                         <Table>
                           <TableHeader>
