@@ -1142,7 +1142,28 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                       <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
                         <PopoverTrigger asChild>
                           <Button variant="outline" className="w-full justify-between h-12 text-left">
-                            <span className="text-muted-foreground">Select a labor code to apply...</span>
+                            {(() => {
+                              if (selectedSystems.size !== 1) {
+                                return <span className="text-muted-foreground">Select a labor code to apply...</span>;
+                              }
+                              const singleSystem = filteredSystems.find(s => selectedSystems.has(s.system));
+                              const singleCode = singleSystem?.laborCode;
+                              const singleCodeInfo = singleCode
+                                ? allLaborCodes.find(c => c.code === singleCode)
+                                : undefined;
+                              if (singleCodeInfo) {
+                                return (
+                                  <span className="flex items-center gap-2">
+                                    <span className="font-mono font-semibold">{singleCodeInfo.code}</span>
+                                    <span className="text-muted-foreground text-sm">{singleCodeInfo.description}</span>
+                                  </span>
+                                );
+                              }
+                              if (singleCode) {
+                                return <span className="font-mono font-semibold">{singleCode}</span>;
+                              }
+                              return <span className="text-muted-foreground">Select a labor code to apply...</span>;
+                            })()}
                             <ChevronDown className="w-4 h-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
