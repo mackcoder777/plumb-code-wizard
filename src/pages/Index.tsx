@@ -801,6 +801,14 @@ const EnhancedCostCodeManager = () => {
         console.log('[Load] Deferring auto-apply: floor mappings not yet loaded');
         return;
       }
+
+      const systemMappingsLoaded = savedMappings.length > 0;
+      const hasSystemsInData = savedItems.some(i => i.system && i.system.trim());
+      if (hasSystemsInData && !systemMappingsLoaded) {
+        console.log('[Load] Deferring: system mappings not yet loaded');
+        return;
+      }
+
       const itemsNeedingPersist: Array<{ row_number: number; cost_code: string }> = [];
 
       const transformedItems = savedItems.map((item) => {

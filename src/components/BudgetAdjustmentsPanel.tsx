@@ -388,6 +388,7 @@ const fixResidual = (
 
 const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
   BGWT: ['DWTR', 'WATR'],        // Below Grade Water → Domestic Water, fallback WATR
+  DWTR: ['WATR'],                // Stale domestic water code → Water
   BGSD: ['STRM'],                 // Below Grade Storm → Storm Drain
   BGWV: ['SNWV'],                 // Below Grade Waste & Vent → Sanitary Waste & Vent
   BGNG: ['NGAS'],                 // Below Grade Gas → Natural Gas
@@ -1694,6 +1695,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           };
           break;
         }
+      }
+
+      // If no live target key found but we know the logical target, still suggest
+      // so the user sees a recommendation even if the target doesn't exist yet
+      if (!suggestions[entry.key] && systemTargetHeads.size > 0) {
+        const targetHead = [...systemTargetHeads][0];
+        const sysNames = [...sourceSystems].slice(0, 2).join(', ');
+        suggestions[entry.key] = {
+          targetHead,
+          targetKey: '',
+          reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
+        };
       }
     });
     return suggestions;
