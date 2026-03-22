@@ -386,11 +386,30 @@ const fixResidual = (
 };
 // ─────────────────────────────────────────────────────────────
 
-// BG cost head → above-grade equivalent for auto-suggest
-const BG_TO_ABOVE_GRADE: Record<string, string> = {
-  BGWT: 'WATR', BGSD: 'STRM', BGTP: 'TRAP', BGCN: 'COND',
-  BGWV: 'SNWV', BGGW: 'GRWV', BGNG: 'NGAS', BGPD: 'PMPD',
-  BGCM: 'COMA', INDR: 'SNWV',
+// Primary mapping — first entry is preferred, subsequent entries are fallbacks in order
+const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
+  BGWT: ['WATR'],
+  BGSD: ['STRM'],
+  BGWV: ['SNWV'],
+  BGNG: ['NGAS'],
+  BGTP: ['TRAP', 'WATR'],
+  BGAW: ['AWST', 'SNWV'],
+  BGCN: ['COND', 'WATR'],
+  BGGW: ['GRWV', 'SNWV'],
+  BGPD: ['PMPD'],
+  BGCM: ['COMA'],
+  INDR: ['SNWV'],
+  TRAP: ['WATR'],
+};
+
+// For BGPD: determine storm vs sanitary fallback from source system names
+const getBgpdFallback = (sourceSystems: Set<string>): string => {
+  for (const sys of sourceSystems) {
+    const lower = sys.toLowerCase();
+    if (/storm|^sd\b|\bsd\s/.test(lower)) return 'STRM';
+    if (/sanitary|waste|\bsn\b/.test(lower)) return 'SNWV';
+  }
+  return 'SNWV';
 };
 
 // Maps field labor cost heads → fabrication material cost head
