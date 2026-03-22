@@ -1071,7 +1071,7 @@ export function exportAuditReport(
         finalHours = String(Math.round(Object.values(redist).reduce((s, h) => s + (h as number), 0)));
       } else {
         const targetEntry = adjSummary[targetCode];
-        finalHours = targetEntry ? String(Math.round(targetEntry.hours * 10) / 10) : '';
+        finalHours = targetEntry ? String(Math.round(targetEntry.hours)) : '';
       }
 
       adjustmentLogData.push([actionType, sourceCode, sourceHours, targetCode, finalHours, new Date().toISOString().split('T')[0]]);
