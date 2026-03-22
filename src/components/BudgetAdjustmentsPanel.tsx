@@ -1480,12 +1480,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   useEffect(() => {
     if (
       !savedMergesData?.length ||
-      !finalLaborSummary ||
+      !calculations.adjustedLaborSummary ||  // use PRE-merge data
       !projectId ||
       projectId === 'default' ||
       cleanupRanRef.current
     ) return;
 
+    const rawSummary = calculations.adjustedLaborSummary;
+    const rawKeys = Object.keys(rawSummary);
+
+    // Only clean up merges for fallback sections where the cost head
+    // has ZERO hours across ALL sections in the raw pre-merge data
     const fallbackMerges = savedMergesData.filter(m =>
       FALLBACK_SECTIONS.has((m.sec_code || '').trim().toUpperCase())
     );
@@ -1493,53 +1498,64 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     if (fallbackMerges.length === 0) return;
 
     const toDelete = fallbackMerges.filter(merge => {
-      const sec = (merge.sec_code || '').trim();
-      const hasLiveHours = Object.keys(finalLaborSummary).some(k =>
-        k.trim().startsWith(sec) && (finalLaborSummary[k].hours ?? 0) > 0
-      );
-      return !hasLiveHours;
+      const head = (merge.cost_head || '').trim();
+      // Check if this cost head has ANY hours anywhere in the raw summary
+      const hasAnyHours = rawKeys.some(k => {
+        const kHead = k.trim().split(/\s+/).pop();
+        return kHead === head && (rawSummary[k]?.hours ?? 0) > 0;
+      });
+      return !hasAnyHours; // only delete if truly zero across all sections
     });
 
-    // Also clean up null/null rows that aren't valid merge outputs
+    // nullNullOrphans: merge records with no action AND no source in raw data
     const nullNullOrphans = savedMergesData.filter(m => {
       if (m.reassign_to_head !== null || m.redistribute_adjustments !== null) return false;
       const sec = (m.sec_code || '').trim();
       const head = (m.cost_head || '').trim();
-      // Valid merge = a 0000 key for this sec+head exists in final summary
-      const mergeTargetKey = `${sec} 0000 ${head}`;
-      return !finalLaborSummary[mergeTargetKey];
+      // Check if ANY key with this sec+head exists in raw pre-merge data
+      const hasSourceInRaw = rawKeys.some(k => {
+        const kParts = k.trim().split(/\s+/);
+        return kParts[0] === sec && kParts[kParts.length - 1] === head;
+      });
+      return !hasSourceInRaw;
     });
 
-    const allToDelete = [...toDelete, ...nullNullOrphans];
-    // Deduplicate by id
-    const uniqueToDelete = allToDelete.filter((m, i, arr) => arr.findIndex(x => x.id === m.id) === i);
+    // Combine but deduplicate by id
+    const seen = new Set<string>();
+    const allToDelete = [...toDelete, ...nullNullOrphans].filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
 
-    if (uniqueToDelete.length === 0) return;
+    if (allToDelete.length === 0) return;
 
     cleanupRanRef.current = true;
 
     const cleanup = async () => {
-      const ids = uniqueToDelete.map(m => m.id);
+      const ids = allToDelete.map(m => m.id);
+      console.log('[AutoCleanup] Deleting orphaned merges:', ids.length, allToDelete.map(m => `${m.sec_code}|${m.cost_head}`));
+
       const { error } = await supabase
         .from('project_small_code_merges')
         .delete()
         .in('id', ids);
 
       if (error) {
-        console.error('[AutoCleanup] Failed to delete orphaned merges:', error);
+        console.error('[AutoCleanup] Failed:', error);
         cleanupRanRef.current = false;
         return;
       }
 
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
       toast({
-        title: `Cleaned up ${uniqueToDelete.length} orphaned merge${uniqueToDelete.length > 1 ? 's' : ''}`,
-        description: `Removed saved rules for folded/orphaned sections: ${[...new Set(uniqueToDelete.map(m => m.sec_code))].join(', ')}`,
+        title: `Cleaned up ${allToDelete.length} orphaned merge${allToDelete.length > 1 ? 's' : ''}`,
+        description: `Removed rules for sections with no source data: ${[...new Set(allToDelete.map(m => m.sec_code))].join(', ')}`,
       });
     };
 
     cleanup();
-  }, [savedMergesData, finalLaborSummary, projectId]);
+  }, [savedMergesData, calculations.adjustedLaborSummary, projectId]);
 
   // Detect saved redistributions that can't be applied against live data
   const inapplicableSavedKeys = useMemo(() => {
@@ -1897,6 +1913,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     saveMergeMutation.mutate(dedupedRows, {
       onSuccess: async () => {
+        queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+
         if (invalidRows.length > 0) {
           const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
           toast({
@@ -1904,35 +1922,51 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             description: `Skipped: ${names}. Fix balance and re-apply.`,
             variant: 'destructive',
           });
-        } else {
-          // Post-save verification
-          const { data: savedBack } = await supabase
-            .from('project_small_code_merges')
-            .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
-            .eq('project_id', projectId);
+        }
 
-          const savedCount = savedBack?.length ?? 0;
+        try {
           const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary ?? {}));
-          const inapplicable = (savedBack ?? []).filter(row => {
+
+          const { data: savedBack } = await Promise.race([
+            supabase
+              .from('project_small_code_merges')
+              .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
+              .eq('project_id', projectId),
+            new Promise<{ data: null }>((resolve) =>
+              setTimeout(() => resolve({ data: null }), 5000)
+            ),
+          ]);
+
+          if (!savedBack) {
+            if (!invalidRows.length) toast({ title: 'Saved', description: 'Merge actions saved successfully.' });
+            return;
+          }
+
+          const savedCount = savedBack.length;
+          const inapplicable = savedBack.filter(row => {
             if (row.redistribute_adjustments && typeof row.redistribute_adjustments === 'object') {
               const adjKeys = Object.keys(row.redistribute_adjustments as object);
               const sec = (row.sec_code || '').trim();
               const head = (row.cost_head || '').trim();
-              const anyLive = adjKeys.some(k => {
+              return !adjKeys.some(k => {
                 if (k.includes(' ')) return liveKeys.has(k);
                 return liveKeys.has(`${sec} ${k} ${head}`);
               });
-              return !anyLive;
             }
             return false;
           });
 
-          toast({
-            title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
-            description: inapplicable.length > 0
-              ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} saved but unresolved (source codes missing — expand to remap).`
-              : `All ${savedCount} actions applied successfully.`,
-          });
+          if (!invalidRows.length) {
+            toast({
+              title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
+              description: inapplicable.length > 0
+                ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} need remapping.`
+                : `All ${savedCount} actions applied successfully.`,
+            });
+          }
+        } catch (err) {
+          console.error('[Save] Post-verification failed:', err);
+          if (!invalidRows.length) toast({ title: 'Saved', description: 'Actions saved. Verification skipped.' });
         }
 
         // Warn about remaining small codes that still have no merge/keep action
