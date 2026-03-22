@@ -325,14 +325,39 @@ const DEFAULT_COST_HEAD_MAPPING = {
   'SNWV': {
     patterns: [
       /^sanitary/i, /waste.*vent/i, /^dwv$/i, /soil/i, /^vent$/i,
-      /^waste$/i, /^bg\s+waste/i, /^waste\s+abs/i, /acid.*waste/i,
-      /trap.*primer/i, /trp.*primer/i, /bg\s+vent/i, /bg\s+acid/i,
+      /^waste$/i, /^waste\s+abs/i, /acid.*waste/i,
+      /trap.*primer/i, /trp.*primer/i,
     ],
     description: 'SANITARY WASTE AND VENT'
   },
   'STRM': {
-    patterns: [/storm/i, /overflow.*dr/i, /roof.*drain/i, /rain/i, /^bg\s+storm/i],
+    patterns: [/storm/i, /overflow.*dr/i, /roof.*drain/i, /rain/i],
     description: 'STORM DRAIN'
+  },
+  'BGWV': {
+    patterns: [
+      /^bg\s+waste/i, /^bg\s+vent/i, /^bg\s+acid/i, /^bg\s+waste\s+abs/i,
+    ],
+    description: 'BELOW GRADE WASTE & VENT'
+  },
+  'BGSD': {
+    patterns: [/^bg\s+storm/i],
+    description: 'BELOW GRADE STORM DRAIN'
+  },
+  'BGWT': {
+    patterns: [
+      /^bg\s+cold\s*water/i, /^bg\s+hot\s*water/i,
+      /^bg\s+water/i, /^bg\s+domestic/i,
+    ],
+    description: 'BELOW GRADE DOMESTIC WATER'
+  },
+  'BGTP': {
+    patterns: [/^bg\s+tr(a)?p/i, /^bg\s+trp/i],
+    description: 'BELOW GRADE TRAP PRIMERS'
+  },
+  'BGGW': {
+    patterns: [/^bg\s+grease/i],
+    description: 'BELOW GRADE GREASE WASTE'
   },
   'DRNS': {
     patterns: [/^drains?$/i, /floor.*drain/i, /cleanout/i, /floor.*sink/i, /drain.*cleanout/i],
