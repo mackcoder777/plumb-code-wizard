@@ -1136,7 +1136,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                     
                     {/* Single Labor Code Assignment */}
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Assign Labor Code to All Selected Systems</Label>
+                      <Label className="text-sm font-medium">
+                        {selectedSystems.size === 1 ? 'Assigned Labor Code' : 'Assign Labor Code to All Selected Systems'}
+                      </Label>
                       <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
                         <PopoverTrigger asChild>
                           <Button variant="outline" className="w-full justify-between h-12 text-left">
