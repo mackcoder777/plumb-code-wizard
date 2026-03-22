@@ -1033,7 +1033,7 @@ export function exportAuditReport(
     ...materialSummary.map(m => [m.costCode, m.description, Math.round(m.materialDollars * 100) / 100, m.itemCount]),
     [],
     ['TOTALS'],
-    ['Total Labor Hours:', Math.round(laborSummaryRows.reduce((s, l) => s + l.hours, 0) * 10) / 10],
+    ['Total Labor Hours:', Math.round(laborSummaryRows.reduce((s, l) => s + l.hours, 0))],
     ['Total Labor $:', Math.round(laborSummaryRows.reduce((s, l) => s + l.laborDollars, 0) * 100) / 100],
     ['Total Material $:', Math.round(materialSummary.reduce((s, m) => s + m.materialDollars, 0) * 100) / 100],
   ];
