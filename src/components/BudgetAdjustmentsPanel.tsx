@@ -1534,7 +1534,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     }
 
     saveMergeMutation.mutate(dedupedRows, {
-      onSuccess: () => {
+      onSuccess: async () => {
         if (invalidRows.length > 0) {
           const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
           toast({
@@ -1543,7 +1543,28 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             variant: 'destructive',
           });
         } else {
-          toast({ title: 'Merges saved', description: 'All consolidation decisions have been persisted.' });
+          // Post-save verification
+          const { data: savedBack } = await supabase
+            .from('project_small_code_merges')
+            .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
+            .eq('project_id', projectId);
+
+          const savedCount = savedBack?.length ?? 0;
+          const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary ?? {}));
+          const inapplicable = (savedBack ?? []).filter(row => {
+            if (row.redistribute_adjustments && typeof row.redistribute_adjustments === 'object') {
+              const adjKeys = Object.keys(row.redistribute_adjustments as object);
+              return !adjKeys.some(k => liveKeys.has(k));
+            }
+            return false;
+          });
+
+          toast({
+            title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
+            description: inapplicable.length > 0
+              ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} saved but unresolved (source codes missing — expand to remap).`
+              : `All ${savedCount} actions applied successfully.`,
+          });
         }
 
         // Warn about remaining small codes that still have no merge/keep action
