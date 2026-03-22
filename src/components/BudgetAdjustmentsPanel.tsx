@@ -1194,9 +1194,48 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         });
 
         if (missingKeys.length > 0) {
-          console.warn(
-            `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. No deltas applied to preserve hour balance.`
-          );
+          // Attempt activity-token drift fallback: match by sec + cost head ignoring activity
+          const remappedAdj: Record<string, number> = {};
+          let remapSuccess = true;
+
+          redistEntries.forEach(([actCode, delta]) => {
+            const isFullCode = actCode.includes(' ');
+            const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            const matchKey =
+              matchingKeys.find((k) => (result[k]?.code ?? '').trim() === fullCode) ?? fullCode;
+            if (result[matchKey]) {
+              remappedAdj[matchKey] = (remappedAdj[matchKey] ?? 0) + (delta as number);
+              return;
+            }
+            // Find a live key with same section and cost head, different activity
+            const fallback = Object.keys(result).find(lk => {
+              const lkParts = (result[lk]?.code ?? '').trim().split(/\s+/);
+              return lkParts[0] === sec && lkParts.slice(2).join(' ') === head;
+            });
+            if (fallback) {
+              remappedAdj[fallback] = (remappedAdj[fallback] ?? 0) + (delta as number);
+            } else {
+              remapSuccess = false;
+            }
+          });
+
+          if (remapSuccess && Object.keys(remappedAdj).length > 0) {
+            Object.entries(remappedAdj).forEach(([key, delta]) => {
+              if (result[key]) {
+                const rate = result[key].hours > 0 ? result[key].dollars / result[key].hours : 0;
+                result[key] = {
+                  ...result[key],
+                  hours: result[key].hours + delta,
+                  dollars: result[key].dollars + delta * rate,
+                };
+                if (result[key].hours <= 0.001) delete result[key];
+              }
+            });
+          } else {
+            console.warn(
+              `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. Remap failed.`
+            );
+          }
         } else {
           redistEntries.forEach(([actCode, delta]) => {
             const isFullCode = actCode.includes(' ');
