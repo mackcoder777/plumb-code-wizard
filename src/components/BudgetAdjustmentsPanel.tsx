@@ -1913,6 +1913,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     saveMergeMutation.mutate(dedupedRows, {
       onSuccess: async () => {
+        queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+
         if (invalidRows.length > 0) {
           const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
           toast({
@@ -1920,35 +1922,51 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             description: `Skipped: ${names}. Fix balance and re-apply.`,
             variant: 'destructive',
           });
-        } else {
-          // Post-save verification
-          const { data: savedBack } = await supabase
-            .from('project_small_code_merges')
-            .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
-            .eq('project_id', projectId);
+        }
 
-          const savedCount = savedBack?.length ?? 0;
+        try {
           const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary ?? {}));
-          const inapplicable = (savedBack ?? []).filter(row => {
+
+          const { data: savedBack } = await Promise.race([
+            supabase
+              .from('project_small_code_merges')
+              .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
+              .eq('project_id', projectId),
+            new Promise<{ data: null }>((resolve) =>
+              setTimeout(() => resolve({ data: null }), 5000)
+            ),
+          ]);
+
+          if (!savedBack) {
+            if (!invalidRows.length) toast({ title: 'Saved', description: 'Merge actions saved successfully.' });
+            return;
+          }
+
+          const savedCount = savedBack.length;
+          const inapplicable = savedBack.filter(row => {
             if (row.redistribute_adjustments && typeof row.redistribute_adjustments === 'object') {
               const adjKeys = Object.keys(row.redistribute_adjustments as object);
               const sec = (row.sec_code || '').trim();
               const head = (row.cost_head || '').trim();
-              const anyLive = adjKeys.some(k => {
+              return !adjKeys.some(k => {
                 if (k.includes(' ')) return liveKeys.has(k);
                 return liveKeys.has(`${sec} ${k} ${head}`);
               });
-              return !anyLive;
             }
             return false;
           });
 
-          toast({
-            title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
-            description: inapplicable.length > 0
-              ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} saved but unresolved (source codes missing — expand to remap).`
-              : `All ${savedCount} actions applied successfully.`,
-          });
+          if (!invalidRows.length) {
+            toast({
+              title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
+              description: inapplicable.length > 0
+                ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} need remapping.`
+                : `All ${savedCount} actions applied successfully.`,
+            });
+          }
+        } catch (err) {
+          console.error('[Save] Post-verification failed:', err);
+          if (!invalidRows.length) toast({ title: 'Saved', description: 'Actions saved. Verification skipped.' });
         }
 
         // Warn about remaining small codes that still have no merge/keep action
