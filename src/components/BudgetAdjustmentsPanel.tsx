@@ -1419,8 +1419,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     savedMergesData.forEach(merge => {
       if (merge.redistribute_adjustments && typeof merge.redistribute_adjustments === 'object') {
         const adjKeys = Object.keys(merge.redistribute_adjustments as object);
-        const anyLive = adjKeys.some(k => liveKeys.has(k));
-        if (!anyLive) stale.add(`${(merge.sec_code || '').trim()}|${(merge.cost_head || '').trim()}`);
+        const sec = (merge.sec_code || '').trim();
+        const head = (merge.cost_head || '').trim();
+        const anyLive = adjKeys.some(k => {
+          // Full code key — check directly
+          if (k.includes(' ')) return liveKeys.has(k);
+          // Short activity code — expand to full code before checking
+          const fullCode = `${sec} ${k} ${head}`;
+          return liveKeys.has(fullCode);
+        });
+        if (!anyLive) stale.add(`${sec}|${head}`);
       }
     });
     return stale;
