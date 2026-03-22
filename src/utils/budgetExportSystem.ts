@@ -1026,7 +1026,7 @@ export function exportAuditReport(
   const summaryData = [
     ['LABOR SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Hours', 'Labor $', 'Items'],
-    ...laborSummaryRows.map(l => [l.costCode, l.description, Math.round(l.hours * 10) / 10, Math.round(l.laborDollars * 100) / 100, l.itemCount || '']),
+    ...laborSummaryRows.map(l => [l.costCode, l.description, Math.round(l.hours), Math.round(l.laborDollars * 100) / 100, l.itemCount || '']),
     [],
     ['MATERIAL SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Material $', 'Items'],
