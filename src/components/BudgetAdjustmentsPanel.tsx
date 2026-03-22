@@ -1810,7 +1810,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           const inapplicable = (savedBack ?? []).filter(row => {
             if (row.redistribute_adjustments && typeof row.redistribute_adjustments === 'object') {
               const adjKeys = Object.keys(row.redistribute_adjustments as object);
-              return !adjKeys.some(k => liveKeys.has(k));
+              const sec = (row.sec_code || '').trim();
+              const head = (row.cost_head || '').trim();
+              const anyLive = adjKeys.some(k => {
+                if (k.includes(' ')) return liveKeys.has(k);
+                return liveKeys.has(`${sec} ${k} ${head}`);
+              });
+              return !anyLive;
             }
             return false;
           });
