@@ -1336,6 +1336,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
 
+  // Detect saved redistributions that can't be applied against live data
+  const inapplicableSavedKeys = useMemo(() => {
+    if (!savedMergesData || !calculations.adjustedLaborSummary) return new Set<string>();
+    const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary));
+    const stale = new Set<string>();
+
+    savedMergesData.forEach(merge => {
+      if (merge.redistribute_adjustments && typeof merge.redistribute_adjustments === 'object') {
+        const adjKeys = Object.keys(merge.redistribute_adjustments as object);
+        const anyLive = adjKeys.some(k => liveKeys.has(k));
+        if (!anyLive) stale.add(`${(merge.sec_code || '').trim()}|${(merge.cost_head || '').trim()}`);
+      }
+    });
+    return stale;
+  }, [savedMergesData, calculations.adjustedLaborSummary]);
+
   // Small Code Consolidation Analysis — runs against finalLaborSummary
   const smallCodeAnalysis = useMemo(() => {
     if (!finalLaborSummary || Object.keys(finalLaborSummary).length === 0) return [];
