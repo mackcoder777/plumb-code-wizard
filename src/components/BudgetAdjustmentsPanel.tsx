@@ -3515,6 +3515,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableCell>
                                   <TableCell className="text-right font-mono font-semibold text-destructive">
                                     {row.combinedHours.toFixed(1)}h
+                                    {standaloneAutoSuggestions[mergeKey] && !isSaved && (() => {
+                                      const suggestion = standaloneAutoSuggestions[mergeKey];
+                                      return (
+                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                          <span className="text-xs text-blue-500 font-normal">
+                                            ⚡ <span className="font-mono font-semibold">{suggestion.targetHead}</span>
+                                          </span>
+                                          <span className="text-xs text-muted-foreground font-normal">— {suggestion.reason}</span>
+                                          <button
+                                            onClick={() => {
+                                              setReassignTargets(prev => ({ ...prev, [mergeKey]: suggestion.targetHead }));
+                                              setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 underline font-normal"
+                                          >
+                                            Apply
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
                                   </TableCell>
                                   <TableCell>
                                     {isSaved ? (() => {
