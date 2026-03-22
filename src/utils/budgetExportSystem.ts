@@ -526,8 +526,8 @@ export function exportBudgetPacket(
   ws[`H${TOTALS_ROW}`] = { 
     t: 'n', 
     f: hoursSumParts || '0',
-    v: Math.round(laborData.reduce((s, i) => s + i.hours, 0) * 10) / 10,
-    z: '#,##0.0' 
+    v: Math.round(laborData.reduce((s, i) => s + i.hours, 0)),
+    z: '#,##0' 
   };
   ws[`J${TOTALS_ROW}`] = { 
     t: 'n', 
