@@ -1179,6 +1179,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                     value={`${code.code} ${code.description}`}
                                     onSelect={() => handleBulkAssign(code.code)}
                                   >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-3.5 w-3.5 shrink-0',
+                                        selectedSystems.size === 1 &&
+                                        filteredSystems.find(s => selectedSystems.has(s.system))?.laborCode === code.code
+                                          ? 'opacity-100 text-primary'
+                                          : 'opacity-0'
+                                      )}
+                                    />
                                     <span className="font-mono text-xs mr-2">{code.code}</span>
                                     <span className="truncate">{code.description}</span>
                                   </CommandItem>
