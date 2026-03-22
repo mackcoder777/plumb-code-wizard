@@ -1446,7 +1446,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
   const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
 
-  const handleConsolidate = () => {
+  const handleConsolidate = async () => {
+    if (!projectId || projectId === 'default') {
+      toast({
+        title: 'No project selected',
+        description: 'Select a project before saving merge actions.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const newEntries = Object.entries(consolidations)
       .filter(([, v]) => v)
       .map(([key]) => {
