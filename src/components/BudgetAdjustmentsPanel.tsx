@@ -1468,6 +1468,56 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
   }, [finalLaborSummary]);
 
+  // Auto-suggestions for standalone codes
+  const standaloneAutoSuggestions = useMemo(() => {
+    if (!smallCodeAnalysis?.length || !finalLaborSummary) return {};
+    const standalone = smallCodeAnalysis.filter(r => r.lines.length === 1);
+    if (standalone.length === 0) return {};
+    const suggestions: Record<string, { targetHead: string; targetKey: string; reason: string }> = {};
+    const liveKeys = Object.keys(finalLaborSummary);
+    standalone.forEach(entry => {
+      const parts = (entry.key || '').split('|');
+      const sec = parts[0] || '';
+      const head = parts[1] || '';
+      const aboveGradeEquiv = BG_TO_ABOVE_GRADE[head];
+      if (aboveGradeEquiv) {
+        const targetKey = liveKeys.find(k => {
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === sec && kParts[kParts.length - 1] === aboveGradeEquiv;
+        });
+        if (targetKey) {
+          suggestions[entry.key] = { targetHead: aboveGradeEquiv, targetKey, reason: `${head} → above-grade equivalent` };
+          return;
+        }
+      }
+      const sourceSystems = new Set<string>();
+      estimateData.forEach(item => {
+        if (!item.costCode) return;
+        const itemParts = (item.costCode || '').trim().split(/\s+/);
+        const itemSec = itemParts[0];
+        const itemHead = itemParts[itemParts.length - 1];
+        if (itemSec === sec && itemHead === head) sourceSystems.add((item.system || '').trim());
+      });
+      const systemTargetHeads = new Set<string>();
+      sourceSystems.forEach(sys => {
+        const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
+        if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
+      });
+      for (const targetHead of systemTargetHeads) {
+        const targetKey = liveKeys.find(k => {
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === sec && kParts[kParts.length - 1] === targetHead;
+        });
+        if (targetKey) {
+          const sysNames = [...sourceSystems].slice(0, 2).join(', ');
+          suggestions[entry.key] = { targetHead, targetKey, reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}` };
+          break;
+        }
+      }
+    });
+    return suggestions;
+  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings]);
+
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
     const MIN_HOURS = 8;
