@@ -3656,20 +3656,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableCell>
                                   <TableCell>
                                     {isSaved ? (() => {
-                                      const savedMerge = savedMergesData?.find(m => m.sec_code === row.sec && m.cost_head === row.head) as any;
-                                      const hasTarget = !!savedMerge?.reassign_to_head;
-                                      const isRedistribute = !!savedMerge?.redistribute_adjustments;
-                                      const isKeep = savedMerge?.reassign_to_head === '__keep__';
-                                      const showWarning = !hasTarget && !isRedistribute;
+                                      const savedMerge = savedMergesData?.find(m =>
+                                        (m.sec_code || '').trim() === row.sec &&
+                                        (m.cost_head || '').trim() === row.head
+                                      );
+                                      if (!savedMerge) return null;
+                                      const action = getSavedAction(savedMerge);
+                                      const isRedistribute = action === '__redistribute__';
+                                      const isKeep = action === '__keep__';
+                                      const isMerge = action === '__merge__';
+                                      const isReassign = !isRedistribute && !isKeep && !isMerge;
                                       return (
-                                        <span className={`text-xs font-mono ${showWarning ? 'text-amber-400' : 'text-green-400'}`}>
-                                          {isKeep
-                                            ? '→ kept as-is'
-                                            : isRedistribute
-                                            ? '→ redistributed'
-                                            : hasTarget
-                                            ? `→ ${savedMerge.reassign_to_head}`
-                                            : '⚠ No target — undo & reassign'}
+                                        <span className={`text-xs font-mono text-green-400`}>
+                                          {isKeep && '↔ Kept as-is'}
+                                          {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
+                                          {isReassign && `→ Reassigned to ${row.sec} ${action}`}
+                                          {isRedistribute && `⇄ Redistributed`}
                                         </span>
                                       );
                                     })()
@@ -3701,22 +3703,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
                                       if (isSaved) {
                                         const savedEntry = savedMergesData?.find(
-                                          m => m.sec_code === row.sec && m.cost_head === row.head
+                                          m => (m.sec_code || '').trim() === row.sec && (m.cost_head || '').trim() === row.head
                                         );
-                                        const isKept = (savedEntry as any)?.reassign_to_head === '__keep__';
-                                        const isStale = !(savedEntry as any)?.reassign_to_head && row.lines.length === 1;
+                                        const action = savedEntry ? getSavedAction(savedEntry) : null;
+                                        const isKept = action === '__keep__';
+                                        const isMerge = action === '__merge__';
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span
-                                              className={`text-xs ${
-                                                isStale
-                                                  ? 'text-amber-500'
-                                                  : isKept
-                                                  ? 'text-blue-400'
-                                                  : 'text-green-500'
-                                              }`}
-                                            >
-                                              {isStale ? '⚠ Needs target' : isKept ? '✓ Kept' : '✓ Saved'}
+                                            <span className={`text-xs ${isKept ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isKept ? '✓ Kept' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
