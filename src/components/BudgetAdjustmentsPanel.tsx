@@ -1907,87 +1907,73 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
     }
 
-    saveMergeMutation.mutate(dedupedRows, {
-      onSuccess: async () => {
-        queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
-
-        if (invalidRows.length > 0) {
-          const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
-          toast({
-            title: `Partially saved — ${invalidRows.length} row(s) skipped`,
-            description: `Skipped: ${names}. Fix balance and re-apply.`,
-            variant: 'destructive',
-          });
-        }
-
-        try {
-          const liveKeys = new Set(Object.keys(calculations.adjustedLaborSummary ?? {}));
-
-          const { data: savedBack } = await Promise.race([
-            supabase
-              .from('project_small_code_merges')
-              .select('sec_code, cost_head, reassign_to_head, redistribute_adjustments')
-              .eq('project_id', projectId),
-            new Promise<{ data: null }>((resolve) =>
-              setTimeout(() => resolve({ data: null }), 5000)
-            ),
-          ]);
-
-          if (!savedBack) {
-            if (!invalidRows.length) toast({ title: 'Saved', description: 'Merge actions saved successfully.' });
-            return;
-          }
-
-          const savedCount = savedBack.length;
-          const inapplicable = savedBack.filter(row => {
-            if (row.redistribute_adjustments && typeof row.redistribute_adjustments === 'object') {
-              const adjKeys = Object.keys(row.redistribute_adjustments as object);
-              const sec = (row.sec_code || '').trim();
-              const head = (row.cost_head || '').trim();
-              return !adjKeys.some(k => {
-                if (k.includes(' ')) return liveKeys.has(k);
-                return liveKeys.has(`${sec} ${k} ${head}`);
-              });
-            }
-            return false;
-          });
-
-          if (!invalidRows.length) {
-            toast({
-              title: `Saved ${savedCount} action${savedCount !== 1 ? 's' : ''}`,
-              description: inapplicable.length > 0
-                ? `${savedCount - inapplicable.length} applied, ${inapplicable.length} need remapping.`
-                : `All ${savedCount} actions applied successfully.`,
-            });
-          }
-        } catch (err) {
-          console.error('[Save] Post-verification failed:', err);
-          if (!invalidRows.length) toast({ title: 'Saved', description: 'Actions saved. Verification skipped.' });
-        }
-
-        // Warn about remaining small codes that still have no merge/keep action
-        const SMALL_THRESHOLD = 8;
-        const savedKeys = new Set(dedupedRows.map(r => `${r.sec_code}|${r.cost_head}`));
-        const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
-        if (summary) {
-          const remainingSmall = Object.values(summary).filter(entry => {
-            const hrs = entry.hours ?? 0;
-            if (hrs < 0.05 || hrs >= SMALL_THRESHOLD) return false;
-            const parts = (entry.code ?? '').trim().split(/\s+/);
-            const sec = parts[0] ?? '';
-            const head = parts.slice(2).join(' ');
-            return !savedKeys.has(`${sec}|${head}`);
-          }).length;
-          if (remainingSmall > 0) {
-            toast({
-              title: `${remainingSmall} small codes still unassigned`,
-              description: `${remainingSmall} cost codes under ${SMALL_THRESHOLD}h have no action saved. Review Standalone Codes tab.`,
-              variant: 'destructive',
-            });
-          }
-        }
-      },
+    const progressToastId = toast({
+      title: `Saving ${dedupedRows.length} action${dedupedRows.length !== 1 ? 's' : ''}…`,
+      description: 'Please wait.',
     });
+
+    try {
+      await saveMergeMutation.mutateAsync(dedupedRows);
+
+      // Wait for refetch to complete BEFORE clearing local state
+      await queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+
+      // NOW clear local state — savedMergesData is already refreshed in cache
+      setConsolidations({});
+      setReassignTargets({});
+      setRedistributeAdjustments({});
+      setManuallyOverridden(new Set());
+
+      // Dismiss progress, show result
+      toast({
+        title: `Saved ${dedupedRows.length} action${dedupedRows.length !== 1 ? 's' : ''}`,
+        description: skippedCount > 0
+          ? `${skippedCount} skipped — select a target or uncheck before saving.`
+          : 'All actions saved successfully.',
+      });
+
+      if (invalidRows.length > 0) {
+        const names = invalidRows.map((r: any) => `${r.sec} ${r.head} (${r.reason})`).join(', ');
+        toast({
+          title: `${invalidRows.length} row(s) skipped`,
+          description: `Skipped: ${names}. Fix balance and re-apply.`,
+          variant: 'destructive',
+        });
+      }
+
+      // Background: warn about remaining small codes (non-blocking)
+      const SMALL_THRESHOLD = 8;
+      const savedKeys = new Set(
+        (queryClient.getQueryData<typeof savedMergesData>(['small-code-merges', projectId]) ?? [])
+          .map(m => `${m.sec_code}|${m.cost_head}`)
+      );
+      const remainingSmall = Object.entries(finalLaborSummary ?? {}).filter(
+        ([key, entry]) => {
+          const head = key.trim().split(/\s+/).pop() ?? '';
+          return (entry.hours ?? 0) < SMALL_THRESHOLD &&
+                 (entry.hours ?? 0) >= 0.05 &&
+                 !savedKeys.has(key.trim().split(/\s+/)[0] + '|' + head);
+        }
+      ).length;
+
+      if (remainingSmall > 0) {
+        setTimeout(() => {
+          toast({
+            title: `${remainingSmall} small codes still unassigned`,
+            description: `Review Standalone Codes tab for remaining codes under ${SMALL_THRESHOLD}h.`,
+            variant: 'default',
+          });
+        }, 1500);
+      }
+
+    } catch (err) {
+      console.error('[Save] Failed:', err);
+      toast({
+        title: 'Save failed',
+        description: err instanceof Error ? err.message : 'Unknown error. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const getSavedAction = (merge: { redistribute_adjustments?: unknown; reassign_to_head?: string | null }) => {
