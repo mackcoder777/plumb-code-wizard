@@ -59,6 +59,7 @@ interface SystemMappingTabProps {
   onProfileOverride?: (override: any) => void;
   onReanalyzeProfile?: () => void;
   onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
+  defaultCostHeadMapping?: Record<string, { patterns: RegExp[]; description: string }>;
 }
 
 type ViewMode = 'cards' | 'table';
