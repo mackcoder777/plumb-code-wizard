@@ -433,6 +433,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   bidLaborRate,
   projectId = 'default',
   onAdjustmentsChange,
+  estimateData = [],
+  systemMappings = [],
 }) => {
   // Load persisted settings from localStorage
   const [jobsiteZipCode, setJobsiteZipCode] = useState(() => {

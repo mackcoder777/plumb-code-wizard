@@ -2783,6 +2783,8 @@ const EnhancedCostCodeManager = () => {
                   bidLaborRate={bidLaborRate}
                   projectId={activeProjectId || 'default'}
                   onAdjustmentsChange={setBudgetAdjustments}
+                  estimateData={estimateData}
+                  systemMappings={savedMappings.map(m => ({ system: m.system_name, laborCode: (m.cost_head || '').split('|')[1] || (m.cost_head || '') }))}
                 />
               </div>
             ) : (
