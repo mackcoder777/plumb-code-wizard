@@ -1398,6 +1398,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       );
     }
 
+    // Re-round after merges/redistributions may have reintroduced fractional hours
+    const finalKeys = Object.keys(result);
+    if (finalKeys.length > 0) {
+      const finalRawHours = finalKeys.map(k => result[k].hours ?? 0);
+      const finalRoundedHours = roundHoursPreservingTotal(finalRawHours);
+      finalKeys.forEach((k, i) => {
+        result[k] = { ...result[k], hours: finalRoundedHours[i] };
+      });
+    }
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
 
