@@ -683,7 +683,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
       
       const savedBudgetRate = localStorage.getItem(`budget_rate_${projectId}`);
-      setBudgetRate(savedBudgetRate ? parseFloat(savedBudgetRate) : 85);
+      const rate = savedBudgetRate ? parseFloat(savedBudgetRate) : 85;
+      setBudgetRate(rate);
+      setBudgetRateInput(rate.toString());
 
       // Reload fab code map
       const savedFabCodeMap = localStorage.getItem(`budget_fab_code_map_${projectId}`);
