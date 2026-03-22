@@ -540,6 +540,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     const saved = localStorage.getItem(`budget_rate_${projectId}`);
     return saved ? parseFloat(saved) : 85;
   });
+  const [budgetRateInput, setBudgetRateInput] = useState(() => budgetRate.toString());
 
   const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>(() => {
     try {
