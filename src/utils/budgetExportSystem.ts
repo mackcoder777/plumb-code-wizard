@@ -502,7 +502,7 @@ export function exportBudgetPacket(
       
       ws[`B${row}`] = { t: 's', v: item.normalizedCode };
       ws[`D${row}`] = { t: 's', v: item.normalizedDescription };
-      ws[`H${row}`] = { t: 'n', v: Math.round(item.hours * 10) / 10, z: '#,##0.0' };
+      ws[`H${row}`] = { t: 'n', v: Math.round(item.hours), z: '#,##0' };
       
       const displayRate = item.rate ?? laborRate;
       if (displayRate > 0) {
