@@ -1,0 +1,1 @@
+DELETE FROM project_small_code_merges WHERE project_id = '304d1e53-1fd4-425a-8a6d-813165f595cf' AND reassign_to_head IS NULL AND redistribute_adjustments IS NULL;
