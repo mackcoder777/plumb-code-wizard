@@ -1136,11 +1136,34 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                     
                     {/* Single Labor Code Assignment */}
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Assign Labor Code to All Selected Systems</Label>
+                      <Label className="text-sm font-medium">
+                        {selectedSystems.size === 1 ? 'Assigned Labor Code' : 'Assign Labor Code to All Selected Systems'}
+                      </Label>
                       <Popover open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
                         <PopoverTrigger asChild>
                           <Button variant="outline" className="w-full justify-between h-12 text-left">
-                            <span className="text-muted-foreground">Select a labor code to apply...</span>
+                            {(() => {
+                              if (selectedSystems.size !== 1) {
+                                return <span className="text-muted-foreground">Select a labor code to apply...</span>;
+                              }
+                              const singleSystem = filteredSystems.find(s => selectedSystems.has(s.system));
+                              const singleCode = singleSystem?.laborCode;
+                              const singleCodeInfo = singleCode
+                                ? allLaborCodes.find(c => c.code === singleCode)
+                                : undefined;
+                              if (singleCodeInfo) {
+                                return (
+                                  <span className="flex items-center gap-2">
+                                    <span className="font-mono font-semibold">{singleCodeInfo.code}</span>
+                                    <span className="text-muted-foreground text-sm">{singleCodeInfo.description}</span>
+                                  </span>
+                                );
+                              }
+                              if (singleCode) {
+                                return <span className="font-mono font-semibold">{singleCode}</span>;
+                              }
+                              return <span className="text-muted-foreground">Select a labor code to apply...</span>;
+                            })()}
                             <ChevronDown className="w-4 h-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
@@ -1156,6 +1179,15 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                     value={`${code.code} ${code.description}`}
                                     onSelect={() => handleBulkAssign(code.code)}
                                   >
+                                    <Check
+                                      className={cn(
+                                        'mr-2 h-3.5 w-3.5 shrink-0',
+                                        selectedSystems.size === 1 &&
+                                        filteredSystems.find(s => selectedSystems.has(s.system))?.laborCode === code.code
+                                          ? 'opacity-100 text-primary'
+                                          : 'opacity-0'
+                                      )}
+                                    />
                                     <span className="font-mono text-xs mr-2">{code.code}</span>
                                     <span className="truncate">{code.description}</span>
                                   </CommandItem>
