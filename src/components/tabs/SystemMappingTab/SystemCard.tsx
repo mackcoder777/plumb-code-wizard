@@ -279,6 +279,18 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
           </div>
         )}
 
+        {/* Auto-pattern conflict warning */}
+        {autoPatternConflict && laborCode && (
+          <div className="flex items-center gap-1.5 p-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-400">
+            <span>⚠️</span>
+            <span>
+              Auto-pattern suggests <span className="font-mono font-semibold">{autoPatternConflict}</span>
+              {' '}but you've mapped to <span className="font-mono font-semibold">{laborCode}</span>
+              {' '}— your mapping will be used.
+            </span>
+          </div>
+        )}
+
         {/* Labor Code Select - Searchable Combobox */}
         <div className="space-y-2">
           <label className="text-sm font-medium">
