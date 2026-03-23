@@ -1410,7 +1410,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           matchingKeys.forEach(k => delete result[k]);
         } else if (targetKey) {
           // Target code doesn't exist yet — create it so hours are not lost
-          console.warn(
+          if (import.meta.env.DEV) console.warn(
             `[finalLaborSummary] reassign target ${targetKey} not found — creating entry to preserve ${sourceHours.toFixed(2)}h`
           );
           result[targetKey] = {
