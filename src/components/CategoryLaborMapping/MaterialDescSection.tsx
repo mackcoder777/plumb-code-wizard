@@ -245,7 +245,7 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
           {savedFlash && (
             <span className="whitespace-nowrap text-xs font-semibold text-green-600">✓ Saved</span>
           )}
-          {!savedFlash && isOverridden && (
+          {!savedFlash && !saving && isOverridden && (
             <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
               <Check className="h-2.5 w-2.5 mr-0.5" />
               {currentCode}
