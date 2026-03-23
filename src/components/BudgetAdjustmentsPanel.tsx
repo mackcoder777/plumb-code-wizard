@@ -1425,7 +1425,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           matchingKeys.forEach(k => delete result[k]);
         } else {
           // No target at all — keep source in place rather than delete
-          console.warn(
+          if (import.meta.env.DEV) console.warn(
             `[finalLaborSummary] reassign has no target for ${sec}|${head} — keeping source to preserve ${sourceHours.toFixed(2)}h`
           );
         }
