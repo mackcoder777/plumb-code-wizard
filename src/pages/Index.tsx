@@ -787,6 +787,8 @@ const EnhancedCostCodeManager = () => {
   const hasAutoAppliedRef = useRef<string | null>(null);
   const materialDescOverridesRef = useRef(dbMaterialDescOverrides);
   materialDescOverridesRef.current = dbMaterialDescOverrides;
+  const autoApplyRunKeyRef = useRef('');
+  const prevMaterialDescOverridesRef = useRef<string>('');
 
   // Reset auto-apply guard when project changes
   useEffect(() => {
