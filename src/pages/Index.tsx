@@ -966,36 +966,124 @@ const EnhancedCostCodeManager = () => {
       // Batch persist newly applied or re-resolved codes to database
       // Guard: diff-based — re-resolved items only persist when section actually changed
       if (newlyApplied > 0) {
-        hasAutoAppliedRef.current = currentProject.id;
-        console.log(`[AutoApply] Persisting ${newlyApplied} labor codes to database...`);
+        // Run-key dedup: skip if we already persisted this exact state
+        const runKey = `${currentProject.id}|${JSON.stringify(itemsNeedingPersist.map(u => `${u.row_number}:${u.cost_code}`))}`;
+        if (runKey === autoApplyRunKeyRef.current) {
+          console.log('[AutoApply] Skipping — same run key');
+        } else {
+          autoApplyRunKeyRef.current = runKey;
+          hasAutoAppliedRef.current = currentProject.id;
+          console.log(`[AutoApply] Persisting ${newlyApplied} labor codes to database...`);
 
-        // Save in batches of 50
-        const batchSize = 50;
-        const batches: Array<Array<{ row_number: number; cost_code: string }>> = [];
-        for (let i = 0; i < itemsNeedingPersist.length; i += batchSize) {
-          batches.push(itemsNeedingPersist.slice(i, i + batchSize));
-        }
-
-        (async () => {
-          try {
-            for (const batch of batches) {
-              await batchUpdateSystemCostCodes.mutateAsync({
+          (async () => {
+            try {
+              // Single batch call using silent version (no invalidation)
+              await batchUpdateSilent.mutateAsync({
                 projectId: currentProject.id,
                 system: '__auto_apply__',
-                itemUpdates: batch.map(u => ({
+                itemUpdates: itemsNeedingPersist.map(u => ({
                   row_number: u.row_number,
                   cost_code: u.cost_code
                 }))
               });
+              console.log(`[AutoApply] Successfully saved ${newlyApplied} labor codes to database`);
+              // Single invalidate after all updates
+              queryClient.invalidateQueries({ queryKey: ['estimate_items', currentProject.id] });
+            } catch (err) {
+              console.error('[AutoApply] Failed to persist labor codes:', err);
             }
-            console.log(`[AutoApply] Successfully saved ${newlyApplied} labor codes to database`);
-          } catch (err) {
-            console.error('[AutoApply] Failed to persist labor codes:', err);
-          }
-        })();
+          })();
+        }
       }
     }
   }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+
+  // Targeted material description override recalculation — only recalc changed pairs
+  useEffect(() => {
+    if (!currentProject?.id || estimateData.length === 0 || dbMaterialDescOverrides.length === 0) return;
+    
+    const serialized = JSON.stringify(dbMaterialDescOverrides);
+    if (serialized === prevMaterialDescOverridesRef.current) return;
+    
+    // Detect which pairs actually changed
+    const prevOverrides = prevMaterialDescOverridesRef.current ? JSON.parse(prevMaterialDescOverridesRef.current) : [];
+    const changedPairs = new Set<string>();
+    
+    (dbMaterialDescOverrides ?? []).forEach((o: any) => {
+      const prev = prevOverrides.find((p: any) => p.category_name === o.category_name && p.material_description === o.material_description);
+      if (!prev || prev.labor_code !== o.labor_code) {
+        changedPairs.add(`${o.category_name}|||${o.material_description}`);
+      }
+    });
+    // Also detect deletions
+    prevOverrides.forEach((p: any) => {
+      const cur = (dbMaterialDescOverrides ?? []).find((o: any) => o.category_name === p.category_name && o.material_description === p.material_description);
+      if (!cur) {
+        changedPairs.add(`${p.category_name}|||${p.material_description}`);
+      }
+    });
+    
+    prevMaterialDescOverridesRef.current = serialized;
+    
+    if (changedPairs.size === 0) return;
+    
+    console.log(`[OverrideRecalc] ${changedPairs.size} material desc pairs changed, recalculating affected items...`);
+    
+    const itemsToUpdate: Array<{ row_number: number; cost_code: string }> = [];
+    const updatedEstimate = estimateData.map((item: any) => {
+      const pairKey = `${item.reportCat}|||${item.materialDesc}`;
+      if (!changedPairs.has(pairKey)) return item;
+      
+      // Recalculate this item's cost code
+      const materialDescHead = getLaborCodeFromMaterialDesc(item.reportCat, item.materialDesc, dbMaterialDescOverrides);
+      let head = materialDescHead;
+      if (!head && dbCategoryMappings.length > 0 && item.reportCat) {
+        head = getLaborCodeFromCategory(item.reportCat, dbCategoryMappings);
+      }
+      if (!head && item.system && savedMappings.length > 0) {
+        const sysMapping = savedMappings.find(m => m.system_name.toLowerCase().trim() === (item.system || '').toLowerCase().trim());
+        if (sysMapping?.cost_head) {
+          const [, laborCode] = sysMapping.cost_head.includes('|') ? sysMapping.cost_head.split('|') : ['', sysMapping.cost_head];
+          head = laborCode || null;
+        }
+      }
+      
+      if (!head) return item;
+      
+      const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+      const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+      const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+      const newCode = `${section} ${activity} ${head}`;
+      
+      if (newCode !== item.costCode) {
+        // Find row_number — it may be on the item from the DB load
+        const rowNum = item.row_number ?? item.id;
+        if (typeof rowNum === 'number') {
+          itemsToUpdate.push({ row_number: rowNum, cost_code: newCode });
+        }
+        return { ...item, costCode: newCode };
+      }
+      return item;
+    });
+    
+    if (itemsToUpdate.length > 0) {
+      setEstimateData(updatedEstimate);
+      setFilteredData(updatedEstimate);
+      
+      (async () => {
+        try {
+          await batchUpdateSilent.mutateAsync({
+            projectId: currentProject.id,
+            system: '__override_recalc__',
+            itemUpdates: itemsToUpdate.map(u => ({ row_number: u.row_number, cost_code: u.cost_code }))
+          });
+          console.log(`[OverrideRecalc] Persisted ${itemsToUpdate.length} items`);
+        } catch (err) {
+          console.error('[OverrideRecalc] Failed:', err);
+        }
+      })();
+    }
+  }, [dbMaterialDescOverrides, currentProject?.id]);
 
   // One-shot effect: set datasetProfile when estimateData first populates for a project
   const datasetProfileSetRef = useRef<string | null>(null);
