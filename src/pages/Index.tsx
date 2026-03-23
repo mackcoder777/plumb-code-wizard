@@ -549,6 +549,7 @@ const EnhancedCostCodeManager = () => {
   
   // Fetch category labor mappings for priority-based code assignment
   const { data: dbCategoryMappings = [] } = useCategoryMappings(activeProjectId || null);
+  const { data: dbMaterialDescOverrides = [] } = useCategoryMaterialDescOverrides(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
