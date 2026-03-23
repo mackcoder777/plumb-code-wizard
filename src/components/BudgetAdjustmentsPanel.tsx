@@ -962,7 +962,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             hours: (fabAccumulator[fabCostHead]?.hours || 0) + fabHours,
           };
         } else {
-          console.warn(`No fab material mapping defined for cost head: ${costHead}`);
+          if (import.meta.env.DEV) console.warn(`No fab material mapping defined for cost head: ${costHead}`);
         }
 
         fabricationSummary.push({
@@ -1361,7 +1361,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               }
             });
           } else {
-            console.warn(
+            if (import.meta.env.DEV) console.warn(
               `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. Remap failed.`
             );
           }
@@ -1410,7 +1410,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           matchingKeys.forEach(k => delete result[k]);
         } else if (targetKey) {
           // Target code doesn't exist yet — create it so hours are not lost
-          console.warn(
+          if (import.meta.env.DEV) console.warn(
             `[finalLaborSummary] reassign target ${targetKey} not found — creating entry to preserve ${sourceHours.toFixed(2)}h`
           );
           result[targetKey] = {
@@ -1425,7 +1425,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           matchingKeys.forEach(k => delete result[k]);
         } else {
           // No target at all — keep source in place rather than delete
-          console.warn(
+          if (import.meta.env.DEV) console.warn(
             `[finalLaborSummary] reassign has no target for ${sec}|${head} — keeping source to preserve ${sourceHours.toFixed(2)}h`
           );
         }
@@ -1457,7 +1457,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     );
     const drift: number = inputHours - outputHours;
     if (Math.abs(drift) > 0.1) {
-      console.warn(
+      if (import.meta.env.DEV) console.warn(
         `[finalLaborSummary] ⚠ Hour drift detected: input=${inputHours.toFixed(2)} output=${outputHours.toFixed(2)} lost=${drift.toFixed(2)}h`
       );
     }
@@ -1862,7 +1862,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             finalDeltas = fixResidual(rawDeltas, netRounded);
             const recheckNet = Object.values(finalDeltas).reduce((s, v) => s + v, 0);
             if (Math.abs(recheckNet) > 0.01) {
-              console.warn(`[redistribute] skipping ${sec}|${head}: net=${netRounded} after fix=${recheckNet}`);
+              if (import.meta.env.DEV) console.warn(`[redistribute] skipping ${sec}|${head}: net=${netRounded} after fix=${recheckNet}`);
               return { __invalid: true, sec, head, reason: `unbalanced (net ${netRounded.toFixed(3)}h)` } as any;
             }
           }

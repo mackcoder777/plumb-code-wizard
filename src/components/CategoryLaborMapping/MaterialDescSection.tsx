@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Check, ChevronsUpDown, ChevronDown, Sparkles } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
@@ -151,6 +151,7 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const requestIdRef = useRef(0);
 
   const currentCode = existing?.labor_code ?? '__CATEGORY__';
   const isOverridden = !!existing && currentCode !== '__CATEGORY__';
@@ -161,24 +162,20 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
   }, [desc, patterns, isOverridden]);
 
   const handleChange = useCallback(async (code: string) => {
+    const requestId = ++requestIdRef.current;
     setSaving(true);
-    const timeout = setTimeout(() => {
-      setSaving(false);
-      toast({
-        title: 'Save may have timed out',
-        description: 'Check if the override was applied. If not, try again.',
-        variant: 'destructive',
-      });
-    }, 8000);
+
     try {
-      if (code === '__CATEGORY__') {
+      if (code === '__CATEGORY__' || code === 'none' || code === '') {
         if (existing) await onDelete(desc);
+        if (requestId !== requestIdRef.current) return;
         toast({
           title: 'Override removed',
           description: `"${desc}" will now use the category default.`,
         });
       } else {
         await onSave(desc, code);
+        if (requestId !== requestIdRef.current) return;
         toast({
           title: 'Override saved',
           description: `"${desc}" → ${code}`,
@@ -187,12 +184,19 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1800);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      toast({
+        title: 'Failed to save override',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
       console.error('MaterialDescSection save error:', err);
     } finally {
-      clearTimeout(timeout);
-      setSaving(false);
+      if (requestId === requestIdRef.current) {
+        setSaving(false);
+      }
     }
-  }, [desc, existing, onSave, onDelete, data, categoryLaborCode]);
+  }, [desc, existing, onSave, onDelete]);
 
   return (
     <div className={cn(
