@@ -160,6 +160,16 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     return categoryIndex.filter(c => c.category !== 'Unknown' && c.category.trim() !== '');
   }, [categoryIndex]);
   
+  // Override counts per category for badge display
+  const overrideCountByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    materialDescOverrides.forEach(o => {
+      const key = (o.category_name || '').toLowerCase().trim();
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [materialDescOverrides]);
+
   // Statistics with three states: mapped, useSystem, unset
   const stats = useMemo(() => {
     const total = filteredCategories.length;
