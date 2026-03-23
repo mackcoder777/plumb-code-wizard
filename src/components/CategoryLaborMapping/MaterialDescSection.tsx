@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
 import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { getSuggestionForMaterialDesc } from '@/hooks/useMaterialDescLaborPatterns';
@@ -167,6 +168,17 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
         await onSave(desc, code);
       }
       setSavedFlash(true);
+      if (code !== '__CATEGORY__') {
+        toast({
+          title: `${code} applied`,
+          description: `Assigned to "${desc}" — ${data.items} item${data.items !== 1 ? 's' : ''} will route to ${code}.`,
+        });
+      } else {
+        toast({
+          title: 'Override removed',
+          description: `"${desc}" reverted to category default${categoryLaborCode ? ` (${categoryLaborCode})` : ''}.`,
+        });
+      }
       setTimeout(() => setSavedFlash(false), 1800);
     } finally {
       setSaving(false);
@@ -233,7 +245,7 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
           {savedFlash && (
             <span className="whitespace-nowrap text-xs font-semibold text-green-600">✓ Saved</span>
           )}
-          {!savedFlash && isOverridden && (
+          {!savedFlash && !saving && isOverridden && (
             <Badge variant="outline" className="shrink-0 font-mono text-[10px] border-primary/30 text-primary">
               <Check className="h-2.5 w-2.5 mr-0.5" />
               {currentCode}
