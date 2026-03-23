@@ -989,7 +989,7 @@ const EnhancedCostCodeManager = () => {
         })();
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbMaterialDescOverrides, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
 
   // One-shot effect: set datasetProfile when estimateData first populates for a project
   const datasetProfileSetRef = useRef<string | null>(null);
