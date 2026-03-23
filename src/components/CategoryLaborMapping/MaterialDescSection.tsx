@@ -74,6 +74,7 @@ const CodeCombobox = React.memo(function CodeCombobox({
         <Button
           variant="outline"
           role="combobox"
+          disabled={saving}
           aria-expanded={open}
           className={cn(
             "w-56 shrink-0 justify-between text-xs font-normal",
