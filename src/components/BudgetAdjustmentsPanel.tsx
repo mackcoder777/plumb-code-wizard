@@ -1862,7 +1862,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             finalDeltas = fixResidual(rawDeltas, netRounded);
             const recheckNet = Object.values(finalDeltas).reduce((s, v) => s + v, 0);
             if (Math.abs(recheckNet) > 0.01) {
-              console.warn(`[redistribute] skipping ${sec}|${head}: net=${netRounded} after fix=${recheckNet}`);
+              if (import.meta.env.DEV) console.warn(`[redistribute] skipping ${sec}|${head}: net=${netRounded} after fix=${recheckNet}`);
               return { __invalid: true, sec, head, reason: `unbalanced (net ${netRounded.toFixed(3)}h)` } as any;
             }
           }
