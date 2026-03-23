@@ -160,6 +160,16 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     return categoryIndex.filter(c => c.category !== 'Unknown' && c.category.trim() !== '');
   }, [categoryIndex]);
   
+  // Override counts per category for badge display
+  const overrideCountByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    materialDescOverrides.forEach(o => {
+      const key = (o.category_name || '').toLowerCase().trim();
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [materialDescOverrides]);
+
   // Statistics with three states: mapped, useSystem, unset
   const stats = useMemo(() => {
     const total = filteredCategories.length;
@@ -348,6 +358,15 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               <span className="text-xs text-muted-foreground">
                                 {cat.itemCount.toLocaleString()} items • {cat.totalHours.toFixed(1)} hrs
                               </span>
+                              {(() => {
+                                const overrideCount = overrideCountByCategory[(cat.category || '').toLowerCase().trim()] || 0;
+                                return overrideCount > 0 ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-orange-600 font-medium">
+                                    <Layers className="h-3 w-3" />
+                                    {overrideCount} override{overrideCount !== 1 ? 's' : ''}
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                           
