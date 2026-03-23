@@ -380,7 +380,13 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 isMapped && "border-primary/50",
                                 usesSystem && "border-muted-foreground/50"
                               )}>
-                                <SelectValue placeholder="Select labor code..." />
+                <SelectValue placeholder="Select labor code...">
+                  {currentCode && currentCode !== 'none'
+                    ? (currentCode === '__SYSTEM__'
+                        ? <span className="flex items-center gap-2"><Link2 className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground font-medium">Use System Mapping</span></span>
+                        : <span className="font-mono text-foreground">{currentCode}</span>)
+                    : undefined}
+                </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">
