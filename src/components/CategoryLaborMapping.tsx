@@ -356,8 +356,8 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               value={currentCode || 'none'}
                               onValueChange={(value) => handleMappingChange(cat.category, value)}
                             >
-                              <SelectTrigger className={cn(
-                                "h-9",
+                            <SelectTrigger className={cn(
+                                "h-9 bg-background text-foreground",
                                 isMapped && "border-primary/50",
                                 usesSystem && "border-muted-foreground/50"
                               )}>
