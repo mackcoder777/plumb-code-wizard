@@ -446,6 +446,7 @@ const EnhancedCostCodeManager = () => {
   const [showMappingWarning, setShowMappingWarning] = useState(false);
 
   const handleTabChange = useCallback((tab: string) => {
+    if (tab === 'budget') budgetTabVisitedRef.current = true;
     if (hasUnappliedMappingChanges && activeTab === 'mapping' && tab !== 'mapping') {
       setPendingTab(tab);
       setShowMappingWarning(true);
