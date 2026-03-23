@@ -121,7 +121,6 @@ export function useDeleteCategoryMaterialDescOverride(projectId: string | null) 
       if (context?.previous !== undefined) {
         qc.setQueryData([TABLE, projectId], context.previous);
       }
-      toast({ title: 'Failed to remove override', description: error.message, variant: 'destructive' });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: [TABLE, projectId] });

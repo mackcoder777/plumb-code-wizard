@@ -173,21 +173,21 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
     try {
       if (code === '__CATEGORY__') {
         if (existing) await onDelete(desc);
+        toast({
+          title: 'Override removed',
+          description: `"${desc}" will now use the category default.`,
+        });
       } else {
         await onSave(desc, code);
+        toast({
+          title: 'Override saved',
+          description: `"${desc}" → ${code}`,
+        });
       }
       setSavedFlash(true);
-      toast({
-        title: 'Override saved',
-        description: `"${desc}" → ${code === '__CATEGORY__' ? `category default (${categoryLaborCode ?? 'none'})` : code}`,
-      });
       setTimeout(() => setSavedFlash(false), 1800);
     } catch (err) {
-      toast({
-        title: 'Failed to save override',
-        description: String(err),
-        variant: 'destructive',
-      });
+      console.error('MaterialDescSection save error:', err);
     } finally {
       clearTimeout(timeout);
       setSaving(false);
