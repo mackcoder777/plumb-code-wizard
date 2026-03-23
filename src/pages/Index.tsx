@@ -783,7 +783,8 @@ const EnhancedCostCodeManager = () => {
 
   // Guard ref to prevent auto-apply from running multiple times per project
   const hasAutoAppliedRef = useRef<string | null>(null);
-  const prevMaterialDescOverridesRef = useRef<string>('');
+  const materialDescOverridesRef = useRef(dbMaterialDescOverrides);
+  materialDescOverridesRef.current = dbMaterialDescOverrides;
 
   // Reset auto-apply guard when project changes
   useEffect(() => {
