@@ -356,8 +356,8 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               value={currentCode || 'none'}
                               onValueChange={(value) => handleMappingChange(cat.category, value)}
                             >
-                              <SelectTrigger className={cn(
-                                "h-9",
+                            <SelectTrigger className={cn(
+                                "h-9 bg-background text-foreground",
                                 isMapped && "border-primary/50",
                                 usesSystem && "border-muted-foreground/50"
                               )}>
@@ -376,7 +376,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 <SelectSeparator />
                                 {laborCodes.map((code) => (
                                   <SelectItem key={code.id} value={code.code}>
-                                    <span className="font-mono">{code.code}</span>
+                                    <span className="font-mono text-foreground">{code.code}</span>
                                     <span className="ml-2 text-muted-foreground">- {code.description}</span>
                                   </SelectItem>
                                 ))}
