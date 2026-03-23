@@ -1361,7 +1361,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               }
             });
           } else {
-            console.warn(
+            if (import.meta.env.DEV) console.warn(
               `[finalLaborSummary] redistribute skipping ${sec}|${head} — missing codes: ${missingKeys.join(', ')}. Remap failed.`
             );
           }
