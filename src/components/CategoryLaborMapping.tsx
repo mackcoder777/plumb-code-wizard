@@ -358,6 +358,15 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               <span className="text-xs text-muted-foreground">
                                 {cat.itemCount.toLocaleString()} items • {cat.totalHours.toFixed(1)} hrs
                               </span>
+                              {(() => {
+                                const overrideCount = overrideCountByCategory[(cat.category || '').toLowerCase().trim()] || 0;
+                                return overrideCount > 0 ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-orange-600 font-medium">
+                                    <Layers className="h-3 w-3" />
+                                    {overrideCount} override{overrideCount !== 1 ? 's' : ''}
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                           
