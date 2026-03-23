@@ -794,13 +794,6 @@ const EnhancedCostCodeManager = () => {
 
   // Load saved items when project changes - apply category AND system mappings during load, then persist
   useEffect(() => {
-    // Skip re-processing if material desc overrides haven't actually changed
-    const serializedOverrides = JSON.stringify(dbMaterialDescOverrides ?? []);
-    if (serializedOverrides === prevMaterialDescOverridesRef.current && prevMaterialDescOverridesRef.current !== '') {
-      return;
-    }
-    prevMaterialDescOverridesRef.current = serializedOverrides;
-
     if (savedItems.length > 0 && currentProject?.id) {
       // GUARD: If project likely has floor mappings but they haven't loaded yet, wait
       // We check if dbFloorMappings is still empty — the query may not have resolved yet
