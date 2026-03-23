@@ -858,13 +858,20 @@ const EnhancedCostCodeManager = () => {
             // Category mapping > System mapping > keep persisted
             let resolvedHead = persistedHead;
 
-            // Priority 1: Category mapping
+            // Tier 0: Material description override (highest priority)
+            const materialDescHead = (item.report_cat && item.material_desc && dbMaterialDescOverrides.length > 0)
+              ? getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides)
+              : null;
+
+            // Tier 1: Category mapping
             let categoryHead: string | null = null;
             if (item.report_cat && dbCategoryMappings.length > 0) {
               categoryHead = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
             }
 
-            if (categoryHead && categoryHead === persistedHead) {
+            if (materialDescHead) {
+              resolvedHead = materialDescHead;
+            } else if (categoryHead && categoryHead === persistedHead) {
               // Category mapping matches current head — keep it, don't let system override
               resolvedHead = persistedHead;
             } else if (categoryHead && categoryHead !== persistedHead) {
