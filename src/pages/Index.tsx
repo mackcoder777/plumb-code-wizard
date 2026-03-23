@@ -31,6 +31,7 @@ import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDr
 import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride } from '@/utils/datasetProfiler';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
+import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
 import { useAuth } from '@/hooks/useAuth';
 import { Auth } from '@/components/Auth';
 import { useCostCodes } from '@/hooks/useCostCodes';
@@ -548,6 +549,7 @@ const EnhancedCostCodeManager = () => {
   
   // Fetch category labor mappings for priority-based code assignment
   const { data: dbCategoryMappings = [] } = useCategoryMappings(activeProjectId || null);
+  const { data: dbMaterialDescOverrides = [] } = useCategoryMaterialDescOverrides(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
@@ -856,13 +858,20 @@ const EnhancedCostCodeManager = () => {
             // Category mapping > System mapping > keep persisted
             let resolvedHead = persistedHead;
 
-            // Priority 1: Category mapping
+            // Tier 0: Material description override (highest priority)
+            const materialDescHead = (item.report_cat && item.material_desc && dbMaterialDescOverrides.length > 0)
+              ? getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides)
+              : null;
+
+            // Tier 1: Category mapping
             let categoryHead: string | null = null;
             if (item.report_cat && dbCategoryMappings.length > 0) {
               categoryHead = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
             }
 
-            if (categoryHead && categoryHead === persistedHead) {
+            if (materialDescHead) {
+              resolvedHead = materialDescHead;
+            } else if (categoryHead && categoryHead === persistedHead) {
               // Category mapping matches current head — keep it, don't let system override
               resolvedHead = persistedHead;
             } else if (categoryHead && categoryHead !== persistedHead) {
@@ -893,9 +902,14 @@ const EnhancedCostCodeManager = () => {
           return baseItem;
         }
 
-        // Priority 2: Category mapping
+        // Tier 0: Material description override
         let appliedCode: string | null = null;
-        if (dbCategoryMappings.length > 0 && item.report_cat) {
+        if (dbMaterialDescOverrides.length > 0 && item.report_cat && item.material_desc) {
+          appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides);
+        }
+
+        // Tier 1: Category mapping
+        if (!appliedCode && dbCategoryMappings.length > 0 && item.report_cat) {
           appliedCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
         }
 
@@ -975,7 +989,7 @@ const EnhancedCostCodeManager = () => {
         })();
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbMaterialDescOverrides, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
 
   // One-shot effect: set datasetProfile when estimateData first populates for a project
   const datasetProfileSetRef = useRef<string | null>(null);
