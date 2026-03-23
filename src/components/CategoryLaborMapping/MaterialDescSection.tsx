@@ -161,6 +161,14 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
 
   const handleChange = useCallback(async (code: string) => {
     setSaving(true);
+    const timeout = setTimeout(() => {
+      setSaving(false);
+      toast({
+        title: 'Save may have timed out',
+        description: 'Check if the override was applied. If not, try again.',
+        variant: 'destructive',
+      });
+    }, 8000);
     try {
       if (code === '__CATEGORY__') {
         if (existing) await onDelete(desc);
@@ -168,22 +176,22 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
         await onSave(desc, code);
       }
       setSavedFlash(true);
-      if (code !== '__CATEGORY__') {
-        toast({
-          title: `${code} applied`,
-          description: `Assigned to "${desc}" — ${data.items} item${data.items !== 1 ? 's' : ''} will route to ${code}.`,
-        });
-      } else {
-        toast({
-          title: 'Override removed',
-          description: `"${desc}" reverted to category default${categoryLaborCode ? ` (${categoryLaborCode})` : ''}.`,
-        });
-      }
+      toast({
+        title: 'Override saved',
+        description: `"${desc}" → ${code === '__CATEGORY__' ? `category default (${categoryLaborCode ?? 'none'})` : code}`,
+      });
       setTimeout(() => setSavedFlash(false), 1800);
+    } catch (err) {
+      toast({
+        title: 'Failed to save override',
+        description: String(err),
+        variant: 'destructive',
+      });
     } finally {
+      clearTimeout(timeout);
       setSaving(false);
     }
-  }, [desc, existing, onSave, onDelete]);
+  }, [desc, existing, onSave, onDelete, data, categoryLaborCode]);
 
   return (
     <div className={cn(
