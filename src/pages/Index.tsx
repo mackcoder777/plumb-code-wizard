@@ -783,6 +783,8 @@ const EnhancedCostCodeManager = () => {
 
   // Guard ref to prevent auto-apply from running multiple times per project
   const hasAutoAppliedRef = useRef<string | null>(null);
+  const materialDescOverridesRef = useRef(dbMaterialDescOverrides);
+  materialDescOverridesRef.current = dbMaterialDescOverrides;
 
   // Reset auto-apply guard when project changes
   useEffect(() => {
@@ -859,8 +861,8 @@ const EnhancedCostCodeManager = () => {
             let resolvedHead = persistedHead;
 
             // Tier 0: Material description override (highest priority)
-            const materialDescHead = (item.report_cat && item.material_desc && dbMaterialDescOverrides.length > 0)
-              ? getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides)
+            const materialDescHead = (item.report_cat && item.material_desc && materialDescOverridesRef.current.length > 0)
+              ? getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current)
               : null;
 
             // Tier 1: Category mapping
@@ -904,8 +906,8 @@ const EnhancedCostCodeManager = () => {
 
         // Tier 0: Material description override
         let appliedCode: string | null = null;
-        if (dbMaterialDescOverrides.length > 0 && item.report_cat && item.material_desc) {
-          appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides);
+        if (materialDescOverridesRef.current.length > 0 && item.report_cat && item.material_desc) {
+          appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current);
         }
 
         // Tier 1: Category mapping
@@ -989,7 +991,7 @@ const EnhancedCostCodeManager = () => {
         })();
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbMaterialDescOverrides, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
 
   // One-shot effect: set datasetProfile when estimateData first populates for a project
   const datasetProfileSetRef = useRef<string | null>(null);

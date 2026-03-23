@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+
 
 export interface CategoryMaterialDescOverride {
   id: string;
@@ -30,7 +30,6 @@ export function useCategoryMaterialDescOverrides(projectId: string | null) {
 
 export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
   const qc = useQueryClient();
-  const { toast } = useToast();
   return useMutation({
     mutationFn: async ({
       categoryName,
@@ -81,7 +80,6 @@ export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
       if (context?.previous !== undefined) {
         qc.setQueryData([TABLE, projectId], context.previous);
       }
-      toast({ title: 'Failed to save override', description: error.message, variant: 'destructive' });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: [TABLE, projectId] });
@@ -91,7 +89,6 @@ export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
 
 export function useDeleteCategoryMaterialDescOverride(projectId: string | null) {
   const qc = useQueryClient();
-  const { toast } = useToast();
   return useMutation({
     mutationFn: async ({
       categoryName,
@@ -123,7 +120,6 @@ export function useDeleteCategoryMaterialDescOverride(projectId: string | null) 
       if (context?.previous !== undefined) {
         qc.setQueryData([TABLE, projectId], context.previous);
       }
-      toast({ title: 'Failed to remove override', description: error.message, variant: 'destructive' });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: [TABLE, projectId] });
