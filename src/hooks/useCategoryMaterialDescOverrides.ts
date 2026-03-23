@@ -30,7 +30,6 @@ export function useCategoryMaterialDescOverrides(projectId: string | null) {
 
 export function useSaveCategoryMaterialDescOverride(projectId: string | null) {
   const qc = useQueryClient();
-  const { toast } = useToast();
   return useMutation({
     mutationFn: async ({
       categoryName,
