@@ -1457,7 +1457,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     );
     const drift: number = inputHours - outputHours;
     if (Math.abs(drift) > 0.1) {
-      console.warn(
+      if (import.meta.env.DEV) console.warn(
         `[finalLaborSummary] ⚠ Hour drift detected: input=${inputHours.toFixed(2)} output=${outputHours.toFixed(2)} lost=${drift.toFixed(2)}h`
       );
     }
