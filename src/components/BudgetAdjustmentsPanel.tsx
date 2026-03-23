@@ -962,7 +962,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             hours: (fabAccumulator[fabCostHead]?.hours || 0) + fabHours,
           };
         } else {
-          if (process.env.NODE_ENV === 'development') console.warn(`No fab material mapping defined for cost head: ${costHead}`);
+          if (import.meta.env.DEV) console.warn(`No fab material mapping defined for cost head: ${costHead}`);
         }
 
         fabricationSummary.push({
