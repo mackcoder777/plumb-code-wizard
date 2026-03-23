@@ -476,6 +476,7 @@ const EnhancedCostCodeManager = () => {
   const [editingSystem, setEditingSystem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+  const budgetTabVisitedRef = useRef(false);
   
   // Column configuration
   const { columns, visibleColumns, toggleColumn, resetToDefaults, autoHideEmptyColumns } = useColumnConfig();
