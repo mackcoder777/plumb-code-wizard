@@ -168,6 +168,17 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
         await onSave(desc, code);
       }
       setSavedFlash(true);
+      if (code !== '__CATEGORY__') {
+        toast({
+          title: `${code} applied`,
+          description: `Assigned to "${desc}" — ${data.items} item${data.items !== 1 ? 's' : ''} will route to ${code}.`,
+        });
+      } else {
+        toast({
+          title: 'Override removed',
+          description: `"${desc}" reverted to category default${categoryLaborCode ? ` (${categoryLaborCode})` : ''}.`,
+        });
+      }
       setTimeout(() => setSavedFlash(false), 1800);
     } finally {
       setSaving(false);
