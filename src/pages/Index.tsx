@@ -906,8 +906,8 @@ const EnhancedCostCodeManager = () => {
 
         // Tier 0: Material description override
         let appliedCode: string | null = null;
-        if (dbMaterialDescOverrides.length > 0 && item.report_cat && item.material_desc) {
-          appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides);
+        if (materialDescOverridesRef.current.length > 0 && item.report_cat && item.material_desc) {
+          appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current);
         }
 
         // Tier 1: Category mapping
