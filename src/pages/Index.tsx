@@ -536,6 +536,7 @@ const EnhancedCostCodeManager = () => {
   const updateProject = useUpdateProject();
   const saveEstimateItems = useSaveEstimateItems();
   const batchUpdateSystemCostCodes = useBatchUpdateSystemCostCodes();
+  const batchUpdateSilent = useBatchUpdateSystemCostCodesSilent();
   const updateAppliedStatus = useUpdateAppliedStatus();
   const upsertAndApplyMapping = useUpsertAndApplyMapping();
   
