@@ -89,7 +89,7 @@ const CodeCombobox = React.memo(function CodeCombobox({
         <Command>
           <CommandInput placeholder="Search codes…" />
           <CommandList className="max-h-[300px]">
-            <CommandEmpty>No codes found</CommandEmpty>
+            <CommandEmpty>{laborCodes.length === 0 ? 'Loading codes…' : 'No codes found'}</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value="__category__ use category default"
