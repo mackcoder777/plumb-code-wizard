@@ -560,7 +560,7 @@ export const useUpdateItemCostCode = () => {
 
 // Batch update cost codes for items matching a system
 // IMPORTANT: Uses row_number as the stable identifier (works regardless of ID type)
-export const useBatchUpdateSystemCostCodes = () => {
+export const useBatchUpdateSystemCostCodes = (options?: { suppressInvalidate?: boolean }) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -638,9 +638,16 @@ export const useBatchUpdateSystemCostCodes = () => {
       return data as EstimateItem[];
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+      if (!options?.suppressInvalidate) {
+        queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+      }
     },
   });
+};
+
+// Silent version that doesn't trigger estimate_items refetch
+export const useBatchUpdateSystemCostCodesSilent = () => {
+  return useBatchUpdateSystemCostCodes({ suppressInvalidate: true });
 };
 
 // Update applied status for a system mapping (also marks as verified)
