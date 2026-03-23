@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
 import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { getSuggestionForMaterialDesc } from '@/hooks/useMaterialDescLaborPatterns';
