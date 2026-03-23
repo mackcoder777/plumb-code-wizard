@@ -902,9 +902,14 @@ const EnhancedCostCodeManager = () => {
           return baseItem;
         }
 
-        // Priority 2: Category mapping
+        // Tier 0: Material description override
         let appliedCode: string | null = null;
-        if (dbCategoryMappings.length > 0 && item.report_cat) {
+        if (dbMaterialDescOverrides.length > 0 && item.report_cat && item.material_desc) {
+          appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, dbMaterialDescOverrides);
+        }
+
+        // Tier 1: Category mapping
+        if (!appliedCode && dbCategoryMappings.length > 0 && item.report_cat) {
           appliedCode = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
         }
 
