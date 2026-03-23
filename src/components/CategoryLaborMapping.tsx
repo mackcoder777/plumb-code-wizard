@@ -376,7 +376,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 <SelectSeparator />
                                 {laborCodes.map((code) => (
                                   <SelectItem key={code.id} value={code.code}>
-                                    <span className="font-mono">{code.code}</span>
+                                    <span className="font-mono text-foreground">{code.code}</span>
                                     <span className="ml-2 text-muted-foreground">- {code.description}</span>
                                   </SelectItem>
                                 ))}
