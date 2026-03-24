@@ -1000,7 +1000,7 @@ const EnhancedCostCodeManager = () => {
         }
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings, materialDescOverridesFetched]);
 
   // Targeted material description override recalculation — only recalc changed pairs
   useEffect(() => {
