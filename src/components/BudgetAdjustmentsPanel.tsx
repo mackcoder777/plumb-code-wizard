@@ -2013,7 +2013,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       Object.keys(merge.redistribute_adjustments as object).length > 0
     ) return '__redistribute__';
     if (merge.reassign_to_head === '__keep__') return '__keep__';
-    if (merge.reassign_to_head && merge.reassign_to_head !== '__keep__') return merge.reassign_to_head;
+    if (merge.reassign_to_head === '__accepted__') return '__accepted__';
+    if (merge.reassign_to_head && merge.reassign_to_head !== '__keep__' && merge.reassign_to_head !== '__accepted__') return merge.reassign_to_head;
     return '__merge__';
   };
 
