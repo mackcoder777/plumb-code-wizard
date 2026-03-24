@@ -1750,7 +1750,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     if (!row) return;
     const result = getDefaultAction(row.lines);
     // For standalone rows, prefer auto-suggestion over placeholder
-    if ((result.action === '__reassign__' || result.action === '' || result.action === null) && standaloneAutoSuggestions?.[key]?.targetHead) {
+    if ((result.action === '__reassign__' || result.action === null) && standaloneAutoSuggestions?.[key]?.targetHead) {
       setReassignTargets(prev => ({ ...prev, [key]: standaloneAutoSuggestions[key].targetHead }));
       return;
     }
