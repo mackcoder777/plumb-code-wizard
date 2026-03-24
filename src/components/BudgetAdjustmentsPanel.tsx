@@ -3883,21 +3883,40 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       );
                                     })()
                                     : (consolidations[mergeKey]) ? (
-                                      <select
-                                        className="text-xs bg-background border border-border rounded px-1 py-0.5"
-                                        value={reassignTargets[mergeKey] ?? '__reassign__'}
-                                        onChange={(e) => {
-                                          setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }));
-                                        }}
-                                      >
-                                        <option value="__reassign__" disabled>— select target —</option>
-                                        {sameSECHeads
-                                          .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
-                                          .map((p) => (
-                                          <option key={p.key} value={p.head}>{p.head}</option>
-                                        ))}
-                                        <option value="__keep__">Keep as-is</option>
-                                      </select>
+                                      <div>
+                                        <select
+                                          className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                          value={reassignTargets[mergeKey] ?? '__reassign__'}
+                                          onChange={(e) => {
+                                            setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }));
+                                          }}
+                                        >
+                                          <option value="__reassign__" disabled>— select target —</option>
+                                          {sameSECHeads
+                                            .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                            .map((p) => (
+                                            <option key={p.key} value={p.head}>{p.head}</option>
+                                          ))}
+                                          <option value="__accepted__">✓ Accept as-is (intentionally small)</option>
+                                          <option value="__keep__">Keep as-is</option>
+                                        </select>
+                                        {/* Pre-action projection warning */}
+                                        {(() => {
+                                          const target = reassignTargets[mergeKey];
+                                          if (!target || target === '__reassign__' || target === '__keep__' || target === '__accepted__' || target === '__merge__') return null;
+                                          const targetEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
+                                            const parts = k.trim().split(/\s+/);
+                                            return parts[0] === row.sec && parts.slice(2).join(' ') === target;
+                                          });
+                                          const targetHours = targetEntry ? (targetEntry[1].hours ?? 0) : 0;
+                                          const projected = row.combinedHours + targetHours;
+                                          return projected < minHoursThreshold ? (
+                                            <div className="text-xs text-amber-500 mt-0.5">⚠ Still {projected.toFixed(1)}h after reassignment</div>
+                                          ) : (
+                                            <div className="text-xs text-green-500 mt-0.5">✓ Will be {projected.toFixed(1)}h</div>
+                                          );
+                                        })()}
+                                      </div>
                                     ) : (
                                       <span className="text-xs text-muted-foreground italic">keeps original code</span>
                                     )}
