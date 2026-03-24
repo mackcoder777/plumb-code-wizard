@@ -446,7 +446,6 @@ const EnhancedCostCodeManager = () => {
   const [showMappingWarning, setShowMappingWarning] = useState(false);
 
   const handleTabChange = useCallback((tab: string) => {
-    if (tab === 'budget') budgetTabVisitedRef.current = true;
     if (hasUnappliedMappingChanges && activeTab === 'mapping' && tab !== 'mapping') {
       setPendingTab(tab);
       setShowMappingWarning(true);
@@ -477,7 +476,7 @@ const EnhancedCostCodeManager = () => {
   const [editingSystem, setEditingSystem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
-  const budgetTabVisitedRef = useRef(false);
+  
   
   // Column configuration
   const { columns, visibleColumns, toggleColumn, resetToDefaults, autoHideEmptyColumns } = useColumnConfig();
@@ -553,7 +552,7 @@ const EnhancedCostCodeManager = () => {
   
   // Fetch category labor mappings for priority-based code assignment
   const { data: dbCategoryMappings = [] } = useCategoryMappings(activeProjectId || null);
-  const { data: dbMaterialDescOverrides = [] } = useCategoryMaterialDescOverrides(activeProjectId || null);
+  const { data: dbMaterialDescOverrides = [], isFetched: materialDescOverridesFetched } = useCategoryMaterialDescOverrides(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
@@ -819,6 +818,11 @@ const EnhancedCostCodeManager = () => {
         return;
       }
 
+      if (!materialDescOverridesFetched) {
+        console.log('[Load] Deferring: material desc overrides not yet fetched');
+        return;
+      }
+
       const itemsNeedingPersist: Array<{ row_number: number; cost_code: string }> = [];
 
       const transformedItems = savedItems.map((item) => {
@@ -989,8 +993,6 @@ const EnhancedCostCodeManager = () => {
                 }))
               });
               console.log(`[AutoApply] Successfully saved ${newlyApplied} labor codes to database`);
-              // Single invalidate after all updates
-              queryClient.invalidateQueries({ queryKey: ['estimate_items', currentProject.id] });
             } catch (err) {
               console.error('[AutoApply] Failed to persist labor codes:', err);
             }
@@ -998,7 +1000,7 @@ const EnhancedCostCodeManager = () => {
         }
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings]);
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings, materialDescOverridesFetched]);
 
   // Targeted material description override recalculation — only recalc changed pairs
   useEffect(() => {
@@ -2863,7 +2865,7 @@ const EnhancedCostCodeManager = () => {
                   </div>
                 </div>
                 
-                {budgetTabVisitedRef.current && <BudgetAdjustmentsPanel
+                <BudgetAdjustmentsPanel
                   laborSummary={(() => {
                     const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
                     estimateData.forEach((item: any) => {
@@ -2937,7 +2939,7 @@ const EnhancedCostCodeManager = () => {
                   onAdjustmentsChange={setBudgetAdjustments}
                   estimateData={estimateData}
                   systemMappings={savedMappings.map(m => ({ system: m.system_name, laborCode: (m.cost_head || '').split('|')[1] || (m.cost_head || '') }))}
-                />}
+                />
               </div>
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
