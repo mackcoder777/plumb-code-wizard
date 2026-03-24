@@ -1749,6 +1749,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const row = smallCodeAnalysis.find(r => r.key === key);
     if (!row) return;
     const result = getDefaultAction(row.lines);
+    // For standalone rows, prefer auto-suggestion over placeholder
+    if ((result.action === '__reassign__' || result.action === '' || result.action === null) && standaloneAutoSuggestions?.[key]?.targetHead) {
+      setReassignTargets(prev => ({ ...prev, [key]: standaloneAutoSuggestions[key].targetHead }));
+      return;
+    }
     setReassignTargets(prev => ({ ...prev, [key]: result.action }));
     if (result.action === '__redistribute__' && result.targets) {
       setRedistributeAdjustments(prev => ({ ...prev, [key]: result.targets! }));
@@ -1832,7 +1837,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
   }, [smallCodeAnalysis, standaloneMaxHours, savedMergeKeySet]);
 
-  const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1);
+  const mergeGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length > 1).sort((a, b) => {
+    const aSaved = savedMergeKeySet.has(a.key);
+    const bSaved = savedMergeKeySet.has(b.key);
+    if (aSaved && !bSaved) return 1;
+    if (!aSaved && bSaved) return -1;
+    return 0;
+  });
   const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
 
   const handleConsolidate = async () => {
@@ -3874,6 +3885,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   {readyCount} with valid targets
                                 </span>
                               </span>
+                              {selectedCount > 0 && readyCount === 0 && (
+                                <span className="text-xs text-amber-500 mr-3">
+                                  Select targets for checked rows, or use Auto-resolve
+                                </span>
+                              )}
                               <div className="flex items-center gap-3">
                                 <button
                                   onClick={() => {
