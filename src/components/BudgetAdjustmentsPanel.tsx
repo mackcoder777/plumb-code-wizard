@@ -3711,7 +3711,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 .map(m => `${m.sec_code}|${m.cost_head}`)
                             );
                             const openPass1 = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
-                            if (openPass1 > 0) return null; // Don't show Round 2 until Pass 1 is done
+                            if (openPass1 > 0) return (
+                              <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700">
+                                {openPass1} code{openPass1 !== 1 ? 's' : ''} need action below
+                              </span>
+                            );
                             const round2Count = Object.entries(finalLaborSummary ?? {}).filter(([key, entry]) => {
                               if ((entry.hours ?? 0) >= minHoursThreshold || (entry.hours ?? 0) < 0.05) return false;
                               const parts = key.trim().split(/\s+/);
@@ -3923,7 +3927,29 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         })()}
                                       </div>
                                     ) : (
-                                      <span className="text-xs text-muted-foreground italic">keeps original code</span>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="text-xs text-muted-foreground italic">keeps original code</span>
+                                        <div className="flex gap-2 mt-1">
+                                          <button
+                                            onClick={() => {
+                                              setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
+                                              autoInitRow(mergeKey);
+                                            }}
+                                            className="text-xs text-blue-600 underline hover:text-blue-800"
+                                          >
+                                            Reassign →
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
+                                              setReassignTargets(prev => ({ ...prev, [mergeKey]: '__accepted__' }));
+                                            }}
+                                            className="text-xs text-green-600 underline hover:text-green-800"
+                                          >
+                                            Accept as-is ✓
+                                          </button>
+                                        </div>
+                                      </div>
                                     )}
                                   </TableCell>
                                   <TableCell>
@@ -3957,7 +3983,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           </div>
                                         );
                                       }
-                                      if (!isChecked) return <span className="text-xs text-muted-foreground">—</span>;
+                                      if (!isChecked) return (
+                                        <span className="text-xs text-amber-500 font-medium">
+                                          ⚠ Needs action — check to assign or accept
+                                        </span>
+                                      );
                                       if (!hasTarget) return <span className="text-xs text-orange-400">Select target</span>;
                                       return <span className="text-xs text-primary font-semibold">Ready</span>;
                                     })()}
