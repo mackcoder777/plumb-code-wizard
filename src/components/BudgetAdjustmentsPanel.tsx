@@ -1852,8 +1852,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Shared Pass1/Accepted key sets for badge + residual filter
   const { allPass1Keys, acceptedKeys } = useMemo(() => {
     const allPass1Keys = new Set([
-      ...standaloneGroups.map(g => g.key),
-      ...savedOnlyRows.map(r => r.key),
+      // Original standalone rows
+      ...(standaloneGroups ?? []).map(g => {
+        const parts = (g.key ?? '').trim().split(/\s+/);
+        return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
+      }),
+      // Saved-only rows
+      ...(savedOnlyRows ?? []).map(r => {
+        const parts = (r.key ?? '').trim().split(/\s+/);
+        return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
+      }),
+      // Merge group source codes
+      ...(mergeGroups ?? []).map(g => {
+        const parts = (g.key ?? '').trim().split(/\s+/);
+        return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
+      }),
+      // All saved merge/reassign source keys from DB
+      ...(savedMergesData ?? []).map(m => `${m.sec_code ?? ''}|${m.cost_head ?? ''}`),
+      // Reassignment TARGET keys — prevent targets from showing as new residuals
+      ...(savedMergesData ?? [])
+        .filter(m => m.reassign_to_head && m.reassign_to_head !== '__accepted__' && m.reassign_to_head !== '__keep__')
+        .map(m => `${m.sec_code ?? ''}|${m.reassign_to_head ?? ''}`),
     ]);
     const acceptedKeys = new Set(
       (savedMergesData ?? [])
@@ -1861,7 +1880,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .map(m => `${m.sec_code}|${m.cost_head}`)
     );
     return { allPass1Keys, acceptedKeys };
-  }, [standaloneGroups, savedOnlyRows, savedMergesData]);
+  }, [standaloneGroups, savedOnlyRows, mergeGroups, savedMergesData]);
 
   // Round 2 residual rows — codes under threshold NOT in Pass 1 and NOT accepted
   const residualRows = useMemo(() => {
