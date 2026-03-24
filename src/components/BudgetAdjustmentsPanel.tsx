@@ -1588,12 +1588,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Small Code Consolidation Analysis — runs against finalLaborSummary
   const smallCodeAnalysis = useMemo(() => {
     if (!finalLaborSummary || Object.keys(finalLaborSummary).length === 0) return [];
-    const SMALL_THRESHOLD = 8;
     const entries = Object.values(finalLaborSummary);
 
     const parsed = entries.map(item => {
       const parts = (item.code ?? '').trim().split(/\s+/);
-      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < SMALL_THRESHOLD };
+      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < minHoursThreshold };
     });
 
     const bySecHead: Record<string, typeof parsed> = {};
