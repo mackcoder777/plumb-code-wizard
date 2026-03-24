@@ -2934,7 +2934,7 @@ const EnhancedCostCodeManager = () => {
                   onAdjustmentsChange={setBudgetAdjustments}
                   estimateData={estimateData}
                   systemMappings={savedMappings.map(m => ({ system: m.system_name, laborCode: (m.cost_head || '').split('|')[1] || (m.cost_head || '') }))}
-                />}
+                />
               </div>
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">
