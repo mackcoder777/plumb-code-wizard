@@ -3933,11 +3933,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         );
                                         const action = savedEntry ? getSavedAction(savedEntry) : null;
                                         const isKept = action === '__keep__';
+                                        const isAccepted = action === '__accepted__';
                                         const isMerge = action === '__merge__';
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className={`text-xs ${isKept ? 'text-blue-400' : 'text-green-500'}`}>
-                                              {isKept ? '✓ Kept' : isMerge ? '✓ Merged' : '✓ Saved'}
+                                            <span className={`text-xs ${isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
