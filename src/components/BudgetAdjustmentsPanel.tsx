@@ -1972,7 +1972,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       // Background: warn about remaining small codes (non-blocking)
-      const SMALL_THRESHOLD = 8;
+      const SMALL_THRESHOLD = minHoursThreshold;
       const savedKeys = new Set(
         (queryClient.getQueryData<typeof savedMergesData>(['small-code-merges', projectId]) ?? [])
           .map(m => `${m.sec_code}|${m.cost_head}`)
@@ -1980,7 +1980,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const remainingSmall = Object.entries(finalLaborSummary ?? {}).filter(
         ([key, entry]) => {
           const head = key.trim().split(/\s+/).pop() ?? '';
-          return (entry.hours ?? 0) < SMALL_THRESHOLD &&
+          return (entry.hours ?? 0) < minHoursThreshold &&
                  (entry.hours ?? 0) >= 0.05 &&
                  !savedKeys.has(key.trim().split(/\s+/)[0] + '|' + head);
         }
@@ -1990,7 +1990,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         setTimeout(() => {
           toast({
             title: `${remainingSmall} small codes still unassigned`,
-            description: `Review Standalone Codes tab for remaining codes under ${SMALL_THRESHOLD}h.`,
+            description: `Review Standalone Codes tab for remaining codes under ${minHoursThreshold}h.`,
             variant: 'default',
           });
         }, 1500);
