@@ -3240,7 +3240,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   : 'bg-green-100 text-green-700'
                               )}>
                                 {standaloneOpenCount > 0 ? `${standaloneOpenCount} open` : '✓ all saved'}
-                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount} saved` : ''}
+                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount - standaloneAcceptedCount} saved` : ''}
+                                {standaloneAcceptedCount > 0 ? `, ${standaloneAcceptedCount} accepted` : ''}
                               </span>
                             </span>
                           </button>
