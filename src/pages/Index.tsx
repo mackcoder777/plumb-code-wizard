@@ -818,6 +818,11 @@ const EnhancedCostCodeManager = () => {
         return;
       }
 
+      if (!materialDescOverridesFetched) {
+        console.log('[Load] Deferring: material desc overrides not yet fetched');
+        return;
+      }
+
       const itemsNeedingPersist: Array<{ row_number: number; cost_code: string }> = [];
 
       const transformedItems = savedItems.map((item) => {
