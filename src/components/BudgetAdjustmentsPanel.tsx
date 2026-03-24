@@ -561,6 +561,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   
   const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
+  const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
+    return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
+  });
+  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual'>('all');
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
