@@ -1611,7 +1611,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
         return { key, head, sec: sec!, lines, combinedHours };
       });
-  }, [finalLaborSummary]);
+  }, [finalLaborSummary, minHoursThreshold]);
 
   // Auto-suggestions for standalone codes
   const standaloneAutoSuggestions = useMemo(() => {
@@ -1720,7 +1720,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
-    const MIN_HOURS = 8;
+    const MIN_HOURS = minHoursThreshold;
 
     // Standalone small codes: default to reassign since there's nothing to merge/redistribute within
     if (lines.length === 1) {
@@ -1802,7 +1802,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 sec: parts[0] ?? '',
                 act: parts[1] ?? '',
                 head: parts.slice(2).join(' ') || '',
-                isSmall: (l.hours ?? 0) < 8,
+                isSmall: (l.hours ?? 0) < minHoursThreshold,
                 dollars: l.dollars ?? 0,
                 rate: l.rate ?? 0,
                 type: l.type ?? 'field',
@@ -1815,7 +1815,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               sec: m.sec_code,
               act: '0000',
               head: m.cost_head,
-              isSmall: combinedHours < 8,
+              isSmall: combinedHours < minHoursThreshold,
               dollars: 0,
               rate: 0,
               type: 'field' as const,
