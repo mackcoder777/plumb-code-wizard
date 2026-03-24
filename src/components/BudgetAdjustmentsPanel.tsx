@@ -3783,7 +3783,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
                             return <div className="flex items-center gap-2">{openPass1Badge}{round2Badge}</div>;
                           })()}
-                          {Object.keys(standaloneAutoSuggestions).length > 0 && (
+                          {(() => {
+                            const unsavedAutoCount = Object.keys(standaloneAutoSuggestions ?? {})
+                              .filter(key => !savedMergeKeySet.has(key)).length;
+                            return unsavedAutoCount > 0 ? (
                             <button
                               onClick={() => {
                                 const newTargets: Record<string, string> = { ...reassignTargets };
@@ -3803,9 +3806,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               }}
                               className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                             >
-                              ⚡ Auto-resolve ({Object.keys(standaloneAutoSuggestions).length})
+                              ⚡ Auto-resolve ({unsavedAutoCount})
                             </button>
-                          )}
+                            ) : null;
+                          })()}
                         </div>
                         <Table>
                           <TableHeader>
