@@ -3869,11 +3869,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const action = getSavedAction(savedMerge);
                                       const isRedistribute = action === '__redistribute__';
                                       const isKeep = action === '__keep__';
+                                      const isAccepted = action === '__accepted__';
                                       const isMerge = action === '__merge__';
-                                      const isReassign = !isRedistribute && !isKeep && !isMerge;
+                                      const isReassign = !isRedistribute && !isKeep && !isMerge && !isAccepted;
                                       return (
-                                        <span className={`text-xs font-mono text-green-400`}>
+                                        <span className={`text-xs font-mono ${isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
                                           {isKeep && '↔ Kept as-is'}
+                                          {isAccepted && '✓ Accepted as-is'}
                                           {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
                                           {isRedistribute && `⇄ Redistributed`}
