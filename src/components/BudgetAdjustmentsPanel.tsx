@@ -3711,11 +3711,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 .map(m => `${m.sec_code}|${m.cost_head}`)
                             );
                             const openPass1 = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
-                            if (openPass1 > 0) return (
+
+                            // Pass 1 badge — informational only, no longer blocks Round 2
+                            const openPass1Badge = openPass1 > 0 ? (
                               <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700">
                                 {openPass1} code{openPass1 !== 1 ? 's' : ''} need action below
                               </span>
-                            );
+                            ) : null;
+
+                            // Round 2 — always compute regardless of Pass 1 state
                             const round2Count = Object.entries(finalLaborSummary ?? {}).filter(([key, entry]) => {
                               if ((entry.hours ?? 0) >= minHoursThreshold || (entry.hours ?? 0) < 0.05) return false;
                               const parts = key.trim().split(/\s+/);
@@ -3724,19 +3728,19 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               const pKey = `${sec}|${head}`;
                               return !allPass1Keys.has(pKey) && !acceptedKeys.has(pKey);
                             }).length;
-                            if (round2Count === 0) return (
-                              <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700">
-                                ✓ All resolved
-                              </span>
-                            );
-                            return (
-                              <button
-                                onClick={() => setStandaloneFilter('residual')}
-                                className="rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-                              >
-                                ⚠ {round2Count} codes still under {minHoursThreshold}h after actions
-                              </button>
-                            );
+
+                            const round2Badge = round2Count === 0
+                              ? (openPass1 === 0
+                                  ? <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700">✓ All resolved</span>
+                                  : null)
+                              : <button
+                                  onClick={() => setStandaloneFilter('residual')}
+                                  className="rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                                >
+                                  ⚠ {round2Count} code{round2Count !== 1 ? 's' : ''} still under {minHoursThreshold}h after actions
+                                </button>;
+
+                            return <div className="flex items-center gap-2">{openPass1Badge}{round2Badge}</div>;
                           })()}
                           {Object.keys(standaloneAutoSuggestions).length > 0 && (
                             <button
