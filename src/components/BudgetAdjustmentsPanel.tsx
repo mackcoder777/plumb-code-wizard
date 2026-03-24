@@ -1849,6 +1849,47 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   });
   const standaloneGroups = filteredSmallCodeAnalysis.filter(g => g.lines.length === 1);
 
+  // Shared Pass1/Accepted key sets for badge + residual filter
+  const { allPass1Keys, acceptedKeys } = useMemo(() => {
+    const allPass1Keys = new Set([
+      ...standaloneGroups.map(g => g.key),
+      ...savedOnlyRows.map(r => r.key),
+    ]);
+    const acceptedKeys = new Set(
+      (savedMergesData ?? [])
+        .filter(m => m.reassign_to_head === '__accepted__')
+        .map(m => `${m.sec_code}|${m.cost_head}`)
+    );
+    return { allPass1Keys, acceptedKeys };
+  }, [standaloneGroups, savedOnlyRows, savedMergesData]);
+
+  // Round 2 residual rows — codes under threshold NOT in Pass 1 and NOT accepted
+  const residualRows = useMemo(() => {
+    return Object.entries(finalLaborSummary ?? {})
+      .filter(([key, entry]) => {
+        if ((entry.hours ?? 0) >= minHoursThreshold || (entry.hours ?? 0) < 0.05) return false;
+        const parts = key.trim().split(/\s+/);
+        const sec = parts[0] ?? '';
+        const head = parts.slice(2).join(' ') || '';
+        const pKey = `${sec}|${head}`;
+        return !allPass1Keys.has(pKey) && !acceptedKeys.has(pKey);
+      })
+      .map(([key, entry]) => {
+        const parts = key.trim().split(/\s+/);
+        return {
+          key: `${parts[0]}|${parts.slice(2).join(' ')}`,
+          displayKey: key,
+          sec: parts[0] ?? '',
+          act: parts[1] ?? '0000',
+          head: parts.slice(2).join(' ') || '',
+          combinedHours: entry.hours ?? 0,
+          lines: [{ code: key, hours: entry.hours ?? 0 }] as { code: string; hours: number }[],
+          isResidual: true,
+        };
+      });
+  }, [finalLaborSummary, minHoursThreshold, allPass1Keys, acceptedKeys]);
+
+
   const handleConsolidate = async () => {
     if (!projectId || projectId === 'default') {
       toast({
@@ -3701,33 +3742,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                           </div>
                           {/* Round 2 residual badge */}
                           {(() => {
-                            const allPass1Keys = new Set([
-                              ...standaloneGroups.map(g => g.key),
-                              ...savedOnlyRows.map(r => r.key),
-                            ]);
-                            const acceptedKeys = new Set(
-                              (savedMergesData ?? [])
-                                .filter(m => m.reassign_to_head === '__accepted__')
-                                .map(m => `${m.sec_code}|${m.cost_head}`)
-                            );
                             const openPass1 = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
+                            const round2Count = residualRows.length;
 
-                            // Pass 1 badge — informational only, no longer blocks Round 2
                             const openPass1Badge = openPass1 > 0 ? (
                               <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700">
                                 {openPass1} code{openPass1 !== 1 ? 's' : ''} need action below
                               </span>
                             ) : null;
-
-                            // Round 2 — always compute regardless of Pass 1 state
-                            const round2Count = Object.entries(finalLaborSummary ?? {}).filter(([key, entry]) => {
-                              if ((entry.hours ?? 0) >= minHoursThreshold || (entry.hours ?? 0) < 0.05) return false;
-                              const parts = key.trim().split(/\s+/);
-                              const sec = parts[0] ?? '';
-                              const head = parts.slice(2).join(' ') || '';
-                              const pKey = `${sec}|${head}`;
-                              return !allPass1Keys.has(pKey) && !acceptedKeys.has(pKey);
-                            }).length;
 
                             const round2Badge = round2Count === 0
                               ? (openPass1 === 0
@@ -3795,7 +3817,107 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {[...standaloneGroups, ...savedOnlyRows.filter((r) => {
+                            {standaloneFilter === 'residual' ? (
+                              residualRows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
+                                    No residual codes found — all codes are above {minHoursThreshold}h after actions.
+                                  </TableCell>
+                                </TableRow>
+                              ) : residualRows.map((row) => {
+                                const mergeKey = row.key;
+                                const sameSECHeads = Object.keys(finalLaborSummary ?? {})
+                                  .map((k) => {
+                                    const parts = k.trim().split(/\s+/);
+                                    return { key: k, sec: parts[0], act: parts[1], head: parts.slice(2).join(' ') };
+                                  })
+                                  .filter((p) => p.sec === row.sec && p.head !== row.head);
+                                return (
+                                  <TableRow key={mergeKey} className="border-l-2 border-l-amber-400">
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={!!consolidations[mergeKey]}
+                                        onCheckedChange={(checked) => {
+                                          setConsolidations((prev) => ({ ...prev, [mergeKey]: !!checked }));
+                                          if (checked) autoInitRow(mergeKey);
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="font-mono font-bold text-amber-500">
+                                      {row.lines[0].code}
+                                      <div className="text-xs text-amber-400 font-normal mt-0.5">Round 2</div>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono font-semibold text-destructive">
+                                      {row.combinedHours.toFixed(1)}h
+                                    </TableCell>
+                                    <TableCell>
+                                      {consolidations[mergeKey] ? (
+                                        <div>
+                                          <select
+                                            className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                            value={reassignTargets[mergeKey] ?? '__reassign__'}
+                                            onChange={(e) => {
+                                              setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }));
+                                            }}
+                                          >
+                                            <option value="__reassign__" disabled>— select target —</option>
+                                            {sameSECHeads
+                                              .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                              .map((p) => (
+                                              <option key={p.key} value={p.head}>{p.head}</option>
+                                            ))}
+                                            <option value="__accepted__">✓ Accept as-is (intentionally small)</option>
+                                            <option value="__keep__">Keep as-is</option>
+                                          </select>
+                                          {(() => {
+                                            const target = reassignTargets[mergeKey];
+                                            if (!target || target === '__reassign__' || target === '__keep__' || target === '__accepted__') return null;
+                                            const targetEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
+                                              const parts = k.trim().split(/\s+/);
+                                              return parts[0] === row.sec && parts.slice(2).join(' ') === target;
+                                            });
+                                            const targetHours = targetEntry ? (targetEntry[1].hours ?? 0) : 0;
+                                            const projected = row.combinedHours + targetHours;
+                                            return projected < minHoursThreshold ? (
+                                              <div className="text-xs text-amber-500 mt-0.5">⚠ Still {projected.toFixed(1)}h after reassignment</div>
+                                            ) : (
+                                              <div className="text-xs text-green-500 mt-0.5">✓ Will be {projected.toFixed(1)}h</div>
+                                            );
+                                          })()}
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col gap-1">
+                                          <span className="text-xs text-muted-foreground italic">keeps original code</span>
+                                          <div className="flex gap-2 mt-1">
+                                            <button
+                                              onClick={() => {
+                                                setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
+                                                autoInitRow(mergeKey);
+                                              }}
+                                              className="text-xs text-blue-600 underline hover:text-blue-800"
+                                            >
+                                              Reassign →
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
+                                                setReassignTargets(prev => ({ ...prev, [mergeKey]: '__accepted__' }));
+                                              }}
+                                              className="text-xs text-green-600 underline hover:text-green-800"
+                                            >
+                                              Accept as-is ✓
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className="text-xs text-amber-500 font-medium">⚠ Round 2 residual</span>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })
+                            ) : [...standaloneGroups, ...savedOnlyRows.filter((r) => {
                               const saved = (savedMergesData ?? []).find(
                                 (m) => m.sec_code === r.sec && m.cost_head === r.head
                               );
@@ -3803,7 +3925,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 !(saved.redistribute_adjustments &&
                                   Object.keys(typeof saved.redistribute_adjustments === 'object' && saved.redistribute_adjustments !== null ? saved.redistribute_adjustments : {}).length > 0);
                             })].filter((row) => {
-                              // Apply standalone filter
                               const isSaved = savedMergeKeySet.has(row.key);
                               const savedMerge = isSaved ? (savedMergesData ?? []).find(m => m.sec_code === row.sec && m.cost_head === row.head) : null;
                               const savedAction = savedMerge ? getSavedAction(savedMerge) : null;
@@ -3811,14 +3932,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               if (standaloneFilter === 'open') return !isSaved;
                               if (standaloneFilter === 'saved') return isSaved && !isAccepted;
                               if (standaloneFilter === 'accepted') return isAccepted;
-                              if (standaloneFilter === 'residual') {
-                                // Show codes still under threshold after all actions applied
-                                const finalEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
-                                  const parts = k.trim().split(/\s+/);
-                                  return parts[0] === row.sec && parts.slice(2).join(' ') === row.head;
-                                });
-                                return finalEntry && (finalEntry[1].hours ?? 0) < minHoursThreshold && !isAccepted;
-                              }
                               return true;
                             }).map((row) => {
                               const mergeKey = row.key;
