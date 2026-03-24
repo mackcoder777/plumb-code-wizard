@@ -3109,7 +3109,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 </h3>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
+                Floor-level codes under {minHoursThreshold} hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
               </p>
 
               {/* Show saved merges that no longer appear in smallCodeAnalysis (already merged) */}
@@ -3347,7 +3347,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     ))}
                                   </div>
                                 </TableCell>
-                                <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < 8 ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
+                                <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < minHoursThreshold ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
                                   {row.combinedHours.toFixed(1)}
                                 </TableCell>
                                 <TableCell>
@@ -3398,7 +3398,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         const getTarget = (line: typeof row.lines[0]) => targets[toActKey(line.code)] ?? targets[line.code] ?? line.hours;
                                         const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
                                         const isBalanced = Math.abs(netDelta) < 0.01;
-                                        const MIN_HOURS = 8;
+                                        const MIN_HOURS = minHoursThreshold;
                                         const handleAutoRebalance = () => {
                                           const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
                                           const donors = row.lines.filter(l => l.hours > MIN_HOURS);
