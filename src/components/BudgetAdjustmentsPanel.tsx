@@ -3196,6 +3196,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       const mergeSavedCount = mergeGroups.filter(g => savedMergeKeySet.has(g.key)).length;
                       const standaloneOpenCount = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
                       const standaloneSavedCount = standaloneGroups.filter(g => savedMergeKeySet.has(g.key)).length;
+                      const standaloneAcceptedCount = standaloneGroups.filter(g => {
+                        const saved = (savedMergesData ?? []).find(m => m.sec_code === g.sec && m.cost_head === g.head);
+                        return saved && saved.reassign_to_head === '__accepted__';
+                      }).length;
                       return (
                         <>
                           <button
