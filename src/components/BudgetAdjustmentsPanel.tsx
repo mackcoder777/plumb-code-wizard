@@ -3789,7 +3789,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               return saved && saved.reassign_to_head !== null &&
                                 !(saved.redistribute_adjustments &&
                                   Object.keys(typeof saved.redistribute_adjustments === 'object' && saved.redistribute_adjustments !== null ? saved.redistribute_adjustments : {}).length > 0);
-                            })].map((row) => {
+                            })].filter((row) => {
+                              // Apply standalone filter
+                              const isSaved = savedMergeKeySet.has(row.key);
+                              const savedMerge = isSaved ? (savedMergesData ?? []).find(m => m.sec_code === row.sec && m.cost_head === row.head) : null;
+                              const savedAction = savedMerge ? getSavedAction(savedMerge) : null;
+                              const isAccepted = savedAction === '__accepted__';
+                              if (standaloneFilter === 'open') return !isSaved;
+                              if (standaloneFilter === 'saved') return isSaved && !isAccepted;
+                              if (standaloneFilter === 'accepted') return isAccepted;
+                              if (standaloneFilter === 'residual') {
+                                // Show codes still under threshold after all actions applied
+                                const finalEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
+                                  const parts = k.trim().split(/\s+/);
+                                  return parts[0] === row.sec && parts.slice(2).join(' ') === row.head;
+                                });
+                                return finalEntry && (finalEntry[1].hours ?? 0) < minHoursThreshold && !isAccepted;
+                              }
+                              return true;
+                            }).map((row) => {
                               const mergeKey = row.key;
                               const isSaved = savedMergeKeySet.has(mergeKey);
                               const line = row.lines[0];
