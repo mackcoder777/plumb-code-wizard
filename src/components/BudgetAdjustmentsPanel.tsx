@@ -561,6 +561,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   
   const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
+  const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
+    return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
+  });
+  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual'>('all');
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1584,12 +1588,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Small Code Consolidation Analysis — runs against finalLaborSummary
   const smallCodeAnalysis = useMemo(() => {
     if (!finalLaborSummary || Object.keys(finalLaborSummary).length === 0) return [];
-    const SMALL_THRESHOLD = 8;
     const entries = Object.values(finalLaborSummary);
 
     const parsed = entries.map(item => {
       const parts = (item.code ?? '').trim().split(/\s+/);
-      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < SMALL_THRESHOLD };
+      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < minHoursThreshold };
     });
 
     const bySecHead: Record<string, typeof parsed> = {};
@@ -1608,7 +1611,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
         return { key, head, sec: sec!, lines, combinedHours };
       });
-  }, [finalLaborSummary]);
+  }, [finalLaborSummary, minHoursThreshold]);
 
   // Auto-suggestions for standalone codes
   const standaloneAutoSuggestions = useMemo(() => {
@@ -1717,7 +1720,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
-    const MIN_HOURS = 8;
+    const MIN_HOURS = minHoursThreshold;
 
     // Standalone small codes: default to reassign since there's nothing to merge/redistribute within
     if (lines.length === 1) {
@@ -1799,7 +1802,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 sec: parts[0] ?? '',
                 act: parts[1] ?? '',
                 head: parts.slice(2).join(' ') || '',
-                isSmall: (l.hours ?? 0) < 8,
+                isSmall: (l.hours ?? 0) < minHoursThreshold,
                 dollars: l.dollars ?? 0,
                 rate: l.rate ?? 0,
                 type: l.type ?? 'field',
@@ -1812,7 +1815,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               sec: m.sec_code,
               act: '0000',
               head: m.cost_head,
-              isSmall: combinedHours < 8,
+              isSmall: combinedHours < minHoursThreshold,
               dollars: 0,
               rate: 0,
               type: 'field' as const,
@@ -1969,7 +1972,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       // Background: warn about remaining small codes (non-blocking)
-      const SMALL_THRESHOLD = 8;
+      const SMALL_THRESHOLD = minHoursThreshold;
       const savedKeys = new Set(
         (queryClient.getQueryData<typeof savedMergesData>(['small-code-merges', projectId]) ?? [])
           .map(m => `${m.sec_code}|${m.cost_head}`)
@@ -1977,7 +1980,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const remainingSmall = Object.entries(finalLaborSummary ?? {}).filter(
         ([key, entry]) => {
           const head = key.trim().split(/\s+/).pop() ?? '';
-          return (entry.hours ?? 0) < SMALL_THRESHOLD &&
+          return (entry.hours ?? 0) < minHoursThreshold &&
                  (entry.hours ?? 0) >= 0.05 &&
                  !savedKeys.has(key.trim().split(/\s+/)[0] + '|' + head);
         }
@@ -1987,7 +1990,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         setTimeout(() => {
           toast({
             title: `${remainingSmall} small codes still unassigned`,
-            description: `Review Standalone Codes tab for remaining codes under ${SMALL_THRESHOLD}h.`,
+            description: `Review Standalone Codes tab for remaining codes under ${minHoursThreshold}h.`,
             variant: 'default',
           });
         }, 1500);
@@ -2010,7 +2013,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       Object.keys(merge.redistribute_adjustments as object).length > 0
     ) return '__redistribute__';
     if (merge.reassign_to_head === '__keep__') return '__keep__';
-    if (merge.reassign_to_head && merge.reassign_to_head !== '__keep__') return merge.reassign_to_head;
+    if (merge.reassign_to_head === '__accepted__') return '__accepted__';
+    if (merge.reassign_to_head && merge.reassign_to_head !== '__keep__' && merge.reassign_to_head !== '__accepted__') return merge.reassign_to_head;
     return '__merge__';
   };
 
@@ -3106,7 +3110,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 </h3>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
-                Floor-level codes under 8 hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
+                Floor-level codes under {minHoursThreshold} hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
               </p>
 
               {/* Show saved merges that no longer appear in smallCodeAnalysis (already merged) */}
@@ -3192,6 +3196,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       const mergeSavedCount = mergeGroups.filter(g => savedMergeKeySet.has(g.key)).length;
                       const standaloneOpenCount = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
                       const standaloneSavedCount = standaloneGroups.filter(g => savedMergeKeySet.has(g.key)).length;
+                      const standaloneAcceptedCount = standaloneGroups.filter(g => {
+                        const saved = (savedMergesData ?? []).find(m => m.sec_code === g.sec && m.cost_head === g.head);
+                        return saved && saved.reassign_to_head === '__accepted__';
+                      }).length;
                       return (
                         <>
                           <button
@@ -3232,7 +3240,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   : 'bg-green-100 text-green-700'
                               )}>
                                 {standaloneOpenCount > 0 ? `${standaloneOpenCount} open` : '✓ all saved'}
-                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount} saved` : ''}
+                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount - standaloneAcceptedCount} saved` : ''}
+                                {standaloneAcceptedCount > 0 ? `, ${standaloneAcceptedCount} accepted` : ''}
                               </span>
                             </span>
                           </button>
@@ -3344,7 +3353,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     ))}
                                   </div>
                                 </TableCell>
-                                <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < 8 ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
+                                <TableCell className={`text-right font-mono font-semibold ${row.combinedHours < minHoursThreshold ? 'text-destructive' : row.combinedHours < 20 ? 'text-orange-400' : 'text-foreground'}`}>
                                   {row.combinedHours.toFixed(1)}
                                 </TableCell>
                                 <TableCell>
@@ -3395,7 +3404,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         const getTarget = (line: typeof row.lines[0]) => targets[toActKey(line.code)] ?? targets[line.code] ?? line.hours;
                                         const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
                                         const isBalanced = Math.abs(netDelta) < 0.01;
-                                        const MIN_HOURS = 8;
+                                        const MIN_HOURS = minHoursThreshold;
                                         const handleAutoRebalance = () => {
                                           const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
                                           const donors = row.lines.filter(l => l.hours > MIN_HOURS);
@@ -3651,28 +3660,80 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       </p>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                           <p className="text-xs text-muted-foreground">
                             Single-entry codes below the minimum. Select rows to reassign their hours to another cost head in the same section.
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1">
+                              <Label className="text-xs text-muted-foreground whitespace-nowrap">Min Hours:</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={40}
+                                step={1}
+                                value={minHoursThreshold}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 8;
+                                  const clamped = Math.max(1, Math.min(40, val));
+                                  setMinHoursThreshold(clamped);
+                                  localStorage.setItem('smallCodeMinHours', String(clamped));
+                                }}
+                                className="h-7 w-14 text-xs font-mono"
+                              />
+                            </div>
                             <span className="text-xs text-muted-foreground">Filter:</span>
                             <Select
-                              value={String(standaloneMaxHours)}
-                              onValueChange={(v) => setStandaloneMaxHours(Number(v))}
+                              value={standaloneFilter}
+                              onValueChange={(v) => setStandaloneFilter(v as typeof standaloneFilter)}
                             >
-                              <SelectTrigger className="h-7 w-24 text-xs">
+                              <SelectTrigger className="h-7 w-32 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="8">All (&lt; 8h)</SelectItem>
-                                <SelectItem value="6">&lt; 6h</SelectItem>
-                                <SelectItem value="4">&lt; 4h</SelectItem>
-                                <SelectItem value="2">&lt; 2h</SelectItem>
-                                <SelectItem value="1">&lt; 1h</SelectItem>
+                                <SelectItem value="all">All (&lt; {minHoursThreshold}h)</SelectItem>
+                                <SelectItem value="open">Open only</SelectItem>
+                                <SelectItem value="saved">Saved only</SelectItem>
+                                <SelectItem value="accepted">Accepted only</SelectItem>
+                                <SelectItem value="residual">Residual (post-action)</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
+                          {/* Round 2 residual badge */}
+                          {(() => {
+                            const allPass1Keys = new Set([
+                              ...standaloneGroups.map(g => g.key),
+                              ...savedOnlyRows.map(r => r.key),
+                            ]);
+                            const acceptedKeys = new Set(
+                              (savedMergesData ?? [])
+                                .filter(m => m.reassign_to_head === '__accepted__')
+                                .map(m => `${m.sec_code}|${m.cost_head}`)
+                            );
+                            const openPass1 = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
+                            if (openPass1 > 0) return null; // Don't show Round 2 until Pass 1 is done
+                            const round2Count = Object.entries(finalLaborSummary ?? {}).filter(([key, entry]) => {
+                              if ((entry.hours ?? 0) >= minHoursThreshold || (entry.hours ?? 0) < 0.05) return false;
+                              const parts = key.trim().split(/\s+/);
+                              const sec = parts[0] ?? '';
+                              const head = parts.slice(2).join(' ') || '';
+                              const pKey = `${sec}|${head}`;
+                              return !allPass1Keys.has(pKey) && !acceptedKeys.has(pKey);
+                            }).length;
+                            if (round2Count === 0) return (
+                              <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700">
+                                ✓ All resolved
+                              </span>
+                            );
+                            return (
+                              <button
+                                onClick={() => setStandaloneFilter('residual')}
+                                className="rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                              >
+                                ⚠ {round2Count} codes still under {minHoursThreshold}h after actions
+                              </button>
+                            );
+                          })()}
                           {Object.keys(standaloneAutoSuggestions).length > 0 && (
                             <button
                               onClick={() => {
@@ -3733,7 +3794,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               return saved && saved.reassign_to_head !== null &&
                                 !(saved.redistribute_adjustments &&
                                   Object.keys(typeof saved.redistribute_adjustments === 'object' && saved.redistribute_adjustments !== null ? saved.redistribute_adjustments : {}).length > 0);
-                            })].map((row) => {
+                            })].filter((row) => {
+                              // Apply standalone filter
+                              const isSaved = savedMergeKeySet.has(row.key);
+                              const savedMerge = isSaved ? (savedMergesData ?? []).find(m => m.sec_code === row.sec && m.cost_head === row.head) : null;
+                              const savedAction = savedMerge ? getSavedAction(savedMerge) : null;
+                              const isAccepted = savedAction === '__accepted__';
+                              if (standaloneFilter === 'open') return !isSaved;
+                              if (standaloneFilter === 'saved') return isSaved && !isAccepted;
+                              if (standaloneFilter === 'accepted') return isAccepted;
+                              if (standaloneFilter === 'residual') {
+                                // Show codes still under threshold after all actions applied
+                                const finalEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
+                                  const parts = k.trim().split(/\s+/);
+                                  return parts[0] === row.sec && parts.slice(2).join(' ') === row.head;
+                                });
+                                return finalEntry && (finalEntry[1].hours ?? 0) < minHoursThreshold && !isAccepted;
+                              }
+                              return true;
+                            }).map((row) => {
                               const mergeKey = row.key;
                               const isSaved = savedMergeKeySet.has(mergeKey);
                               const line = row.lines[0];
@@ -3795,11 +3874,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const action = getSavedAction(savedMerge);
                                       const isRedistribute = action === '__redistribute__';
                                       const isKeep = action === '__keep__';
+                                      const isAccepted = action === '__accepted__';
                                       const isMerge = action === '__merge__';
-                                      const isReassign = !isRedistribute && !isKeep && !isMerge;
+                                      const isReassign = !isRedistribute && !isKeep && !isMerge && !isAccepted;
                                       return (
-                                        <span className={`text-xs font-mono text-green-400`}>
+                                        <span className={`text-xs font-mono ${isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
                                           {isKeep && '↔ Kept as-is'}
+                                          {isAccepted && '✓ Accepted as-is'}
                                           {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
                                           {isRedistribute && `⇄ Redistributed`}
@@ -3807,21 +3888,40 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       );
                                     })()
                                     : (consolidations[mergeKey]) ? (
-                                      <select
-                                        className="text-xs bg-background border border-border rounded px-1 py-0.5"
-                                        value={reassignTargets[mergeKey] ?? '__reassign__'}
-                                        onChange={(e) => {
-                                          setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }));
-                                        }}
-                                      >
-                                        <option value="__reassign__" disabled>— select target —</option>
-                                        {sameSECHeads
-                                          .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
-                                          .map((p) => (
-                                          <option key={p.key} value={p.head}>{p.head}</option>
-                                        ))}
-                                        <option value="__keep__">Keep as-is</option>
-                                      </select>
+                                      <div>
+                                        <select
+                                          className="text-xs bg-background border border-border rounded px-1 py-0.5"
+                                          value={reassignTargets[mergeKey] ?? '__reassign__'}
+                                          onChange={(e) => {
+                                            setReassignTargets((prev) => ({ ...prev, [mergeKey]: e.target.value }));
+                                          }}
+                                        >
+                                          <option value="__reassign__" disabled>— select target —</option>
+                                          {sameSECHeads
+                                            .filter((p, i, arr) => arr.findIndex(x => x.head === p.head) === i)
+                                            .map((p) => (
+                                            <option key={p.key} value={p.head}>{p.head}</option>
+                                          ))}
+                                          <option value="__accepted__">✓ Accept as-is (intentionally small)</option>
+                                          <option value="__keep__">Keep as-is</option>
+                                        </select>
+                                        {/* Pre-action projection warning */}
+                                        {(() => {
+                                          const target = reassignTargets[mergeKey];
+                                          if (!target || target === '__reassign__' || target === '__keep__' || target === '__accepted__' || target === '__merge__') return null;
+                                          const targetEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
+                                            const parts = k.trim().split(/\s+/);
+                                            return parts[0] === row.sec && parts.slice(2).join(' ') === target;
+                                          });
+                                          const targetHours = targetEntry ? (targetEntry[1].hours ?? 0) : 0;
+                                          const projected = row.combinedHours + targetHours;
+                                          return projected < minHoursThreshold ? (
+                                            <div className="text-xs text-amber-500 mt-0.5">⚠ Still {projected.toFixed(1)}h after reassignment</div>
+                                          ) : (
+                                            <div className="text-xs text-green-500 mt-0.5">✓ Will be {projected.toFixed(1)}h</div>
+                                          );
+                                        })()}
+                                      </div>
                                     ) : (
                                       <span className="text-xs text-muted-foreground italic">keeps original code</span>
                                     )}
@@ -3838,11 +3938,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         );
                                         const action = savedEntry ? getSavedAction(savedEntry) : null;
                                         const isKept = action === '__keep__';
+                                        const isAccepted = action === '__accepted__';
                                         const isMerge = action === '__merge__';
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className={`text-xs ${isKept ? 'text-blue-400' : 'text-green-500'}`}>
-                                              {isKept ? '✓ Kept' : isMerge ? '✓ Merged' : '✓ Saved'}
+                                            <span className={`text-xs ${isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
