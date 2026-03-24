@@ -3654,28 +3654,80 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       </p>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                           <p className="text-xs text-muted-foreground">
                             Single-entry codes below the minimum. Select rows to reassign their hours to another cost head in the same section.
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1">
+                              <Label className="text-xs text-muted-foreground whitespace-nowrap">Min Hours:</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={40}
+                                step={1}
+                                value={minHoursThreshold}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 8;
+                                  const clamped = Math.max(1, Math.min(40, val));
+                                  setMinHoursThreshold(clamped);
+                                  localStorage.setItem('smallCodeMinHours', String(clamped));
+                                }}
+                                className="h-7 w-14 text-xs font-mono"
+                              />
+                            </div>
                             <span className="text-xs text-muted-foreground">Filter:</span>
                             <Select
-                              value={String(standaloneMaxHours)}
-                              onValueChange={(v) => setStandaloneMaxHours(Number(v))}
+                              value={standaloneFilter}
+                              onValueChange={(v) => setStandaloneFilter(v as typeof standaloneFilter)}
                             >
-                              <SelectTrigger className="h-7 w-24 text-xs">
+                              <SelectTrigger className="h-7 w-32 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="8">All (&lt; 8h)</SelectItem>
-                                <SelectItem value="6">&lt; 6h</SelectItem>
-                                <SelectItem value="4">&lt; 4h</SelectItem>
-                                <SelectItem value="2">&lt; 2h</SelectItem>
-                                <SelectItem value="1">&lt; 1h</SelectItem>
+                                <SelectItem value="all">All (&lt; {minHoursThreshold}h)</SelectItem>
+                                <SelectItem value="open">Open only</SelectItem>
+                                <SelectItem value="saved">Saved only</SelectItem>
+                                <SelectItem value="accepted">Accepted only</SelectItem>
+                                <SelectItem value="residual">Residual (post-action)</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
+                          {/* Round 2 residual badge */}
+                          {(() => {
+                            const allPass1Keys = new Set([
+                              ...standaloneGroups.map(g => g.key),
+                              ...savedOnlyRows.map(r => r.key),
+                            ]);
+                            const acceptedKeys = new Set(
+                              (savedMergesData ?? [])
+                                .filter(m => m.reassign_to_head === '__accepted__')
+                                .map(m => `${m.sec_code}|${m.cost_head}`)
+                            );
+                            const openPass1 = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
+                            if (openPass1 > 0) return null; // Don't show Round 2 until Pass 1 is done
+                            const round2Count = Object.entries(finalLaborSummary ?? {}).filter(([key, entry]) => {
+                              if ((entry.hours ?? 0) >= minHoursThreshold || (entry.hours ?? 0) < 0.05) return false;
+                              const parts = key.trim().split(/\s+/);
+                              const sec = parts[0] ?? '';
+                              const head = parts.slice(2).join(' ') || '';
+                              const pKey = `${sec}|${head}`;
+                              return !allPass1Keys.has(pKey) && !acceptedKeys.has(pKey);
+                            }).length;
+                            if (round2Count === 0) return (
+                              <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700">
+                                ✓ All resolved
+                              </span>
+                            );
+                            return (
+                              <button
+                                onClick={() => setStandaloneFilter('residual')}
+                                className="rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                              >
+                                ⚠ {round2Count} codes still under {minHoursThreshold}h after actions
+                              </button>
+                            );
+                          })()}
                           {Object.keys(standaloneAutoSuggestions).length > 0 && (
                             <button
                               onClick={() => {
