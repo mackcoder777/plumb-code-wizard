@@ -555,6 +555,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
 const [undoingKey, setUndoingKey] = useState<string | null>(null);
 const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
+  const staleRedistKeysRef = useRef<Set<string>>(new Set());
   const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
@@ -564,7 +565,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
     return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
   });
-  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual'>('all');
+  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1128,6 +1129,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
+    staleRedistKeysRef.current = new Set();
     const summary = calculations.adjustedLaborSummary;
     if (!summary || Object.keys(summary).length === 0) return summary;
 
@@ -1400,6 +1402,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             if (result[matchKey].hours <= 0.001) delete result[matchKey];
           });
         }
+        // Detect stale redistributes: any key in this group still under threshold
+        matchingKeys.forEach(k => {
+          if (result[k] && (result[k].hours ?? 0) > 0.05 && (result[k].hours ?? 0) < minHoursThreshold) {
+            staleRedistKeysRef.current.add(`${sec}|${head}`);
+          }
+        });
         return; // do not fall through to merge/reassign logic
       }
 
@@ -1496,7 +1504,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
     }
     return result;
-  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
+  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, minHoursThreshold]);
 
   // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
   const cleanupRanRef = useRef(false);
@@ -1944,6 +1952,35 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       .length,
     [finalLaborSummary, minHoursThreshold]
   );
+
+  const staleRedistCount = staleRedistKeysRef.current.size;
+
+  const inExportRows = useMemo(() => {
+    return Object.entries(finalLaborSummary ?? {})
+      .filter(([, e]) => (e.hours ?? 0) > 0.05 && (e.hours ?? 0) < minHoursThreshold)
+      .map(([key, entry]) => {
+        const parts = key.trim().split(/\s+/);
+        const pKey = `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
+        return {
+          key: pKey,
+          displayKey: key,
+          sec: parts[0] ?? '',
+          act: parts[1] ?? '0000',
+          head: parts.slice(2).join(' ') || '',
+          combinedHours: entry.hours ?? 0,
+          isStale: staleRedistKeysRef.current.has(pKey),
+          status: acceptedKeys.has(pKey) ? 'accepted' as const
+            : staleRedistKeysRef.current.has(pKey) ? 'stale' as const
+            : savedMergeKeySet.has(pKey) ? 'saved' as const
+            : 'open' as const,
+        };
+      })
+      .sort((a, b) => {
+        if (a.isStale && !b.isStale) return -1;
+        if (!a.isStale && b.isStale) return 1;
+        return a.combinedHours - b.combinedHours;
+      });
+  }, [finalLaborSummary, minHoursThreshold, acceptedKeys, savedMergeKeySet]);
 
 
   const handleConsolidate = async () => {
@@ -3206,10 +3243,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                   </span>
                 </h3>
               </div>
-              <div className="text-xs text-muted-foreground mb-3 px-1 flex items-center gap-3">
-                <span>
+              <div className="text-xs text-muted-foreground mb-3 px-1 flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => { setSmallCodeTab('standalone'); setStandaloneFilter('in-export'); }}
+                  className="underline cursor-pointer hover:opacity-80"
+                >
                   <strong className="text-foreground">{totalSmallInExport}</strong> codes under {minHoursThreshold}h will appear in export
-                </span>
+                </button>
                 <span className="text-muted-foreground">·</span>
                 <span className="text-green-600">{acceptedKeys.size} accepted</span>
                 <span className="text-muted-foreground">·</span>
@@ -3225,6 +3265,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 >
                   {residualRows.length} need attention
                 </button>
+                {staleRedistCount > 0 && (
+                  <>
+                    <span className="text-muted-foreground">·</span>
+                    <button
+                      onClick={() => { setSmallCodeTab('standalone'); setStandaloneFilter('in-export'); }}
+                      className="text-amber-500 underline cursor-pointer hover:text-amber-600"
+                    >
+                      {staleRedistCount} redistribution{staleRedistCount !== 1 ? 's' : ''} need updating
+                    </button>
+                  </>
+                )}
               </div>
               {residualRows.length > 0 && (
                 <button
@@ -3834,6 +3885,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 <SelectItem value="saved">Saved only</SelectItem>
                                 <SelectItem value="accepted">Accepted only</SelectItem>
                                 <SelectItem value="residual">Residual (post-action)</SelectItem>
+                                <SelectItem value="in-export">In Export ({totalSmallInExport})</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -3921,7 +3973,51 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {standaloneFilter === 'residual' ? (
+                            {standaloneFilter === 'in-export' ? (
+                              inExportRows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
+                                    No codes under {minHoursThreshold}h in the final export.
+                                  </TableCell>
+                                </TableRow>
+                              ) : inExportRows.map((row) => (
+                                <TableRow key={row.displayKey} className={row.isStale ? 'border-l-2 border-l-amber-400' : ''}>
+                                  <TableCell>
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  </TableCell>
+                                  <TableCell className="font-mono font-bold text-orange-400">
+                                    {row.displayKey}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono font-semibold text-destructive">
+                                    {row.combinedHours.toFixed(1)}h
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  </TableCell>
+                                  <TableCell>
+                                    {row.status === 'stale' ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-amber-500 font-medium">⚠ Outdated — re-open &amp; re-save</span>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-5 px-1.5 text-xs"
+                                          onClick={() => handleUndoMerge(row.sec, row.head)}
+                                        >
+                                          <Undo2 className="h-3 w-3 mr-1" /> Undo &amp; redo
+                                        </Button>
+                                      </div>
+                                    ) : row.status === 'accepted' ? (
+                                      <span className="text-xs text-blue-400">✓ Accepted</span>
+                                    ) : row.status === 'saved' ? (
+                                      <span className="text-xs text-green-500">✓ Saved</span>
+                                    ) : (
+                                      <span className="text-xs text-amber-500 font-medium">⚠ Open</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            ) : standaloneFilter === 'residual' ? (
                               residualRows.length === 0 ? (
                                 <TableRow>
                                   <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
@@ -4102,13 +4198,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const isAccepted = action === '__accepted__';
                                       const isMerge = action === '__merge__';
                                       const isReassign = !isRedistribute && !isKeep && !isMerge && !isAccepted;
+                                      const isStaleRedist = isRedistribute && staleRedistKeysRef.current.has(`${row.sec}|${row.head}`);
                                       return (
-                                        <span className={`text-xs font-mono ${isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
+                                        <span className={`text-xs font-mono ${isStaleRedist ? 'text-amber-500' : isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
                                           {isKeep && '↔ Kept as-is'}
                                           {isAccepted && '✓ Accepted as-is'}
                                           {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
-                                          {isRedistribute && `⇄ Redistributed`}
+                                          {isRedistribute && (isStaleRedist ? '⚠ Outdated — re-open & re-save' : '⇄ Redistributed')}
                                         </span>
                                       );
                                     })()
@@ -4187,10 +4284,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         const isKept = action === '__keep__';
                                         const isAccepted = action === '__accepted__';
                                         const isMerge = action === '__merge__';
+                                        const isRedist = action === '__redistribute__';
+                                        const isStaleRedist = isRedist && staleRedistKeysRef.current.has(`${row.sec}|${row.head}`);
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className={`text-xs ${isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
-                                              {isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
+                                            <span className={`text-xs ${isStaleRedist ? 'text-amber-500' : isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isStaleRedist ? '⚠ Stale' : isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
