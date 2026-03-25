@@ -1867,12 +1867,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const parts = (g.key ?? '').trim().split(/\s+/);
         return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
       }),
-      // All saved merge/reassign source keys from DB
-      ...(savedMergesData ?? []).map(m => `${m.sec_code ?? ''}|${m.cost_head ?? ''}`),
-      // Reassignment TARGET keys — prevent targets from showing as new residuals
+      // Saved merge/reassign source keys — only exclude if result is above threshold
       ...(savedMergesData ?? [])
-        .filter(m => m.reassign_to_head && m.reassign_to_head !== '__accepted__' && m.reassign_to_head !== '__keep__')
-        .map(m => `${m.sec_code ?? ''}|${m.reassign_to_head ?? ''}`),
+        .filter(m => {
+          const sec = m.sec_code ?? '';
+          const head = m.cost_head ?? '';
+          const resultKey = Object.keys(finalLaborSummary ?? {}).find(k => {
+            const parts = k.trim().split(/\s+/);
+            return parts[0] === sec && parts.slice(2).join(' ') === head;
+          });
+          return resultKey
+            ? (finalLaborSummary[resultKey]?.hours ?? 0) >= minHoursThreshold
+            : true;
+        })
+        .map(m => `${m.sec_code ?? ''}|${m.cost_head ?? ''}`),
     ]);
     const acceptedKeys = new Set(
       (savedMergesData ?? [])
