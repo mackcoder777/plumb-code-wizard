@@ -4198,13 +4198,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const isAccepted = action === '__accepted__';
                                       const isMerge = action === '__merge__';
                                       const isReassign = !isRedistribute && !isKeep && !isMerge && !isAccepted;
+                                      const isStaleRedist = isRedistribute && staleRedistKeysRef.current.has(`${row.sec}|${row.head}`);
                                       return (
-                                        <span className={`text-xs font-mono ${isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
+                                        <span className={`text-xs font-mono ${isStaleRedist ? 'text-amber-500' : isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
                                           {isKeep && '↔ Kept as-is'}
                                           {isAccepted && '✓ Accepted as-is'}
                                           {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
-                                          {isRedistribute && `⇄ Redistributed`}
+                                          {isRedistribute && (isStaleRedist ? '⚠ Outdated — re-open & re-save' : '⇄ Redistributed')}
                                         </span>
                                       );
                                     })()
@@ -4283,10 +4284,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         const isKept = action === '__keep__';
                                         const isAccepted = action === '__accepted__';
                                         const isMerge = action === '__merge__';
+                                        const isRedist = action === '__redistribute__';
+                                        const isStaleRedist = isRedist && staleRedistKeysRef.current.has(`${row.sec}|${row.head}`);
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className={`text-xs ${isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
-                                              {isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
+                                            <span className={`text-xs ${isStaleRedist ? 'text-amber-500' : isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isStaleRedist ? '⚠ Stale' : isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
