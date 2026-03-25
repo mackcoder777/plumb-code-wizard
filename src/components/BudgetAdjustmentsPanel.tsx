@@ -1450,10 +1450,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           };
           matchingKeys.forEach(k => delete result[k]);
         } else {
-          // No target at all — keep source in place rather than delete
-          if (import.meta.env.DEV) console.warn(
-            `[finalLaborSummary] reassign has no target for ${sec}|${head} — keeping source to preserve ${sourceHours.toFixed(2)}h`
-          );
+          // No target key found — create one using 0000 activity code
+          const newTargetKey = `${sec} 0000 ${reassignTo}`;
+          result[newTargetKey] = {
+            code: newTargetKey,
+            sec: sec,
+            activityCode: '0000',
+            head: reassignTo,
+            hours: sourceHours,
+            dollars: sourceDollars,
+            description: `Reassigned from ${head}`,
+          };
+          matchingKeys.forEach(k => delete result[k]);
         }
       } else {
         // Standard merge to 0000
