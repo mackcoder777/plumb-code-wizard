@@ -1,76 +1,50 @@
 
 
-## Plan: Three Navigation-Only Changes in BudgetAdjustmentsPanel.tsx
+## Plan: Add diagnostic console.logs to finalLaborSummary
 
-### Change 1 — Make "need attention" clickable (lines 3205-3207)
+Three `console.log` statements added at precise locations in the `finalLaborSummary` useMemo:
 
-Replace the static `<span>` with a `<button>`:
+### Log 1 — After section alias normalization (after line 1183)
+After the `Object.entries(summary).forEach(...)` block that normalizes numeric sections to canonical (e.g. "2" → "B2"), before the fallback folding block starts at line 1185.
 
-```tsx
-// Before (lines 3205-3207):
-<span className={residualRows.length > 0 ? 'text-amber-500' : 'text-green-600'}>
-  {residualRows.length} need attention
-</span>
+### Log 2 — After fallback folding (after line 1259)
+After the `fallbackKeys.forEach(...)` block completes and before the `if (!savedMergesData?.length) return result;` guard at line 1261.
 
-// After:
-<button
-  onClick={() => {
-    setSmallCodeTab('standalone');
-    setStandaloneFilter('residual');
-  }}
-  className={cn(
-    'underline cursor-pointer',
-    residualRows.length > 0 ? 'text-amber-500 hover:text-amber-600' : 'text-green-600'
-  )}
->
-  {residualRows.length} need attention
-</button>
+### Log 3 — After redistributes applied (after line 1411)
+This one is trickier — the redistribute block is inside a `remappedMerges.forEach(...)` loop. The log needs to go after the entire loop completes, not inside the redistribute branch. Need to check where the forEach ends.
+
+Actually, since the user wants to see the state after ALL redistributes have been applied, the log should go after the entire `remappedMerges.forEach(...)` loop ends. Let me find that line — it's around line 1480-1500 based on prior context.
+
+### Implementation
+
+**File**: `src/components/BudgetAdjustmentsPanel.tsx`
+
+**Edit 1** — Insert after line 1183 (end of alias normalization loop):
+```typescript
+    console.log('[12 SPCL after alias normalization]', 
+      Object.entries(result)
+        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
+        .map(([k,v]) => ({k, hours: (v as any).hours}))
+    );
 ```
 
-### Change 2 — Round 2 badge also switches tab (line 3815)
-
-Add `setSmallCodeTab('standalone')` to the existing onClick:
-
-```tsx
-// Before (line 3815):
-onClick={() => setStandaloneFilter('residual')}
-
-// After:
-onClick={() => {
-  setSmallCodeTab('standalone');
-  setStandaloneFilter('residual');
-}}
+**Edit 2** — Insert after line 1259 (end of fallback folding), before line 1261:
+```typescript
+    console.log('[12 SPCL after folding]',
+      Object.entries(result)
+        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
+        .map(([k,v]) => ({k, hours: (v as any).hours}))
+    );
 ```
 
-### Change 3 — Amber CTA card after banner (after line 3208)
-
-Insert the amber card immediately after the closing `</div>` of the banner (line 3208):
-
-```tsx
-{residualRows.length > 0 && (
-  <button
-    onClick={() => {
-      setSmallCodeTab('standalone');
-      setStandaloneFilter('residual');
-    }}
-    className="w-full mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left hover:bg-amber-100 transition-colors"
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <span className="text-sm font-semibold text-amber-700">
-          ⚠ {residualRows.length} codes still under {minHoursThreshold}h after all actions
-        </span>
-        <p className="text-xs text-amber-600 mt-0.5">
-          Click to review and reassign or accept these codes
-        </p>
-      </div>
-      <span className="text-amber-500 text-sm">Review →</span>
-    </div>
-  </button>
-)}
+**Edit 3** — Insert after the `remappedMerges.forEach(...)` closing `});` (need to confirm exact line), before the final `return result;`:
+```typescript
+    console.log('[12 SPCL after redistributes]',
+      Object.entries(result)
+        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
+        .map(([k,v]) => ({k, hours: (v as any).hours}))
+    );
 ```
 
-### Summary
-
-Three surgical edits, all display/navigation only. No logic, persistence, or export changes. All variables (`setSmallCodeTab`, `setStandaloneFilter`, `residualRows`, `minHoursThreshold`, `cn`) are already in scope.
+No logic changes — diagnostic only.
 
