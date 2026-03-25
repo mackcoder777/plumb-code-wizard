@@ -1881,6 +1881,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             : true;
         })
         .map(m => `${m.sec_code ?? ''}|${m.cost_head ?? ''}`),
+      // Reassignment TARGET keys — only exclude if target result is above threshold
+      ...(savedMergesData ?? [])
+        .filter(m => {
+          if (!m.reassign_to_head || m.reassign_to_head === '__accepted__' || m.reassign_to_head === '__keep__') return false;
+          const resultEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
+            const parts = k.trim().split(/\s+/);
+            return parts[0] === m.sec_code && parts.slice(2).join(' ') === m.reassign_to_head;
+          });
+          return resultEntry && (resultEntry[1]?.hours ?? 0) >= minHoursThreshold;
+        })
+        .map(m => `${m.sec_code ?? ''}|${m.reassign_to_head ?? ''}`),
     ]);
     const acceptedKeys = new Set(
       (savedMergesData ?? [])
@@ -1915,6 +1926,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         };
       });
   }, [finalLaborSummary, minHoursThreshold, allPass1Keys, acceptedKeys]);
+
+  const totalSmallInExport = useMemo(() =>
+    Object.values(finalLaborSummary ?? {})
+      .filter(e => (e.hours ?? 0) > 0.05 && (e.hours ?? 0) < minHoursThreshold)
+      .length,
+    [finalLaborSummary, minHoursThreshold]
+  );
 
 
   const handleConsolidate = async () => {
@@ -3176,6 +3194,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     ({filteredSmallCodeAnalysis.length} flagged{savedMergesData?.length ? `, ${savedMergesData.length} saved` : ''})
                   </span>
                 </h3>
+              </div>
+              <div className="text-xs text-muted-foreground mb-3 px-1 flex items-center gap-3">
+                <span>
+                  <strong className="text-foreground">{totalSmallInExport}</strong> codes under {minHoursThreshold}h will appear in export
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-green-600">{acceptedKeys.size} accepted</span>
+                <span className="text-muted-foreground">·</span>
+                <span className={residualRows.length > 0 ? 'text-amber-500' : 'text-green-600'}>
+                  {residualRows.length} need attention
+                </span>
               </div>
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under {minHoursThreshold} hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
