@@ -1182,6 +1182,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
+    console.log('[12 SPCL after alias normalization]', 
+      Object.entries(result)
+        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
+        .map(([k,v]) => ({k, hours: (v as any).hours}))
+    );
+
     // Fold standalone fallback sections (CS, RF, ST, UG, AG) into their
     // zone-resolved canonical sections. Prevents timing-gap transients from
     // surviving to export when zone resolution has already placed items correctly.
