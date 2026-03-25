@@ -1888,7 +1888,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .map(m => `${m.sec_code}|${m.cost_head}`)
     );
     return { allPass1Keys, acceptedKeys };
-  }, [standaloneGroups, savedOnlyRows, mergeGroups, savedMergesData]);
+  }, [standaloneGroups, savedOnlyRows, mergeGroups, savedMergesData, finalLaborSummary, minHoursThreshold]);
 
   // Round 2 residual rows — codes under threshold NOT in Pass 1 and NOT accepted
   const residualRows = useMemo(() => {
