@@ -1450,6 +1450,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           };
           matchingKeys.forEach(k => delete result[k]);
         } else {
+          // Guard: do not create fake target keys for special action values
+          const specialValues = ['__accepted__', '__keep__', '__redistribute__', '__merge__', ''];
+          if (!reassignTo || specialValues.includes(reassignTo)) {
+            matchingKeys.forEach(k => delete result[k]);
+            return;
+          }
           // No target key found — create one using 0000 activity code
           const newTargetKey = `${sec} 0000 ${reassignTo}`;
           result[newTargetKey] = {
@@ -3960,14 +3966,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                             <TableRow>
                               <TableHead className="w-10">
                                 <Checkbox
-                                  checked={
-                                    standaloneGroups.length > 0 &&
-                                    standaloneGroups.filter(r => !savedMergeKeySet.has(r.key)).length > 0 &&
-                                    standaloneGroups.filter(r => !savedMergeKeySet.has(r.key)).every(r => consolidations[r.key])
-                                  }
+                                  checked={(() => {
+                                    const rows = standaloneFilter === 'in-export'
+                                      ? inExportRows.filter(r => !savedMergeKeySet.has(r.key))
+                                      : standaloneGroups.filter(r => !savedMergeKeySet.has(r.key));
+                                    return rows.length > 0 && rows.every(r => consolidations[r.key]);
+                                  })()}
                                   onCheckedChange={(checked) => {
                                     const next: Record<string, boolean> = {};
-                                    standaloneGroups.forEach((row) => {
+                                    const rows = standaloneFilter === 'in-export' ? inExportRows : standaloneGroups;
+                                    rows.forEach((row) => {
                                       if (!savedMergeKeySet.has(row.key)) {
                                         next[row.key] = !!checked;
                                         if (checked) autoInitRow(row.key);
@@ -3984,51 +3992,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {standaloneFilter === 'in-export' ? (
-                              inExportRows.length === 0 ? (
-                                <TableRow>
-                                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
-                                    No codes under {minHoursThreshold}h in the final export.
-                                  </TableCell>
-                                </TableRow>
-                              ) : inExportRows.map((row) => (
-                                <TableRow key={row.displayKey} className={row.isStale ? 'border-l-2 border-l-amber-400' : ''}>
-                                  <TableCell>
-                                    <span className="text-xs text-muted-foreground">—</span>
-                                  </TableCell>
-                                  <TableCell className="font-mono font-bold text-orange-400">
-                                    {row.displayKey}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono font-semibold text-destructive">
-                                    {row.combinedHours.toFixed(1)}h
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className="text-xs text-muted-foreground">—</span>
-                                  </TableCell>
-                                  <TableCell>
-                                    {row.status === 'stale' ? (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs text-amber-500 font-medium">⚠ Outdated — re-open &amp; re-save</span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-5 px-1.5 text-xs"
-                                          onClick={() => handleUndoMerge(row.sec, row.head)}
-                                        >
-                                          <Undo2 className="h-3 w-3 mr-1" /> Undo &amp; redo
-                                        </Button>
-                                      </div>
-                                    ) : row.status === 'accepted' ? (
-                                      <span className="text-xs text-blue-400">✓ Accepted</span>
-                                    ) : row.status === 'saved' ? (
-                                      <span className="text-xs text-green-500">✓ Saved</span>
-                                    ) : (
-                                      <span className="text-xs text-amber-500 font-medium">⚠ Open</span>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : standaloneFilter === 'residual' ? (
+                            {standaloneFilter === 'residual' ? (
                               residualRows.length === 0 ? (
                                 <TableRow>
                                   <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
@@ -4128,23 +4092,49 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableRow>
                                 );
                               })
-                            ) : [...standaloneGroups, ...savedOnlyRows.filter((r) => {
-                              const saved = (savedMergesData ?? []).find(
-                                (m) => m.sec_code === r.sec && m.cost_head === r.head
-                              );
-                              return saved && saved.reassign_to_head !== null &&
-                                !(saved.redistribute_adjustments &&
-                                  Object.keys(typeof saved.redistribute_adjustments === 'object' && saved.redistribute_adjustments !== null ? saved.redistribute_adjustments : {}).length > 0);
-                            })].filter((row) => {
-                              const isSaved = savedMergeKeySet.has(row.key);
-                              const savedMerge = isSaved ? (savedMergesData ?? []).find(m => m.sec_code === row.sec && m.cost_head === row.head) : null;
-                              const savedAction = savedMerge ? getSavedAction(savedMerge) : null;
-                              const isAccepted = savedAction === '__accepted__';
-                              if (standaloneFilter === 'open') return !isSaved;
-                              if (standaloneFilter === 'saved') return isSaved && !isAccepted;
-                              if (standaloneFilter === 'accepted') return isAccepted;
-                              return true;
-                            }).map((row) => {
+                            ) : (() => {
+                              const sourceRows = standaloneFilter === 'in-export'
+                                ? inExportRows.map(ieRow => {
+                                    const found = standaloneGroups.find(g => g.key === ieRow.key)
+                                      || savedOnlyRows.find(r => r.key === ieRow.key);
+                                    return found ?? {
+                                      key: ieRow.key,
+                                      lines: [{ code: ieRow.displayKey }],
+                                      combinedHours: ieRow.combinedHours,
+                                      sec: ieRow.sec,
+                                      head: ieRow.head,
+                                    };
+                                  })
+                                : [...standaloneGroups, ...savedOnlyRows.filter((r) => {
+                                    const saved = (savedMergesData ?? []).find(
+                                      (m) => m.sec_code === r.sec && m.cost_head === r.head
+                                    );
+                                    return saved && saved.reassign_to_head !== null &&
+                                      !(saved.redistribute_adjustments &&
+                                        Object.keys(typeof saved.redistribute_adjustments === 'object' && saved.redistribute_adjustments !== null ? saved.redistribute_adjustments : {}).length > 0);
+                                  })];
+                              if (sourceRows.length === 0) {
+                                return (
+                                  <TableRow>
+                                    <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
+                                      {standaloneFilter === 'in-export'
+                                        ? `No codes under ${minHoursThreshold}h in the final export.`
+                                        : 'No matching rows.'}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              }
+                              return sourceRows.filter((row) => {
+                                if (standaloneFilter === 'in-export') return true;
+                                const isSaved = savedMergeKeySet.has(row.key);
+                                const savedMerge = isSaved ? (savedMergesData ?? []).find(m => m.sec_code === row.sec && m.cost_head === row.head) : null;
+                                const savedAction = savedMerge ? getSavedAction(savedMerge) : null;
+                                const isAccepted = savedAction === '__accepted__';
+                                if (standaloneFilter === 'open') return !isSaved;
+                                if (standaloneFilter === 'saved') return isSaved && !isAccepted;
+                                if (standaloneFilter === 'accepted') return isAccepted;
+                                return true;
+                              }).map((row) => {
                               const mergeKey = row.key;
                               const isSaved = savedMergeKeySet.has(mergeKey);
                               const line = row.lines[0];
