@@ -1435,7 +1435,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       } else {
         // Standard merge to 0000
-        if (matchingKeys.length < 2) return;
+        if (matchingKeys.length < 1) return;
         const group = matchingKeys.map(k => result[k]);
         const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
         const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
