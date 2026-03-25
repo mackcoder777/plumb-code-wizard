@@ -1764,8 +1764,111 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
     });
+
+    // Pass 2: Cover in-export rows (from finalLaborSummary under threshold) not already in suggestions
+    Object.entries(finalLaborSummary).forEach(([flKey, flEntry]) => {
+      const hrs = flEntry.hours ?? 0;
+      if (hrs <= 0.05 || hrs >= minHoursThreshold) return; // only under-threshold rows
+      const flParts = flKey.trim().split(/\s+/);
+      const pKey = `${flParts[0] ?? ''}|${flParts.slice(2).join(' ') || ''}`;
+      if (suggestions[pKey]) return; // already have one
+
+      const sec = flParts[0] ?? '';
+      const head = flParts.slice(2).join(' ') || '';
+
+      // Rule A: BG-to-above-grade chain
+      const chain = BG_TO_ABOVE_GRADE[head];
+      if (chain) {
+        let candidates = [...chain];
+        if (head === 'BGPD') {
+          const srcSys = new Set<string>();
+          estimateData.forEach(item => {
+            if (!item.costCode) return;
+            const ip = (item.costCode || '').trim().split(/\s+/);
+            if (ip[0] === sec && ip[ip.length - 1] === head) srcSys.add((item.system || '').trim());
+          });
+          candidates = ['PMPD', getBgpdFallback(srcSys)];
+        }
+        const found = findTargetKey(sec, candidates);
+        if (found) {
+          suggestions[pKey] = {
+            targetHead: found.head,
+            targetKey: found.key,
+            reason: `${head} → ${found.head}`,
+          };
+          return;
+        }
+      }
+
+      // Rule B: Above-grade system codes → accept
+      if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+        suggestions[pKey] = {
+          targetHead: '__accepted__',
+          targetKey: '',
+          reason: 'Above-grade system code — accept as standalone',
+        };
+        return;
+      }
+
+      // Rule C: System inference from source items
+      const srcSys2 = new Set<string>();
+      estimateData.forEach(item => {
+        if (!item.costCode) return;
+        const ip = (item.costCode || '').trim().split(/\s+/);
+        if (ip[0] === sec && ip[ip.length - 1] === head) srcSys2.add((item.system || '').trim());
+      });
+
+      const sysHeads2 = new Set<string>();
+      srcSys2.forEach(sys => {
+        const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
+        if (sysMapping?.laborCode && sysMapping.laborCode !== head) sysHeads2.add(sysMapping.laborCode);
+      });
+
+      for (const targetHead of sysHeads2) {
+        const found = findTargetKey(sec, [targetHead]);
+        if (found) {
+          const sysNames = [...srcSys2].slice(0, 2).join(', ');
+          suggestions[pKey] = {
+            targetHead: found.head,
+            targetKey: found.key,
+            reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+          };
+          break;
+        }
+      }
+
+      if (!suggestions[pKey] && sysHeads2.size > 0) {
+        const targetHead = [...sysHeads2][0];
+        const sysNames = [...srcSys2].slice(0, 2).join(', ');
+        suggestions[pKey] = {
+          targetHead,
+          targetKey: '',
+          reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
+        };
+      }
+
+      // Rule D: Peer-merge fallback — largest same-section code
+      if (!suggestions[pKey]) {
+        const sameSec = Object.entries(finalLaborSummary)
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && p.slice(2).join(' ') !== head;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameSec.length > 0) {
+          const [targetFullKey, targetEntry] = sameSec[0];
+          const tHead = targetFullKey.trim().split(/\s+/).slice(2).join(' ');
+          suggestions[pKey] = {
+            targetHead: tHead,
+            targetKey: targetFullKey,
+            reason: `Largest in section → ${tHead} (${(targetEntry.hours ?? 0).toFixed(0)}h)`,
+          };
+        }
+      }
+    });
+
     return suggestions;
-  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings]);
+  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings, minHoursThreshold]);
 
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
@@ -1799,7 +1902,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Auto-initialize a single row
   const autoInitRow = (key: string) => {
     const row = smallCodeAnalysis.find(r => r.key === key);
-    if (!row) return;
+    if (!row) {
+      // Handle in-export rows not in smallCodeAnalysis
+      if (standaloneAutoSuggestions?.[key]?.targetHead) {
+        setReassignTargets(prev => ({ ...prev, [key]: standaloneAutoSuggestions[key].targetHead }));
+      }
+      return;
+    }
     const result = getDefaultAction(row.lines);
     // For standalone rows, prefer auto-suggestion over placeholder
     if (result.action === '__reassign__' && standaloneAutoSuggestions?.[key]?.targetHead) {
