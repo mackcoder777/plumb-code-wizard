@@ -645,7 +645,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Re-load all settings when projectId changes (e.g., from 'default' to actual project ID)
   useEffect(() => {
     if (projectId !== prevProjectId && projectId !== 'default') {
-      console.log('[BudgetAdjustments] ProjectId changed from', prevProjectId, 'to', projectId, '- reloading settings');
+      if (import.meta.env.DEV) console.log('[BudgetAdjustments] ProjectId changed from', prevProjectId, 'to', projectId, '- reloading settings');
       
       // Reload ZIP code
       const savedZip = localStorage.getItem(`budget_zip_${projectId}`);
@@ -1561,7 +1561,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     const cleanup = async () => {
       const ids = allToDelete.map(m => m.id);
-      console.log('[AutoCleanup] Deleting orphaned merges:', ids.length, allToDelete.map(m => `${m.sec_code}|${m.cost_head}`));
+      if (import.meta.env.DEV) console.log('[AutoCleanup] Deleting orphaned merges:', ids.length, allToDelete.map(m => `${m.sec_code}|${m.cost_head}`));
 
       const { error } = await supabase
         .from('project_small_code_merges')
@@ -2160,7 +2160,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const validEntries = newEntries.filter((e: any) => !e.__invalid);
 
     if (validEntries.length === 0 && (savedMergesData ?? []).length === 0 && invalidRows.length === 0) {
-      console.log('[handleConsolidate] Early return: no entries to save');
+      if (import.meta.env.DEV) console.log('[handleConsolidate] Early return: no entries to save');
       return;
     }
     const existingEntries = (savedMergesData ?? []).map(m => ({
@@ -2172,7 +2172,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const allMap = new Map<string, { sec_code: string; cost_head: string; reassign_to_head?: string | null; redistribute_adjustments?: Record<string, number> | null }>();
     [...existingEntries, ...validEntries].forEach(e => allMap.set(`${e.sec_code}|${e.cost_head}`, e));
 
-    console.log('[handleConsolidate] validEntries:', validEntries.length, 'invalidRows:', invalidRows.length);
+    if (import.meta.env.DEV) console.log('[handleConsolidate] validEntries:', validEntries.length, 'invalidRows:', invalidRows.length);
 
     const allRows = [...allMap.values()];
     const seen = new Set<string>();
@@ -2183,7 +2183,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       return true;
     });
 
-    console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
+    if (import.meta.env.DEV) console.log('[handleConsolidate] Final rows to save:', dedupedRows.length);
     const skippedCount = Object.keys(consolidations).filter(key => {
       const t = reassignTargets[key];
       // Only count as skipped: user explicitly chose reassign but didn't pick a target
@@ -2293,7 +2293,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       return;
     }
 
-    console.log('[Undo] Direct delete:', { projectId, targetSec, targetHead });
+    if (import.meta.env.DEV) console.log('[Undo] Direct delete:', { projectId, targetSec, targetHead });
     setUndoingKey(key);
 
     try {
