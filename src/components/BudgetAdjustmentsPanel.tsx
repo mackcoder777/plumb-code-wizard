@@ -1220,7 +1220,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                kParts[kParts.length - 1] === fbHead;
       });
 
-      // Try 2: same cost head only — pick canonical key with highest hours
+      // Try 2: preserve activity code, use canonical section
       if (!canonicalKey) {
         const candidates = Object.keys(result).filter(k => {
           const kParts = k.trim().split(/\s+/);
@@ -1228,10 +1228,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                  kParts[kParts.length - 1] === fbHead;
         });
         if (candidates.length > 0) {
-          canonicalKey = candidates.sort(
-            (a, b) => (result[b].hours ?? 0) - (result[a].hours ?? 0)
-          )[0];
+          // Use the canonical section from the first candidate, but keep original activity
+          const canonSec = candidates[0].trim().split(/\s+/)[0];
+          const newKey = `${canonSec} ${fbAct} ${fbHead}`;
+          const fbEntry = result[fbKey];
+          if (result[newKey]) {
+            result[newKey] = {
+              ...result[newKey],
+              hours: (result[newKey].hours ?? 0) + (fbEntry.hours ?? 0),
+              materialDollars: (result[newKey].materialDollars ?? 0) + (fbEntry.materialDollars ?? 0),
+            };
+          } else {
+            result[newKey] = { ...fbEntry, code: newKey };
+          }
+          delete result[fbKey];
         }
+        return; // handled or no candidates — skip generic fold below
       }
 
       if (canonicalKey) {
@@ -1441,7 +1453,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
         const mergedCode = `${sec} ${merge.merged_act} ${head}`;
         matchingKeys.forEach(k => delete result[k]);
-        result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+        if (result[mergedCode]) {
+          result[mergedCode] = {
+            ...result[mergedCode],
+            hours: (result[mergedCode].hours ?? 0) + mergedHours,
+            dollars: (result[mergedCode].dollars ?? 0) + mergedDollars,
+          };
+        } else {
+          result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
+        }
       }
     });
 
