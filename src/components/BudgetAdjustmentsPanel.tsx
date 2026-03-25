@@ -1765,28 +1765,33 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
-    // Pass 2: Cover inExportRows not already in suggestions
-    (inExportRows ?? []).forEach(ieRow => {
-      if (suggestions[ieRow.key]) return; // already have one
-      const sec = ieRow.sec;
-      const head = ieRow.head;
+    // Pass 2: Cover in-export rows (from finalLaborSummary under threshold) not already in suggestions
+    Object.entries(finalLaborSummary).forEach(([flKey, flEntry]) => {
+      const hrs = flEntry.hours ?? 0;
+      if (hrs <= 0.05 || hrs >= minHoursThreshold) return; // only under-threshold rows
+      const flParts = flKey.trim().split(/\s+/);
+      const pKey = `${flParts[0] ?? ''}|${flParts.slice(2).join(' ') || ''}`;
+      if (suggestions[pKey]) return; // already have one
+
+      const sec = flParts[0] ?? '';
+      const head = flParts.slice(2).join(' ') || '';
 
       // Rule A: BG-to-above-grade chain
       const chain = BG_TO_ABOVE_GRADE[head];
       if (chain) {
         let candidates = [...chain];
         if (head === 'BGPD') {
-          const sourceSystems = new Set<string>();
+          const srcSys = new Set<string>();
           estimateData.forEach(item => {
             if (!item.costCode) return;
             const ip = (item.costCode || '').trim().split(/\s+/);
-            if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
+            if (ip[0] === sec && ip[ip.length - 1] === head) srcSys.add((item.system || '').trim());
           });
-          candidates = ['PMPD', getBgpdFallback(sourceSystems)];
+          candidates = ['PMPD', getBgpdFallback(srcSys)];
         }
         const found = findTargetKey(sec, candidates);
         if (found) {
-          suggestions[ieRow.key] = {
+          suggestions[pKey] = {
             targetHead: found.head,
             targetKey: found.key,
             reason: `${head} → ${found.head}`,
@@ -1797,7 +1802,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Rule B: Above-grade system codes → accept
       if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
-        suggestions[ieRow.key] = {
+        suggestions[pKey] = {
           targetHead: '__accepted__',
           targetKey: '',
           reason: 'Above-grade system code — accept as standalone',
@@ -1806,44 +1811,44 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       // Rule C: System inference from source items
-      const sourceSystems2 = new Set<string>();
+      const srcSys2 = new Set<string>();
       estimateData.forEach(item => {
         if (!item.costCode) return;
         const ip = (item.costCode || '').trim().split(/\s+/);
-        if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems2.add((item.system || '').trim());
+        if (ip[0] === sec && ip[ip.length - 1] === head) srcSys2.add((item.system || '').trim());
       });
 
-      const systemTargetHeads2 = new Set<string>();
-      sourceSystems2.forEach(sys => {
+      const sysHeads2 = new Set<string>();
+      srcSys2.forEach(sys => {
         const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
-        if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads2.add(sysMapping.laborCode);
+        if (sysMapping?.laborCode && sysMapping.laborCode !== head) sysHeads2.add(sysMapping.laborCode);
       });
 
-      for (const targetHead of systemTargetHeads2) {
+      for (const targetHead of sysHeads2) {
         const found = findTargetKey(sec, [targetHead]);
         if (found) {
-          const sysNames = [...sourceSystems2].slice(0, 2).join(', ');
-          suggestions[ieRow.key] = {
+          const sysNames = [...srcSys2].slice(0, 2).join(', ');
+          suggestions[pKey] = {
             targetHead: found.head,
             targetKey: found.key,
-            reason: `System${sourceSystems2.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+            reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
           };
           break;
         }
       }
 
-      if (!suggestions[ieRow.key] && systemTargetHeads2.size > 0) {
-        const targetHead = [...systemTargetHeads2][0];
-        const sysNames = [...sourceSystems2].slice(0, 2).join(', ');
-        suggestions[ieRow.key] = {
+      if (!suggestions[pKey] && sysHeads2.size > 0) {
+        const targetHead = [...sysHeads2][0];
+        const sysNames = [...srcSys2].slice(0, 2).join(', ');
+        suggestions[pKey] = {
           targetHead,
           targetKey: '',
-          reason: `System${sourceSystems2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
+          reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
         };
       }
 
       // Rule D: Peer-merge fallback — largest same-section code
-      if (!suggestions[ieRow.key]) {
+      if (!suggestions[pKey]) {
         const sameSec = Object.entries(finalLaborSummary)
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
@@ -1853,7 +1858,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         if (sameSec.length > 0) {
           const [targetFullKey, targetEntry] = sameSec[0];
           const tHead = targetFullKey.trim().split(/\s+/).slice(2).join(' ');
-          suggestions[ieRow.key] = {
+          suggestions[pKey] = {
             targetHead: tHead,
             targetKey: targetFullKey,
             reason: `Largest in section → ${tHead} (${(targetEntry.hours ?? 0).toFixed(0)}h)`,
@@ -1863,7 +1868,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
 
     return suggestions;
-  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings, inExportRows]);
+  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings, minHoursThreshold]);
 
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
