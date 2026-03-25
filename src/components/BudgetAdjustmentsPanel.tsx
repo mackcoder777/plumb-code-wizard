@@ -1406,7 +1406,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return; // do not fall through to merge/reassign logic
       }
 
-      if (reassignTo === '__keep__') {
+      if (reassignTo === '__keep__' || reassignTo === '__accepted__') {
         return; // hours stay on original code, nothing to do
       }
 
@@ -1419,7 +1419,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           const parts = (result[key].code ?? '').trim().split(/\s+/);
           return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
         });
-        if (targetKey && result[targetKey]) {
+        if (targetKey) {
           // Normal path: target exists, accumulate and delete source
           result[targetKey] = {
             ...result[targetKey],
@@ -1427,24 +1427,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             dollars: result[targetKey].dollars + sourceDollars,
           };
           matchingKeys.forEach(k => delete result[k]);
-        } else if (targetKey) {
-          // Target code doesn't exist yet — create it so hours are not lost
-          if (import.meta.env.DEV) console.warn(
-            `[finalLaborSummary] reassign target ${targetKey} not found — creating entry to preserve ${sourceHours.toFixed(2)}h`
-          );
-          result[targetKey] = {
-            code: targetKey,
-            sec: sec,
-            activityCode: '0000',
-            head: reassignTo,
-            hours: sourceHours,
-            dollars: sourceDollars,
-            description: `Reassigned from ${matchingKeys.join(', ')}`,
-          };
-          matchingKeys.forEach(k => delete result[k]);
         } else {
           // Guard: do not create fake target keys for special action values
-          const specialValues = ['__accepted__', '__keep__', '__redistribute__', '__merge__', ''];
+          const specialValues = ['__redistribute__', '__merge__', ''];
           if (!reassignTo || specialValues.includes(reassignTo)) {
             matchingKeys.forEach(k => delete result[k]);
             return;
