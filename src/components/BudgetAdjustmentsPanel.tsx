@@ -3272,17 +3272,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 >
                   {residualRows.length} need attention
                 </button>
-                {staleRedistCount > 0 && (
-                  <>
-                    <span className="text-muted-foreground">·</span>
-                    <button
-                      onClick={() => { setSmallCodeTab('standalone'); setStandaloneFilter('in-export'); }}
-                      className="text-amber-500 underline cursor-pointer hover:text-amber-600"
-                    >
-                      {staleRedistCount} redistribution{staleRedistCount !== 1 ? 's' : ''} need updating
-                    </button>
-                  </>
-                )}
               </div>
               {residualRows.length > 0 && (
                 <button
