@@ -4315,7 +4315,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   </TableCell>
                                 </TableRow>
                               );
-                            })}
+                            });
+                            })()}
                           </TableBody>
                         </Table>
                         {/* Standalone tab footer */}
