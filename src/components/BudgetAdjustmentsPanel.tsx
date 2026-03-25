@@ -1699,11 +1699,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       // Rule 2: Category override codes → infer target from source systems
       // Above-grade peer system codes are excluded — they cannot merge into each other
       if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
-        suggestions[entry.key] = {
-          targetHead: '__accepted__',
-          targetKey: '',
-          reason: 'Above-grade system code — accept as standalone',
-        };
+        const sameSec = Object.entries(finalLaborSummary ?? {})
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && p.slice(2).join(' ') !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameSec.length > 0) {
+          const tHead = sameSec[0][0].trim().split(/\s+/).slice(2).join(' ');
+          suggestions[entry.key] = {
+            targetHead: tHead,
+            targetKey: sameSec[0][0],
+            reason: `${head} → ${tHead} (largest in section)`,
+          };
+        }
         return;
       }
 
@@ -1800,13 +1809,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
 
-      // Rule B: Above-grade system codes → accept
+      // Rule B: Above-grade system codes → peer-merge into largest in section
       if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
-        suggestions[pKey] = {
-          targetHead: '__accepted__',
-          targetKey: '',
-          reason: 'Above-grade system code — accept as standalone',
-        };
+        const sameSec2 = Object.entries(finalLaborSummary ?? {})
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && p.slice(2).join(' ') !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameSec2.length > 0) {
+          const tHead2 = sameSec2[0][0].trim().split(/\s+/).slice(2).join(' ');
+          suggestions[pKey] = {
+            targetHead: tHead2,
+            targetKey: sameSec2[0][0],
+            reason: `${head} → ${tHead2} (largest in section)`,
+          };
+        }
         return;
       }
 
