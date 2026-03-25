@@ -1,52 +1,66 @@
 
 
-# Fix: "In Export" rows not selectable due to duplicate React keys
+# Expand Auto-Resolve Suggestions for Standalone Codes
 
-## Root Cause
+## Summary
+Add two new suggestion rules so that above-grade system codes and override codes get auto-resolve suggestions instead of blank dropdowns.
 
-The console shows **duplicate key warnings** for `B3|SPCL`, `B2|SLVS`, etc. The `inExportRows` memo iterates `finalLaborSummary` entries — multiple entries can share the same `sec|head` key but differ by activity code (e.g., `B3 0000 SPCL` and `B3 00L1 SPCL` both produce key `B3|SPCL`). When rendered, React receives two `<TableRow key="B3|SPCL">` elements, causing it to silently drop/duplicate DOM nodes. This makes some rows unclickable — their checkboxes and buttons are dead.
+## Changes — single file: `src/components/BudgetAdjustmentsPanel.tsx`
 
-## Fix
+### 1. Above-grade codes → suggest `__accepted__`
 
-**File**: `src/components/BudgetAdjustmentsPanel.tsx`
-
-**At render time only** (not changing the `inExportRows` memo), deduplicate `sourceRows` when `standaloneFilter === 'in-export'` before passing to the `.map()` renderer.
-
-After building `sourceRows` from `inExportRows.map(...)` (around line 4061-4071), add a deduplication step:
+In `standaloneAutoSuggestions` useMemo (~line 1701), replace the bare `return;` for `ABOVE_GRADE_SYSTEM_CODES` with an `__accepted__` suggestion:
 
 ```typescript
-const sourceRows = standaloneFilter === 'in-export'
-  ? (() => {
-      const mapped = inExportRows.map(ieRow => {
-        const found = standaloneGroups.find(g => g.key === ieRow.key)
-          || savedOnlyRows.find(r => r.key === ieRow.key);
-        return found ?? {
-          key: ieRow.key,
-          lines: [{ code: ieRow.displayKey }],
-          combinedHours: ieRow.combinedHours,
-          sec: ieRow.sec,
-          head: ieRow.head,
-        };
-      });
-      // Deduplicate by key, summing hours for entries with multiple activity codes
-      const seen = new Map();
-      mapped.forEach(row => {
-        if (seen.has(row.key)) {
-          const existing = seen.get(row.key);
-          existing.combinedHours = (existing.combinedHours ?? 0) + (row.combinedHours ?? 0);
-        } else {
-          seen.set(row.key, { ...row });
-        }
-      });
-      return Array.from(seen.values());
-    })()
-  : [/* existing default logic unchanged */];
+if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+  suggestions[entry.key] = {
+    targetHead: '__accepted__',
+    targetKey: '',
+    reason: 'Above-grade system code — accept as standalone',
+  };
+  return;
+}
 ```
 
-This ensures each `sec|head` key appears exactly once in the rendered table, fixing:
-- **Select All** — no duplicate keys means every checkbox maps to a unique row
-- **Individual row checkboxes** — React correctly tracks each row's DOM
-- **Reassign/Accept buttons** — click handlers fire on the correct element
+**Safety**: `__accepted__` is caught by the existing early-return guard at line 1409 — hours are untouched, no deletion, no orphan.
 
-No changes to `inExportRows` useMemo, merge logic, or export code.
+### 2. Override codes → suggest largest same-section peer
+
+After the system-inference block (~line 1739), add a fallback for codes still without suggestions:
+
+```typescript
+if (!suggestions[entry.key]) {
+  // Find largest code in same section as peer-merge target
+  const sameSec = Object.entries(finalLaborSummary)
+    .filter(([k]) => {
+      const p = k.trim().split(/\s+/);
+      return p[0] === sec && p.slice(2).join(' ') !== head;
+    })
+    .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+  if (sameSec.length > 0) {
+    const [targetFullKey, targetEntry] = sameSec[0];
+    const tHead = targetFullKey.trim().split(/\s+/).slice(2).join(' ');
+    suggestions[entry.key] = {
+      targetHead: tHead,
+      targetKey: targetFullKey,
+      reason: `Largest in section → ${tHead} (${(targetEntry.hours ?? 0).toFixed(0)}h)`,
+    };
+  }
+}
+```
+
+**Safety**: Uses existing reassign pathway (line 1413-1449) which accumulates hours into target and deletes source — proven pattern, no orphans.
+
+### 3. UI — render "Accept" label for `__accepted__` suggestions
+
+In the suggestion lightning-bolt display (~line 4145-4160), add a condition: if `suggestion.targetHead === '__accepted__'`, show "⚡ Accept as-is" instead of "⚡ → {targetHead}".
+
+### 4. autoInitRow — already handles this
+
+`autoInitRow` (line 1779) already sets `reassignTargets[key] = suggestion.targetHead` for any suggestion including `__accepted__`. No change needed.
+
+## Safety Confirmation
+- **No orphans**: `__accepted__` triggers early-return preserving all keys; peer-merge uses proven accumulate-delete pattern
+- **No duplicate keys**: Deduplication fix already in place for rendered rows
+- **No hour drift**: `__accepted__` doesn't modify hours; peer-merge is a simple sum transfer
 
