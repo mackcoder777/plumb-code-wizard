@@ -3202,10 +3202,40 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 <span className="text-muted-foreground">·</span>
                 <span className="text-green-600">{acceptedKeys.size} accepted</span>
                 <span className="text-muted-foreground">·</span>
-                <span className={residualRows.length > 0 ? 'text-amber-500' : 'text-green-600'}>
+                <button
+                  onClick={() => {
+                    setSmallCodeTab('standalone');
+                    setStandaloneFilter('residual');
+                  }}
+                  className={cn(
+                    'underline cursor-pointer',
+                    residualRows.length > 0 ? 'text-amber-500 hover:text-amber-600' : 'text-green-600'
+                  )}
+                >
                   {residualRows.length} need attention
-                </span>
+                </button>
               </div>
+              {residualRows.length > 0 && (
+                <button
+                  onClick={() => {
+                    setSmallCodeTab('standalone');
+                    setStandaloneFilter('residual');
+                  }}
+                  className="w-full mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left hover:bg-amber-100 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold text-amber-700">
+                        ⚠ {residualRows.length} codes still under {minHoursThreshold}h after all actions
+                      </span>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        Click to review and reassign or accept these codes
+                      </p>
+                    </div>
+                    <span className="text-amber-500 text-sm">Review →</span>
+                  </div>
+                </button>
+              )}
               <p className="text-xs text-muted-foreground mb-4">
                 Floor-level codes under {minHoursThreshold} hrs should typically be merged into a single <code className="font-mono bg-muted px-1 rounded">0000</code> activity code. Check each to merge. If a SEC section total is under 80 hrs, consider merging the entire section.
               </p>
@@ -3812,7 +3842,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   ? <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-700">✓ All resolved</span>
                                   : null)
                               : <button
-                                  onClick={() => setStandaloneFilter('residual')}
+                                  onClick={() => {
+                                    setSmallCodeTab('standalone');
+                                    setStandaloneFilter('residual');
+                                  }}
                                   className="rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
                                 >
                                   ⚠ {round2Count} code{round2Count !== 1 ? 's' : ''} still under {minHoursThreshold}h after actions
