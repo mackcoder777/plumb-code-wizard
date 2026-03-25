@@ -555,7 +555,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
 const [undoingKey, setUndoingKey] = useState<string | null>(null);
 const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
-  const staleRedistKeysRef = useRef<Set<string>>(new Set());
+  
   const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
@@ -1129,7 +1129,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
-    staleRedistKeysRef.current = new Set();
     const summary = calculations.adjustedLaborSummary;
     if (!summary || Object.keys(summary).length === 0) return summary;
 
@@ -1404,12 +1403,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             if (result[matchKey].hours <= 0.001) delete result[matchKey];
           });
         }
-        // Detect stale redistributes: any key in this group still under threshold
-        matchingKeys.forEach(k => {
-          if (result[k] && (result[k].hours ?? 0) > 0.05 && (result[k].hours ?? 0) < minHoursThreshold) {
-            staleRedistKeysRef.current.add(`${sec}|${head}`);
-          }
-        });
         return; // do not fall through to merge/reassign logic
       }
 
@@ -1970,8 +1963,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     [finalLaborSummary, minHoursThreshold]
   );
 
-  const staleRedistCount = staleRedistKeysRef.current.size;
-
   const inExportRows = useMemo(() => {
     return Object.entries(finalLaborSummary ?? {})
       .filter(([, e]) => (e.hours ?? 0) > 0.05 && (e.hours ?? 0) < minHoursThreshold)
@@ -1985,9 +1976,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           act: parts[1] ?? '0000',
           head: parts.slice(2).join(' ') || '',
           combinedHours: entry.hours ?? 0,
-          isStale: staleRedistKeysRef.current.has(pKey),
+          isStale: false,
           status: acceptedKeys.has(pKey) ? 'accepted' as const
-            : staleRedistKeysRef.current.has(pKey) ? 'stale' as const
             : savedMergeKeySet.has(pKey) ? 'saved' as const
             : 'open' as const,
         };
@@ -3282,17 +3272,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 >
                   {residualRows.length} need attention
                 </button>
-                {staleRedistCount > 0 && (
-                  <>
-                    <span className="text-muted-foreground">·</span>
-                    <button
-                      onClick={() => { setSmallCodeTab('standalone'); setStandaloneFilter('in-export'); }}
-                      className="text-amber-500 underline cursor-pointer hover:text-amber-600"
-                    >
-                      {staleRedistCount} redistribution{staleRedistCount !== 1 ? 's' : ''} need updating
-                    </button>
-                  </>
-                )}
               </div>
               {residualRows.length > 0 && (
                 <button
@@ -4199,14 +4178,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const isAccepted = action === '__accepted__';
                                       const isMerge = action === '__merge__';
                                       const isReassign = !isRedistribute && !isKeep && !isMerge && !isAccepted;
-                                      const isStaleRedist = isRedistribute && staleRedistKeysRef.current.has(`${row.sec}|${row.head}`);
                                       return (
-                                        <span className={`text-xs font-mono ${isStaleRedist ? 'text-amber-500' : isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
+                                        <span className={`text-xs font-mono ${isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
                                           {isKeep && '↔ Kept as-is'}
                                           {isAccepted && '✓ Accepted as-is'}
                                           {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
-                                          {isRedistribute && (isStaleRedist ? '⚠ Outdated — re-open & re-save' : '⇄ Redistributed')}
+                                          {isRedistribute && '⇄ Redistributed'}
                                         </span>
                                       );
                                     })()
@@ -4286,11 +4264,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         const isAccepted = action === '__accepted__';
                                         const isMerge = action === '__merge__';
                                         const isRedist = action === '__redistribute__';
-                                        const isStaleRedist = isRedist && staleRedistKeysRef.current.has(`${row.sec}|${row.head}`);
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className={`text-xs ${isStaleRedist ? 'text-amber-500' : isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
-                                              {isStaleRedist ? '⚠ Stale' : isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
+                                            <span className={`text-xs ${isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
