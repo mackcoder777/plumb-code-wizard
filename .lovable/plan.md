@@ -1,77 +1,76 @@
 
 
-# Smart Assign Preview Dialog
+## Plan: Three Navigation-Only Changes in BudgetAdjustmentsPanel.tsx
 
-## Problem
+### Change 1 — Make "need attention" clickable (lines 3205-3207)
 
-When Smart Assign detects multiple codes (e.g., 9524 and 9525 in the Fixtures group), you currently only see a basic browser confirmation popup like "200 items -> 9525, 225 items -> 9524". There's no way to:
-- See WHICH items go to which code
-- Understand the high-level breakdown by description/size
-- Verify the assignments are correct before applying
+Replace the static `<span>` with a `<button>`:
 
-## What 9524 Covers (for reference)
+```tsx
+// Before (lines 3205-3207):
+<span className={residualRows.length > 0 ? 'text-amber-500' : 'text-green-600'}>
+  {residualRows.length} need attention
+</span>
 
-Code **9524** matches items containing these keywords: `valve`, `ball valve`, `gate valve`, `check valve`, `butterfly`, `prv`, `pressure reducing`.
-
-In your Fixtures group, items like "Ball Valve", "Check Valve", "Gate Valve" descriptions would route to 9524, while "Lavatory", "Urinal", "Water Closet", "Sink" items route to 9525.
-
-## Solution: Smart Assign Preview Dialog
-
-Replace the basic `window.confirm` popup with a proper dialog that shows a tabbed breakdown of which items go to each code.
-
-### UI Design
-
-When you click "Smart Assign", a dialog opens with:
-
-1. **Summary header** showing total items and code count
-2. **Tabbed sections**, one per detected code (e.g., "9524 - Valves (200)", "9525 - Fixtures (225)")
-3. Each tab shows a **grouped summary** of items by their Size/Description, with counts and dollar totals
-4. An **"Unmatched" tab** (if any) showing items that didn't match any keyword rule
-5. **Confirm** and **Cancel** buttons at the bottom
-
-```text
-+--------------------------------------------------+
-|  Smart Assign Preview                        [X]  |
-|                                                   |
-|  425 items will be assigned to 2 codes            |
-|                                                   |
-|  [9525 Fixtures (200)]  [9524 Valves (225)]       |
-|  [Unmatched (0)]                                  |
-|                                                   |
-|  9525 - Plumbing Fixtures                         |
-|  +-----------+-------------------------+-----+    |
-|  | Qty       | Description             | $   |    |
-|  +-----------+-------------------------+-----+    |
-|  | 45        | Wall Lavatories          | 12k |    |
-|  | 32        | Urinal Wall Hung         | 8k  |    |
-|  | 28        | Water Closet             | 15k |    |
-|  | ...       | ...                      | ... |    |
-|  +-----------+-------------------------+-----+    |
-|                                                   |
-|            [Cancel]    [Apply All (425 items)]    |
-+--------------------------------------------------+
+// After:
+<button
+  onClick={() => {
+    setSmallCodeTab('standalone');
+    setStandaloneFilter('residual');
+  }}
+  className={cn(
+    'underline cursor-pointer',
+    residualRows.length > 0 ? 'text-amber-500 hover:text-amber-600' : 'text-green-600'
+  )}
+>
+  {residualRows.length} need attention
+</button>
 ```
 
-### Technical Changes
+### Change 2 — Round 2 badge also switches tab (line 3815)
 
-#### File: `src/components/tabs/MaterialMappingTab.tsx`
+Add `setSmallCodeTab('standalone')` to the existing onClick:
 
-1. **Add state** for the preview dialog:
-   - `smartAssignPreview` state holding `{ groups, unmatched, items }` or `null`
-   - When not null, the dialog is open
+```tsx
+// Before (line 3815):
+onClick={() => setStandaloneFilter('residual')}
 
-2. **Modify `handleSmartAssign`** to set the preview state instead of calling `window.confirm`. The actual assignment logic moves to a `confirmSmartAssign` function triggered by the dialog's "Apply" button.
+// After:
+onClick={() => {
+  setSmallCodeTab('standalone');
+  setStandaloneFilter('residual');
+}}
+```
 
-3. **Add `SmartAssignPreviewDialog` component** (inline or extracted):
-   - Uses the existing `Dialog` component from shadcn
-   - `Tabs` component for switching between code groups
-   - Each tab aggregates items by description/size and shows counts + dollar totals
-   - A summary row at the bottom of each tab
-   - "Apply All" button calls the existing batch update logic
+### Change 3 — Amber CTA card after banner (after line 3208)
 
-#### File: `src/hooks/useMaterialMappingPatterns.ts`
+Insert the amber card immediately after the closing `</div>` of the banner (line 3208):
 
-4. **Export `DESCRIPTION_CODE_KEYWORDS`** so the preview dialog can show which keywords triggered the match for transparency (optional enhancement -- show matched keyword next to each group).
+```tsx
+{residualRows.length > 0 && (
+  <button
+    onClick={() => {
+      setSmallCodeTab('standalone');
+      setStandaloneFilter('residual');
+    }}
+    className="w-full mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left hover:bg-amber-100 transition-colors"
+  >
+    <div className="flex items-center justify-between">
+      <div>
+        <span className="text-sm font-semibold text-amber-700">
+          ⚠ {residualRows.length} codes still under {minHoursThreshold}h after all actions
+        </span>
+        <p className="text-xs text-amber-600 mt-0.5">
+          Click to review and reassign or accept these codes
+        </p>
+      </div>
+      <span className="text-amber-500 text-sm">Review →</span>
+    </div>
+  </button>
+)}
+```
 
-### No database changes needed.
+### Summary
+
+Three surgical edits, all display/navigation only. No logic, persistence, or export changes. All variables (`setSmallCodeTab`, `setStandaloneFilter`, `residualRows`, `minHoursThreshold`, `cn`) are already in scope.
 
