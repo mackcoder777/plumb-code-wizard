@@ -3973,7 +3973,51 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {standaloneFilter === 'residual' ? (
+                            {standaloneFilter === 'in-export' ? (
+                              inExportRows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
+                                    No codes under {minHoursThreshold}h in the final export.
+                                  </TableCell>
+                                </TableRow>
+                              ) : inExportRows.map((row) => (
+                                <TableRow key={row.displayKey} className={row.isStale ? 'border-l-2 border-l-amber-400' : ''}>
+                                  <TableCell>
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  </TableCell>
+                                  <TableCell className="font-mono font-bold text-orange-400">
+                                    {row.displayKey}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono font-semibold text-destructive">
+                                    {row.combinedHours.toFixed(1)}h
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  </TableCell>
+                                  <TableCell>
+                                    {row.status === 'stale' ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-amber-500 font-medium">⚠ Outdated — re-open &amp; re-save</span>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-5 px-1.5 text-xs"
+                                          onClick={() => handleUndoMerge(row.sec, row.head)}
+                                        >
+                                          <Undo2 className="h-3 w-3 mr-1" /> Undo &amp; redo
+                                        </Button>
+                                      </div>
+                                    ) : row.status === 'accepted' ? (
+                                      <span className="text-xs text-blue-400">✓ Accepted</span>
+                                    ) : row.status === 'saved' ? (
+                                      <span className="text-xs text-green-500">✓ Saved</span>
+                                    ) : (
+                                      <span className="text-xs text-amber-500 font-medium">⚠ Open</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            ) : standaloneFilter === 'residual' ? (
                               residualRows.length === 0 ? (
                                 <TableRow>
                                   <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-6">
