@@ -1258,6 +1258,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
+    console.log('[12 SPCL after folding]',
+      Object.entries(result)
+        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
+        .map(([k,v]) => ({k, hours: (v as any).hours}))
+    );
+
     if (!savedMergesData?.length) return result;
 
     // Normalize merge sec_codes using the alias map
@@ -1472,6 +1478,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
     });
+
+    console.log('[12 SPCL after redistributes]',
+      Object.entries(result)
+        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
+        .map(([k,v]) => ({k, hours: (v as any).hours}))
+    );
 
     // Clean up entries with effectively zero hours after merges
     Object.keys(result).forEach(k => {
