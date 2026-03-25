@@ -1698,7 +1698,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Rule 2: Category override codes → infer target from source systems
       // Above-grade peer system codes are excluded — they cannot merge into each other
-      if (ABOVE_GRADE_SYSTEM_CODES.has(head)) return;
+      if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+        suggestions[entry.key] = {
+          targetHead: '__accepted__',
+          targetKey: '',
+          reason: 'Above-grade system code — accept as standalone',
+        };
+        return;
+      }
 
       const sourceSystems = new Set<string>();
       estimateData.forEach(item => {
@@ -1736,6 +1743,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           targetKey: '',
           reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
         };
+      }
+
+      // Rule 3: Peer-merge fallback — suggest largest same-section code
+      if (!suggestions[entry.key]) {
+        const sameSec = Object.entries(finalLaborSummary)
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && p.slice(2).join(' ') !== head;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameSec.length > 0) {
+          const [targetFullKey, targetEntry] = sameSec[0];
+          const tHead = targetFullKey.trim().split(/\s+/).slice(2).join(' ');
+          suggestions[entry.key] = {
+            targetHead: tHead,
+            targetKey: targetFullKey,
+            reason: `Largest in section → ${tHead} (${(targetEntry.hours ?? 0).toFixed(0)}h)`,
+          };
+        }
       }
     });
     return suggestions;
@@ -4145,9 +4171,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     {standaloneAutoSuggestions[mergeKey] && !isSaved && (() => {
                                       const suggestion = standaloneAutoSuggestions[mergeKey];
                                       return (
-                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                           <span className="text-xs text-blue-500 font-normal">
-                                            ⚡ <span className="font-mono font-semibold">{suggestion.targetHead}</span>
+                                            ⚡ {suggestion.targetHead === '__accepted__'
+                                              ? <span className="font-semibold">Accept as-is</span>
+                                              : <span className="font-mono font-semibold">{suggestion.targetHead}</span>
+                                            }
                                           </span>
                                           <span className="text-xs text-muted-foreground font-normal">— {suggestion.reason}</span>
                                           <button
@@ -4157,7 +4186,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             }}
                                             className="text-xs text-blue-600 hover:text-blue-800 underline font-normal"
                                           >
-                                            Apply
+                                            {suggestion.targetHead === '__accepted__' ? 'Accept' : 'Apply'}
                                           </button>
                                         </div>
                                       );
