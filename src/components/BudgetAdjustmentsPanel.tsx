@@ -1927,6 +1927,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
   }, [finalLaborSummary, minHoursThreshold, allPass1Keys, acceptedKeys]);
 
+  const totalSmallInExport = useMemo(() =>
+    Object.values(finalLaborSummary ?? {})
+      .filter(e => (e.hours ?? 0) > 0.05 && (e.hours ?? 0) < minHoursThreshold)
+      .length,
+    [finalLaborSummary, minHoursThreshold]
+  );
+
 
   const handleConsolidate = async () => {
     if (!projectId || projectId === 'default') {
