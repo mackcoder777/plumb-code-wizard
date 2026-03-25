@@ -1,50 +1,52 @@
 
 
-## Plan: Add diagnostic console.logs to finalLaborSummary
+# Fix: "In Export" rows not selectable due to duplicate React keys
 
-Three `console.log` statements added at precise locations in the `finalLaborSummary` useMemo:
+## Root Cause
 
-### Log 1 — After section alias normalization (after line 1183)
-After the `Object.entries(summary).forEach(...)` block that normalizes numeric sections to canonical (e.g. "2" → "B2"), before the fallback folding block starts at line 1185.
+The console shows **duplicate key warnings** for `B3|SPCL`, `B2|SLVS`, etc. The `inExportRows` memo iterates `finalLaborSummary` entries — multiple entries can share the same `sec|head` key but differ by activity code (e.g., `B3 0000 SPCL` and `B3 00L1 SPCL` both produce key `B3|SPCL`). When rendered, React receives two `<TableRow key="B3|SPCL">` elements, causing it to silently drop/duplicate DOM nodes. This makes some rows unclickable — their checkboxes and buttons are dead.
 
-### Log 2 — After fallback folding (after line 1259)
-After the `fallbackKeys.forEach(...)` block completes and before the `if (!savedMergesData?.length) return result;` guard at line 1261.
-
-### Log 3 — After redistributes applied (after line 1411)
-This one is trickier — the redistribute block is inside a `remappedMerges.forEach(...)` loop. The log needs to go after the entire loop completes, not inside the redistribute branch. Need to check where the forEach ends.
-
-Actually, since the user wants to see the state after ALL redistributes have been applied, the log should go after the entire `remappedMerges.forEach(...)` loop ends. Let me find that line — it's around line 1480-1500 based on prior context.
-
-### Implementation
+## Fix
 
 **File**: `src/components/BudgetAdjustmentsPanel.tsx`
 
-**Edit 1** — Insert after line 1183 (end of alias normalization loop):
+**At render time only** (not changing the `inExportRows` memo), deduplicate `sourceRows` when `standaloneFilter === 'in-export'` before passing to the `.map()` renderer.
+
+After building `sourceRows` from `inExportRows.map(...)` (around line 4061-4071), add a deduplication step:
+
 ```typescript
-    console.log('[12 SPCL after alias normalization]', 
-      Object.entries(result)
-        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
-        .map(([k,v]) => ({k, hours: (v as any).hours}))
-    );
+const sourceRows = standaloneFilter === 'in-export'
+  ? (() => {
+      const mapped = inExportRows.map(ieRow => {
+        const found = standaloneGroups.find(g => g.key === ieRow.key)
+          || savedOnlyRows.find(r => r.key === ieRow.key);
+        return found ?? {
+          key: ieRow.key,
+          lines: [{ code: ieRow.displayKey }],
+          combinedHours: ieRow.combinedHours,
+          sec: ieRow.sec,
+          head: ieRow.head,
+        };
+      });
+      // Deduplicate by key, summing hours for entries with multiple activity codes
+      const seen = new Map();
+      mapped.forEach(row => {
+        if (seen.has(row.key)) {
+          const existing = seen.get(row.key);
+          existing.combinedHours = (existing.combinedHours ?? 0) + (row.combinedHours ?? 0);
+        } else {
+          seen.set(row.key, { ...row });
+        }
+      });
+      return Array.from(seen.values());
+    })()
+  : [/* existing default logic unchanged */];
 ```
 
-**Edit 2** — Insert after line 1259 (end of fallback folding), before line 1261:
-```typescript
-    console.log('[12 SPCL after folding]',
-      Object.entries(result)
-        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
-        .map(([k,v]) => ({k, hours: (v as any).hours}))
-    );
-```
+This ensures each `sec|head` key appears exactly once in the rendered table, fixing:
+- **Select All** — no duplicate keys means every checkbox maps to a unique row
+- **Individual row checkboxes** — React correctly tracks each row's DOM
+- **Reassign/Accept buttons** — click handlers fire on the correct element
 
-**Edit 3** — Insert after the `remappedMerges.forEach(...)` closing `});` (need to confirm exact line), before the final `return result;`:
-```typescript
-    console.log('[12 SPCL after redistributes]',
-      Object.entries(result)
-        .filter(([k]) => k.startsWith('12') && k.includes('SPCL'))
-        .map(([k,v]) => ({k, hours: (v as any).hours}))
-    );
-```
-
-No logic changes — diagnostic only.
+No changes to `inExportRows` useMemo, merge logic, or export code.
 
