@@ -3885,6 +3885,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 <SelectItem value="saved">Saved only</SelectItem>
                                 <SelectItem value="accepted">Accepted only</SelectItem>
                                 <SelectItem value="residual">Residual (post-action)</SelectItem>
+                                <SelectItem value="in-export">In Export ({totalSmallInExport})</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
