@@ -1764,8 +1764,106 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
     });
+
+    // Pass 2: Cover inExportRows not already in suggestions
+    (inExportRows ?? []).forEach(ieRow => {
+      if (suggestions[ieRow.key]) return; // already have one
+      const sec = ieRow.sec;
+      const head = ieRow.head;
+
+      // Rule A: BG-to-above-grade chain
+      const chain = BG_TO_ABOVE_GRADE[head];
+      if (chain) {
+        let candidates = [...chain];
+        if (head === 'BGPD') {
+          const sourceSystems = new Set<string>();
+          estimateData.forEach(item => {
+            if (!item.costCode) return;
+            const ip = (item.costCode || '').trim().split(/\s+/);
+            if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
+          });
+          candidates = ['PMPD', getBgpdFallback(sourceSystems)];
+        }
+        const found = findTargetKey(sec, candidates);
+        if (found) {
+          suggestions[ieRow.key] = {
+            targetHead: found.head,
+            targetKey: found.key,
+            reason: `${head} → ${found.head}`,
+          };
+          return;
+        }
+      }
+
+      // Rule B: Above-grade system codes → accept
+      if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+        suggestions[ieRow.key] = {
+          targetHead: '__accepted__',
+          targetKey: '',
+          reason: 'Above-grade system code — accept as standalone',
+        };
+        return;
+      }
+
+      // Rule C: System inference from source items
+      const sourceSystems2 = new Set<string>();
+      estimateData.forEach(item => {
+        if (!item.costCode) return;
+        const ip = (item.costCode || '').trim().split(/\s+/);
+        if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems2.add((item.system || '').trim());
+      });
+
+      const systemTargetHeads2 = new Set<string>();
+      sourceSystems2.forEach(sys => {
+        const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
+        if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads2.add(sysMapping.laborCode);
+      });
+
+      for (const targetHead of systemTargetHeads2) {
+        const found = findTargetKey(sec, [targetHead]);
+        if (found) {
+          const sysNames = [...sourceSystems2].slice(0, 2).join(', ');
+          suggestions[ieRow.key] = {
+            targetHead: found.head,
+            targetKey: found.key,
+            reason: `System${sourceSystems2.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+          };
+          break;
+        }
+      }
+
+      if (!suggestions[ieRow.key] && systemTargetHeads2.size > 0) {
+        const targetHead = [...systemTargetHeads2][0];
+        const sysNames = [...sourceSystems2].slice(0, 2).join(', ');
+        suggestions[ieRow.key] = {
+          targetHead,
+          targetKey: '',
+          reason: `System${sourceSystems2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
+        };
+      }
+
+      // Rule D: Peer-merge fallback — largest same-section code
+      if (!suggestions[ieRow.key]) {
+        const sameSec = Object.entries(finalLaborSummary)
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && p.slice(2).join(' ') !== head;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameSec.length > 0) {
+          const [targetFullKey, targetEntry] = sameSec[0];
+          const tHead = targetFullKey.trim().split(/\s+/).slice(2).join(' ');
+          suggestions[ieRow.key] = {
+            targetHead: tHead,
+            targetKey: targetFullKey,
+            reason: `Largest in section → ${tHead} (${(targetEntry.hours ?? 0).toFixed(0)}h)`,
+          };
+        }
+      }
+    });
+
     return suggestions;
-  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings]);
+  }, [smallCodeAnalysis, finalLaborSummary, estimateData, systemMappings, inExportRows]);
 
   // Auto-default action helper
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
@@ -1799,7 +1897,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Auto-initialize a single row
   const autoInitRow = (key: string) => {
     const row = smallCodeAnalysis.find(r => r.key === key);
-    if (!row) return;
+    if (!row) {
+      // Handle in-export rows not in smallCodeAnalysis
+      if (standaloneAutoSuggestions?.[key]?.targetHead) {
+        setReassignTargets(prev => ({ ...prev, [key]: standaloneAutoSuggestions[key].targetHead }));
+      }
+      return;
+    }
     const result = getDefaultAction(row.lines);
     // For standalone rows, prefer auto-suggestion over placeholder
     if (result.action === '__reassign__' && standaloneAutoSuggestions?.[key]?.targetHead) {
