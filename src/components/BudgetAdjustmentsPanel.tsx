@@ -3243,10 +3243,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                   </span>
                 </h3>
               </div>
-              <div className="text-xs text-muted-foreground mb-3 px-1 flex items-center gap-3">
-                <span>
+              <div className="text-xs text-muted-foreground mb-3 px-1 flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => { setSmallCodeTab('standalone'); setStandaloneFilter('in-export'); }}
+                  className="underline cursor-pointer hover:opacity-80"
+                >
                   <strong className="text-foreground">{totalSmallInExport}</strong> codes under {minHoursThreshold}h will appear in export
-                </span>
+                </button>
                 <span className="text-muted-foreground">·</span>
                 <span className="text-green-600">{acceptedKeys.size} accepted</span>
                 <span className="text-muted-foreground">·</span>
@@ -3262,6 +3265,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 >
                   {residualRows.length} need attention
                 </button>
+                {staleRedistCount > 0 && (
+                  <>
+                    <span className="text-muted-foreground">·</span>
+                    <button
+                      onClick={() => { setSmallCodeTab('standalone'); setStandaloneFilter('in-export'); }}
+                      className="text-amber-500 underline cursor-pointer hover:text-amber-600"
+                    >
+                      {staleRedistCount} redistribution{staleRedistCount !== 1 ? 's' : ''} need updating
+                    </button>
+                  </>
+                )}
               </div>
               {residualRows.length > 0 && (
                 <button
