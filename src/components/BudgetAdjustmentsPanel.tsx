@@ -555,6 +555,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
 const [undoingKey, setUndoingKey] = useState<string | null>(null);
 const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
+  const staleRedistKeysRef = useRef<Set<string>>(new Set());
   const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
   const [redistributeAdjustments, setRedistributeAdjustments] = useState<Record<string, Record<string, number>>>({});
@@ -564,7 +565,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
     return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
   });
-  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual'>('all');
+  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1128,6 +1129,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
+    staleRedistKeysRef.current = new Set();
     const summary = calculations.adjustedLaborSummary;
     if (!summary || Object.keys(summary).length === 0) return summary;
 
@@ -1400,6 +1402,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             if (result[matchKey].hours <= 0.001) delete result[matchKey];
           });
         }
+        // Detect stale redistributes: any key in this group still under threshold
+        matchingKeys.forEach(k => {
+          if (result[k] && (result[k].hours ?? 0) > 0.05 && (result[k].hours ?? 0) < minHoursThreshold) {
+            staleRedistKeysRef.current.add(`${sec}|${head}`);
+          }
+        });
         return; // do not fall through to merge/reassign logic
       }
 
@@ -1496,7 +1504,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
     }
     return result;
-  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
+  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, minHoursThreshold]);
 
   // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
   const cleanupRanRef = useRef(false);
@@ -1944,6 +1952,35 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       .length,
     [finalLaborSummary, minHoursThreshold]
   );
+
+  const staleRedistCount = staleRedistKeysRef.current.size;
+
+  const inExportRows = useMemo(() => {
+    return Object.entries(finalLaborSummary ?? {})
+      .filter(([, e]) => (e.hours ?? 0) > 0.05 && (e.hours ?? 0) < minHoursThreshold)
+      .map(([key, entry]) => {
+        const parts = key.trim().split(/\s+/);
+        const pKey = `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
+        return {
+          key: pKey,
+          displayKey: key,
+          sec: parts[0] ?? '',
+          act: parts[1] ?? '0000',
+          head: parts.slice(2).join(' ') || '',
+          combinedHours: entry.hours ?? 0,
+          isStale: staleRedistKeysRef.current.has(pKey),
+          status: acceptedKeys.has(pKey) ? 'accepted' as const
+            : staleRedistKeysRef.current.has(pKey) ? 'stale' as const
+            : savedMergeKeySet.has(pKey) ? 'saved' as const
+            : 'open' as const,
+        };
+      })
+      .sort((a, b) => {
+        if (a.isStale && !b.isStale) return -1;
+        if (!a.isStale && b.isStale) return 1;
+        return a.combinedHours - b.combinedHours;
+      });
+  }, [finalLaborSummary, minHoursThreshold, acceptedKeys, savedMergeKeySet]);
 
 
   const handleConsolidate = async () => {
