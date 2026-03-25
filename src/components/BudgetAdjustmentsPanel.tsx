@@ -4058,17 +4058,30 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               })
                             ) : (() => {
                               const sourceRows = standaloneFilter === 'in-export'
-                                ? inExportRows.map(ieRow => {
-                                    const found = standaloneGroups.find(g => g.key === ieRow.key)
-                                      || savedOnlyRows.find(r => r.key === ieRow.key);
-                                    return found ?? {
-                                      key: ieRow.key,
-                                      lines: [{ code: ieRow.displayKey }],
-                                      combinedHours: ieRow.combinedHours,
-                                      sec: ieRow.sec,
-                                      head: ieRow.head,
-                                    };
-                                  })
+                                ? (() => {
+                                    const mapped = inExportRows.map(ieRow => {
+                                      const found = standaloneGroups.find(g => g.key === ieRow.key)
+                                        || savedOnlyRows.find(r => r.key === ieRow.key);
+                                      return found ?? {
+                                        key: ieRow.key,
+                                        lines: [{ code: ieRow.displayKey }],
+                                        combinedHours: ieRow.combinedHours,
+                                        sec: ieRow.sec,
+                                        head: ieRow.head,
+                                      };
+                                    });
+                                    // Deduplicate by key, summing hours for entries with multiple activity codes
+                                    const seen = new Map<string, typeof mapped[0]>();
+                                    mapped.forEach(row => {
+                                      if (seen.has(row.key)) {
+                                        const existing = seen.get(row.key)!;
+                                        existing.combinedHours = (existing.combinedHours ?? 0) + (row.combinedHours ?? 0);
+                                      } else {
+                                        seen.set(row.key, { ...row });
+                                      }
+                                    });
+                                    return Array.from(seen.values());
+                                  })()
                                 : [...standaloneGroups, ...savedOnlyRows.filter((r) => {
                                     const saved = (savedMergesData ?? []).find(
                                       (m) => m.sec_code === r.sec && m.cost_head === r.head
