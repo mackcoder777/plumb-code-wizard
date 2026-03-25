@@ -1584,6 +1584,38 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     cleanup();
   }, [savedMergesData, calculations.adjustedLaborSummary, projectId]);
 
+  // Auto-cleanup: delete stale __accepted__ records where code is below threshold
+  const acceptedCleanupRanRef = useRef(false);
+
+  useEffect(() => {
+    if (acceptedCleanupRanRef.current) return;
+    if (!savedMergesData?.length || !finalLaborSummary || !projectId || projectId === 'default') return;
+    const stale = savedMergesData.filter(m => {
+      if (m.reassign_to_head !== '__accepted__') return false;
+      const liveKey = Object.keys(finalLaborSummary).find(k => {
+        const p = k.trim().split(/\s+/);
+        return p[0] === m.sec_code && p.slice(2).join(' ') === m.cost_head;
+      });
+      return liveKey && (finalLaborSummary[liveKey]?.hours ?? 0) < minHoursThreshold;
+    });
+    if (stale.length === 0) return;
+    acceptedCleanupRanRef.current = true;
+    const ids = stale.map(m => m.id);
+    supabase
+      .from('project_small_code_merges')
+      .delete()
+      .in('id', ids)
+      .then(({ error }) => {
+        if (!error) {
+          queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+          toast({
+            title: `Cleared ${ids.length} stale accepted record(s)`,
+            description: 'These codes will reappear as open for re-resolution.',
+          });
+        }
+      });
+  }, [savedMergesData, finalLaborSummary, minHoursThreshold, projectId]);
+
   // Detect saved redistributions that can't be applied against live data
   const inapplicableSavedKeys = useMemo(() => {
     if (!savedMergesData || !calculations.adjustedLaborSummary) return new Set<string>();
@@ -4215,12 +4247,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     const mapped = inExportRows.map(ieRow => {
                                       const found = standaloneGroups.find(g => g.key === ieRow.key)
                                         || savedOnlyRows.find(r => r.key === ieRow.key);
-                                      return found ?? {
-                                        key: ieRow.key,
-                                        lines: [{ code: ieRow.displayKey }],
+                                      return {
+                                        ...(found ?? {
+                                          key: ieRow.key,
+                                          lines: [{ code: ieRow.displayKey }],
+                                          sec: ieRow.sec,
+                                          head: ieRow.head,
+                                        }),
+                                        // ALWAYS use finalLaborSummary hours — never the pre-merge hours from standaloneGroups
                                         combinedHours: ieRow.combinedHours,
-                                        sec: ieRow.sec,
-                                        head: ieRow.head,
                                       };
                                     });
                                     // Deduplicate by key, summing hours for entries with multiple activity codes
