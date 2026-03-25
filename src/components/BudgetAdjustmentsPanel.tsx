@@ -1296,7 +1296,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       if (!canonicalKey) return merge; // can't remap, leave for stale detection
 
       const newSec = canonicalKey.trim().split(/\s+/)[0];
-      console.log(`[finalLaborSummary] Remapping stale merge ${merge.sec_code}|${merge.cost_head} → ${newSec}|${merge.cost_head}`);
+      if (import.meta.env.DEV) console.log(`[finalLaborSummary] Remapping stale merge ${merge.sec_code}|${merge.cost_head} → ${newSec}|${merge.cost_head}`);
       return { ...merge, sec_code: newSec };
     });
 
