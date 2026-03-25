@@ -1873,20 +1873,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const { allPass1Keys, acceptedKeys } = useMemo(() => {
     const allPass1Keys = new Set([
       // Original standalone rows
-      ...(standaloneGroups ?? []).map(g => {
-        const parts = (g.key ?? '').trim().split(/\s+/);
-        return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
-      }),
+      ...(standaloneGroups ?? []).map(g => g.key ?? ''),
       // Saved-only rows
-      ...(savedOnlyRows ?? []).map(r => {
-        const parts = (r.key ?? '').trim().split(/\s+/);
-        return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
-      }),
+      ...(savedOnlyRows ?? []).map(r => r.key ?? ''),
       // Merge group source codes
-      ...(mergeGroups ?? []).map(g => {
-        const parts = (g.key ?? '').trim().split(/\s+/);
-        return `${parts[0] ?? ''}|${parts.slice(2).join(' ') || ''}`;
-      }),
+      ...(mergeGroups ?? []).map(g => g.key ?? ''),
       // Saved merge/reassign source keys — only exclude if result is above threshold
       ...(savedMergesData ?? [])
         .filter(m => {
