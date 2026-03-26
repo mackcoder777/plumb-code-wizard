@@ -319,11 +319,11 @@ function validateHoursReconciliation(
   const delta = Math.abs(rawTotal - exportTotal);
   
   if (delta >= 0.1) {
-    console.warn(
+    if (import.meta.env.DEV) console.warn(
       `⚠️ HOURS RECONCILIATION MISMATCH: Raw ${rawTotal.toFixed(2)} hrs vs export ${exportTotal.toFixed(2)} hrs. Delta: ${delta.toFixed(2)} hrs.`
     );
   } else {
-    console.log(`✓ Hours reconciliation passed: ${rawTotal.toFixed(2)} hrs`);
+    if (import.meta.env.DEV) console.log(`✓ Hours reconciliation passed: ${rawTotal.toFixed(2)} hrs`);
   }
 }
 

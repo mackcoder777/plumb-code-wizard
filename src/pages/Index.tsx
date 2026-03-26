@@ -369,10 +369,6 @@ const DEFAULT_COST_HEAD_MAPPING = {
     patterns: [/grease/i, /interceptor/i, /grey.*waste/i],
     description: 'GREASE WASTE AND VENT'
   },
-  'DWTR': {
-    patterns: [/domestic.*water/i, /potable/i, /cold.*water/i, /hot.*water/i, /^water$/i],
-    description: 'DOMESTIC WATER'
-  },
   'RCLM': {
     patterns: [/reclaim/i, /recycled.*water/i],
     description: 'RECLAIMED WATER'
@@ -2813,8 +2809,21 @@ const EnhancedCostCodeManager = () => {
 
 {/* Budget Builder Tab — always mounted so adjustments persist for export */}
           <div className={activeTab === 'budget' ? '' : 'hidden'}>
-          {estimateData.length > 0 ? (
-              <div className="p-6 space-y-6">
+          {estimateData.length === 0 && (
+              <div className="bg-card border border-border rounded-lg p-12 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                  <span className="text-3xl">💰</span>
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">No Estimate Data Loaded</h3>
+                <p className="text-muted-foreground mb-4">
+                  Upload an estimate file first to configure budget adjustments.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  The Budget Builder allows you to add sales tax, foreman bonus strips, and fabrication hour allocations.
+                </p>
+              </div>
+            )}
+              <div className="p-6 space-y-6" style={estimateData.length === 0 ? { display: 'none' } : undefined}>
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">💰 Budget Builder</h2>
@@ -2864,20 +2873,20 @@ const EnhancedCostCodeManager = () => {
                     </div>
                   </div>
                 </div>
-                
+
                 <BudgetAdjustmentsPanel
                   laborSummary={(() => {
                     const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
                     estimateData.forEach((item: any) => {
                       const rawCostHead = item.costCode || item.laborCostCode;
                       const hours = item.hours || 0;
-                      
+
                       // Skip zero-hour items
                       if (hours === 0) return;
 
                       let costHead: string;
                       let existingActivity: string | null = null;
-                      
+
                       if (!rawCostHead) {
                         // CRITICAL FIX: Bucket uncoded items instead of skipping
                         costHead = 'UNCD';
@@ -2885,7 +2894,7 @@ const EnhancedCostCodeManager = () => {
                       } else {
                         // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
                         const parts = rawCostHead.trim().split(/\s+/);
-                        
+
                         // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
                         if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
                           existingActivity = parts[1];
@@ -2897,13 +2906,13 @@ const EnhancedCostCodeManager = () => {
                           costHead = rawCostHead;
                         }
                       }
-                      
+
                       // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
                       const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined));
                       const fullCode = `${section} ${activity} ${costHead}`;
-                      
+
                       if (!summary[fullCode]) {
                         const codeInfo = COST_CODES.find(c => c.code === costHead);
                         summary[fullCode] = {
@@ -2941,20 +2950,6 @@ const EnhancedCostCodeManager = () => {
                   systemMappings={savedMappings.map(m => ({ system: m.system_name, laborCode: (m.cost_head || '').split('|')[1] || (m.cost_head || '') }))}
                 />
               </div>
-            ) : (
-              <div className="bg-card border border-border rounded-lg p-12 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                  <span className="text-3xl">💰</span>
-                </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">No Estimate Data Loaded</h3>
-                <p className="text-muted-foreground mb-4">
-                  Upload an estimate file first to configure budget adjustments.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  The Budget Builder allows you to add sales tax, foreman bonus strips, and fabrication hour allocations.
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Bulk Buyout Tab */}

@@ -1129,6 +1129,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
+    const logTotal = (label: string, obj: Record<string, any>) => {
+      const total = Object.values(obj).reduce((s: number, e: any) => s + (e.hours ?? e.combinedHours ?? 0), 0);
+      console.log(`[DRIFT] ${label}: ${total.toFixed(2)}h (${Object.keys(obj).length} entries)`);
+    };
     const summary = calculations.adjustedLaborSummary;
     if (!summary || Object.keys(summary).length === 0) return summary;
 
@@ -1150,6 +1154,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       });
     }
+
+    logTotal('1-initial', summary);
 
     // Normalize any stale numeric sections in the summary itself
     let result: Record<string, any> = {};
@@ -1181,6 +1187,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
+    logTotal('2-after-alias-norm', result);
 
     // Fold standalone fallback sections (CS, RF, ST, UG, AG) into their
     // zone-resolved canonical sections. Prevents timing-gap transients from
@@ -1258,6 +1265,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
+    logTotal('3-after-fallback-fold', result);
 
     if (!savedMergesData?.length) return result;
 
@@ -1467,11 +1475,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
+    logTotal('4-after-merge-reassign', result);
 
     // Clean up entries with effectively zero hours after merges
     Object.keys(result).forEach(k => {
       if (Math.abs(result[k]?.hours ?? 0) < 0.05) delete result[k];
     });
+
+    logTotal('5-after-zero-cleanup', result);
 
     // Reconciliation check — warn if hours were lost during merge application
     const inputHours = Object.values(calculations.adjustedLaborSummary ?? {}).reduce(
@@ -1498,6 +1509,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         result[k] = { ...result[k], hours: finalRoundedHours[i] };
       });
     }
+    logTotal('6-after-rounding', result);
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, minHoursThreshold]);
 
@@ -2388,6 +2400,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       materialTaxOverrides,
       materialTaxSummary: calculations.materialTaxSummary,
       totalMaterialTax: calculations.totalMaterialTax,
+      // NOTE: adjustedLaborSummary actually contains finalLaborSummary data when merges are active.
+      // The field is not renamed to avoid breaking downstream references, but consumers should be
+      // aware this reflects post-merge (final) values, not just pre-merge adjusted values.
       adjustedLaborSummary: summary,
       totalFieldHours: calculations.totalFieldHours,
       totalFabHours: calculations.totalFabHours,
