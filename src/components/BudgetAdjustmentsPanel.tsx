@@ -392,7 +392,7 @@ const BG_TO_ABOVE_GRADE: Record<string, string[]> = {
   BGSD: ['STRM'],                 // Below Grade Storm → Storm Drain
   BGWV: ['SNWV'],                 // Below Grade Waste & Vent → Sanitary Waste & Vent
   BGNG: ['NGAS'],                 // Below Grade Gas → Natural Gas
-  BGTP: ['TRAP', 'WATR'],         // Below Grade Trap Primers → Trap, fallback WATR
+  BGTP: ['TRAP', 'WATR', 'DWTR'],  // Below Grade Trap Primers → Trap, fallback WATR, then DWTR
   BGAW: ['AWST', 'SNWV'],         // Below Grade Acid Waste → Acid Waste, fallback SNWV
   BGCN: ['COND', 'DWTR', 'WATR'], // Below Grade Condensate → Cond, fallback DWTR/WATR
   BGGW: ['GRWV', 'SNWV'],         // Below Grade Grease Waste → Grease, fallback SNWV
@@ -1130,6 +1130,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
     const logTotal = (label: string, obj: Record<string, any>) => {
+      if (!import.meta.env.DEV) return;
       const total = Object.values(obj).reduce((s: number, e: any) => s + (e.hours ?? e.combinedHours ?? 0), 0);
       console.log(`[DRIFT] ${label}: ${total.toFixed(2)}h (${Object.keys(obj).length} entries)`);
     };
@@ -1420,21 +1421,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       if (reassignTo) {
         // Reassign: move hours/dollars to the target cost head in same SEC
-        const sourceHours = matchingKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
-        const sourceDollars = matchingKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
         // Find target key in same SEC with the reassign_to_head cost head
         const targetKey = Object.keys(result).find(key => {
           const parts = (result[key].code ?? '').trim().split(/\s+/);
           return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
         });
+        // Exclude target from source keys to prevent double-counting
+        const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
+        const sourceHours = sourceKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
+        const sourceDollars = sourceKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
         if (targetKey) {
-          // Normal path: target exists, accumulate and delete source
+          // Normal path: target exists, accumulate source hours and delete source keys
           result[targetKey] = {
             ...result[targetKey],
             hours: result[targetKey].hours + sourceHours,
             dollars: result[targetKey].dollars + sourceDollars,
           };
-          matchingKeys.forEach(k => delete result[k]);
+          sourceKeys.forEach(k => delete result[k]);
         } else {
           // Guard: do not create fake target keys for special action values
           const specialValues = ['__redistribute__', '__merge__', ''];
@@ -1691,7 +1694,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // These are peer system codes — no valid auto-merge target exists
     const ABOVE_GRADE_SYSTEM_CODES = new Set([
       'DWTR', 'WATR', 'SNWV', 'STRM', 'NGAS', 'GRWV', 'RCLM',
-      'PMPD', 'FIRE', 'DEMO',
+      'PMPD', 'FIRE', 'DEMO', 'AWST', 'COND', 'TRAP',
     ]);
 
     const findTargetKey = (sec: string, candidates: string[]) => {
@@ -1798,12 +1801,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         };
       }
 
-      // Rule 3: Peer-merge fallback — suggest largest same-section code
+      // Rule 3: Peer-merge fallback — suggest largest same-section code above threshold
       if (!suggestions[entry.key]) {
         const sameSec = Object.entries(finalLaborSummary)
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
-            return p[0] === sec && p.slice(2).join(' ') !== head;
+            return p[0] === sec && p.slice(2).join(' ') !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
           })
           .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
         if (sameSec.length > 0) {
@@ -1909,12 +1912,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         };
       }
 
-      // Rule D: Peer-merge fallback — largest same-section code
+      // Rule D: Peer-merge fallback — largest same-section code above threshold
       if (!suggestions[pKey]) {
         const sameSec = Object.entries(finalLaborSummary)
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
-            return p[0] === sec && p.slice(2).join(' ') !== head;
+            return p[0] === sec && p.slice(2).join(' ') !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
           })
           .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
         if (sameSec.length > 0) {

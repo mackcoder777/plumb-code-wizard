@@ -327,8 +327,7 @@ const DEFAULT_COST_HEAD_MAPPING = {
   'SNWV': {
     patterns: [
       /^sanitary/i, /waste.*vent/i, /^dwv$/i, /soil/i, /^vent$/i,
-      /^waste$/i, /^waste\s+abs/i, /acid.*waste/i,
-      /trap.*primer/i, /trp.*primer/i,
+      /^waste$/i, /^waste\s+abs/i,
     ],
     description: 'SANITARY WASTE AND VENT'
   },
@@ -338,9 +337,15 @@ const DEFAULT_COST_HEAD_MAPPING = {
   },
   'BGWV': {
     patterns: [
-      /^bg\s+waste/i, /^bg\s+vent/i, /^bg\s+acid/i, /^bg\s+waste\s+abs/i,
+      /^bg\s+waste/i, /^bg\s+vent/i,
     ],
     description: 'BELOW GRADE WASTE & VENT'
+  },
+  'BGAW': {
+    patterns: [
+      /^bg\s+acid/i,
+    ],
+    description: 'BELOW GRADE ACID WASTE'
   },
   'BGSD': {
     patterns: [/^bg\s+storm/i],
@@ -361,6 +366,14 @@ const DEFAULT_COST_HEAD_MAPPING = {
     patterns: [/^bg\s+grease/i],
     description: 'BELOW GRADE GREASE WASTE'
   },
+  'BGCN': {
+    patterns: [/^bg\s+condensate/i],
+    description: 'BELOW GRADE CONDENSATE'
+  },
+  'BGPD': {
+    patterns: [/^bg\s+.*pump.*discharge/i, /^bg\s+.*pmp/i],
+    description: 'BELOW GRADE PUMP DISCHARGE'
+  },
   'DRNS': {
     patterns: [/^drains?$/i, /floor.*drain/i, /cleanout/i, /floor.*sink/i, /drain.*cleanout/i],
     description: 'DRAINS AND FLOOR SINKS'
@@ -378,8 +391,12 @@ const DEFAULT_COST_HEAD_MAPPING = {
     description: 'CONDENSATE'
   },
   'NGAS': {
-    patterns: [/natural.*gas/i, /fuel.*gas/i, /^gas$/i, /^bg\s+.*gas/i, /m\.?p\.?\s*gas/i],
+    patterns: [/natural.*gas/i, /fuel.*gas/i, /^gas$/i, /m\.?p\.?\s*gas/i, /fuel.*oil/i],
     description: 'NATURAL GAS'
+  },
+  'BGNG': {
+    patterns: [/^bg\s+.*gas/i],
+    description: 'BELOW GRADE GAS'
   },
   'FNSH': {
     patterns: [/fixture/i, /toilet/i, /urinal/i, /lavatory/i, /sink/i, /faucet/i],
@@ -388,6 +405,34 @@ const DEFAULT_COST_HEAD_MAPPING = {
   'HNGS': {
     patterns: [/hanger/i, /support/i, /brace/i, /seismic/i, /strap/i],
     description: 'HANGERS AND SUPPORTS'
+  },
+  'AWST': {
+    patterns: [/acid.*waste/i, /acid.*vent/i],
+    description: 'ACID WASTE'
+  },
+  'TRAP': {
+    patterns: [/trap.*primer/i, /trp.*primer/i],
+    description: 'TRAP PRIMERS'
+  },
+  'WATR': {
+    patterns: [/^cold\s*water/i, /^hot\s*water/i, /^ind\.?\s*(cold|hot)\s*w/i, /^tempered\s*w/i],
+    description: 'DOMESTIC WATER'
+  },
+  'INDR': {
+    patterns: [/^indirect\s*dr/i],
+    description: 'INDIRECT DRAIN'
+  },
+  'SEQP': {
+    patterns: [/^equipment$/i],
+    description: 'EQUIPMENT SETTING'
+  },
+  'DEMO': {
+    patterns: [/^demo$/i, /^demolition$/i],
+    description: 'DEMOLITION'
+  },
+  'PMPD': {
+    patterns: [/pump.*discharge/i, /^sp\s+pmp/i],
+    description: 'PUMP DISCHARGE'
   }
 };
 
@@ -725,18 +770,9 @@ const EnhancedCostCodeManager = () => {
     let source = costHead ? 'custom' : '';
     let matchReason = costHead ? 'Manual mapping' : '';
 
-    // Priority 2: Check hardcoded patterns
-    if (!costHead) {
-      for (const [code, config] of Object.entries(DEFAULT_COST_HEAD_MAPPING)) {
-        if (config.patterns.some(pattern => pattern.test(systemLower))) {
-          costHead = code;
-          confidence = 0.9;
-          source = 'auto-pattern';
-          matchReason = `Pattern match: ${config.description}`;
-          break;
-        }
-      }
-    }
+    // Priority 2 (removed): DEFAULT_COST_HEAD_MAPPING hardcoded patterns are no longer
+    // used in the priority chain. Cost heads come from explicit user system mappings only.
+    // See CLAUDE.md Section 16 Rule 7 and Section 6.
 
     // Priority 3: Smart matching against database cost codes
     if (!costHead && dbCostCodes.length > 0) {
