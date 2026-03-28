@@ -556,6 +556,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
 const [undoingKey, setUndoingKey] = useState<string | null>(null);
 const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
+  const [expandedHistoryKeys, setExpandedHistoryKeys] = useState<Set<string>>(new Set());
   
   const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
