@@ -3737,7 +3737,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   return next;
                                 });
                               }}
-                              colSpan={1}
+                              colSpan={0}
                             />
                           </div>
                         )}
