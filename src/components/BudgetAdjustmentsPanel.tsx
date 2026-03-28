@@ -1368,17 +1368,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const _debugKeys = ['BGSD', 'DEMO'];
       const _debugSecs: Record<string, string> = { 'BGSD': '12', 'DEMO': 'BD' };
       if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
-        const _resolvedAction = (redistAdj && Object.keys(redistAdj).length > 0) ? 'redistribute'
-          : reassignTo === '__keep__' ? 'keep'
-          : reassignTo ? 'reassign'
-          : 'merge';
-        const _inspectKeys = Object.keys(result).filter(k =>
-          k.includes(head) || k.includes(sec)
-        );
-        console.log(`[KEY INSPECT] ${sec}|${head} — keys in working matching sec or head:`, _inspectKeys);
-        console.log(`[KEY INSPECT] hours at each:`, _inspectKeys.map(k => `${k}: ${result[k]?.hours}`));
-        console.log(`[KEY INSPECT] reassign_to_head:`, reassignTo);
-        console.log(`[KEY INSPECT] resolved action:`, _resolvedAction);
+        console.log(`[EXEC INSPECT] ${sec}|${head} — matchingKeys:`, matchingKeys, matchingKeys.map(k => `${k}: ${result[k]?.hours}`));
+        console.log(`[EXEC INSPECT] ${sec}|${head} — redistAdj:`, redistAdj);
+        console.log(`[EXEC INSPECT] ${sec}|${head} — reassignTo:`, reassignTo);
+        console.log(`[EXEC INSPECT] ${sec}|${head} — effectiveTargetHead (if reassign):`, reassignTo ? (reassignChainMap.get(`${sec}|${head}`) ?? reassignTo) : 'n/a');
       }
 
       // Redistribute: apply per-activity hour deltas
@@ -1479,6 +1472,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
         const sourceHours = sourceKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
         const sourceDollars = sourceKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
+        if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
+          console.log(`[EXEC INSPECT] ${sec}|${head} reassign — effectiveTargetHead:`, effectiveTargetHead);
+          console.log(`[EXEC INSPECT] ${sec}|${head} reassign — targetKey:`, targetKey, targetKey ? `hours=${result[targetKey]?.hours}` : 'NOT FOUND — will create new key');
+          console.log(`[EXEC INSPECT] ${sec}|${head} reassign — sourceKeys:`, sourceKeys, 'sourceHours:', sourceHours);
+        }
         if (targetKey) {
           result[targetKey] = {
             ...result[targetKey],
@@ -1511,6 +1509,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
         const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
         const mergedCode = `${sec} ${merge.merged_act} ${head}`;
+        if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
+          console.log(`[EXEC INSPECT] ${sec}|${head} merge — mergedCode:`, mergedCode);
+          console.log(`[EXEC INSPECT] ${sec}|${head} merge — matchingKeys hours:`, matchingKeys.map(k => `${k}:${result[k]?.hours}`), 'mergedHours:', mergedHours);
+          console.log(`[EXEC INSPECT] ${sec}|${head} merge — mergedCode already exists?`, !!result[mergedCode], result[mergedCode]?.hours ?? 'n/a');
+        }
         matchingKeys.forEach(k => delete result[k]);
         if (result[mergedCode]) {
           result[mergedCode] = {
