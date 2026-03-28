@@ -1129,11 +1129,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
-    const logTotal = (label: string, obj: Record<string, any>) => {
-      if (!import.meta.env.DEV) return;
-      const total = Object.values(obj).reduce((s: number, e: any) => s + (e.hours ?? e.combinedHours ?? 0), 0);
-      console.log(`[DRIFT] ${label}: ${total.toFixed(2)}h (${Object.keys(obj).length} entries)`);
-    };
     const summary = calculations.adjustedLaborSummary;
     if (!summary || Object.keys(summary).length === 0) return summary;
 
@@ -1156,7 +1151,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
     }
 
-    logTotal('1-initial', summary);
+
 
     // Normalize any stale numeric sections in the summary itself
     let result: Record<string, any> = {};
@@ -1188,7 +1183,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
-    logTotal('2-after-alias-norm', result);
+    
 
     // Fold standalone fallback sections (CS, RF, ST, UG, AG) into their
     // zone-resolved canonical sections. Prevents timing-gap transients from
@@ -1266,7 +1261,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
     });
 
-    logTotal('3-after-fallback-fold', result);
+    
 
     if (!savedMergesData?.length) return result;
 
@@ -1335,9 +1330,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     };
     const reassignChainMap = buildReassignChainMap();
 
-    let step4RunningHours = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
-    const step4HoursBefore = step4RunningHours;
-
     remappedMerges.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
@@ -1362,16 +1354,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         if (fuzzyKeys.length > 0) {
           matchingKeys = fuzzyKeys;
         }
-      }
-
-      // Debug key inspection for known drift culprits
-      const _debugKeys = ['BGSD', 'DEMO'];
-      const _debugSecs: Record<string, string> = { 'BGSD': '12', 'DEMO': 'BD' };
-      if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
-        console.log(`[EXEC INSPECT] ${sec}|${head} — matchingKeys:`, matchingKeys, matchingKeys.map(k => `${k}: ${result[k]?.hours}`));
-        console.log(`[EXEC INSPECT] ${sec}|${head} — redistAdj:`, redistAdj);
-        console.log(`[EXEC INSPECT] ${sec}|${head} — reassignTo:`, reassignTo);
-        console.log(`[EXEC INSPECT] ${sec}|${head} — effectiveTargetHead (if reassign):`, reassignTo ? (reassignChainMap.get(`${sec}|${head}`) ?? reassignTo) : 'n/a');
       }
 
       // Redistribute: apply per-activity hour deltas
@@ -1474,14 +1456,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             };
           }
         }
-        {
-          const step4HoursAfter = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
-          const step4Delta = step4HoursAfter - step4RunningHours;
-          if (Math.abs(step4Delta) > 0.01) {
-            console.log(`[STEP4 REDIST DELTA] ${sec}|${head} action=redistribute delta=${step4Delta > 0 ? '+' : ''}${step4Delta.toFixed(2)}h running=${step4HoursAfter.toFixed(2)}h`);
-          }
-          step4RunningHours = step4HoursAfter;
-        }
         return; // do not fall through to merge/reassign logic
       }
 
@@ -1502,11 +1476,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
         const sourceHours = sourceKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
         const sourceDollars = sourceKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
-        if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
-          console.log(`[EXEC INSPECT] ${sec}|${head} reassign — effectiveTargetHead:`, effectiveTargetHead);
-          console.log(`[EXEC INSPECT] ${sec}|${head} reassign — targetKey:`, targetKey, targetKey ? `hours=${result[targetKey]?.hours}` : 'NOT FOUND — will create new key');
-          console.log(`[EXEC INSPECT] ${sec}|${head} reassign — sourceKeys:`, sourceKeys, 'sourceHours:', sourceHours);
-        }
         if (targetKey) {
           result[targetKey] = {
             ...result[targetKey],
@@ -1539,11 +1508,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
         const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
         const mergedCode = `${sec} ${merge.merged_act} ${head}`;
-        if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
-          console.log(`[EXEC INSPECT] ${sec}|${head} merge — mergedCode:`, mergedCode);
-          console.log(`[EXEC INSPECT] ${sec}|${head} merge — matchingKeys hours:`, matchingKeys.map(k => `${k}:${result[k]?.hours}`), 'mergedHours:', mergedHours);
-          console.log(`[EXEC INSPECT] ${sec}|${head} merge — mergedCode already exists?`, !!result[mergedCode], result[mergedCode]?.hours ?? 'n/a');
-        }
         matchingKeys.forEach(k => delete result[k]);
         if (result[mergedCode]) {
           result[mergedCode] = {
@@ -1556,29 +1520,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
 
-      // Step-4 per-record drift tracking
-      {
-        const step4HoursAfter = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
-        const step4Delta = step4HoursAfter - step4RunningHours;
-        if (Math.abs(step4Delta) > 0.01) {
-          const resolvedAction = (redistAdj && Object.keys(redistAdj).length > 0) ? 'redistribute'
-            : reassignTo === '__keep__' ? 'keep'
-            : reassignTo ? 'reassign'
-            : 'merge';
-          console.log(`[STEP4 DELTA] ${sec}|${head} action=${resolvedAction} delta=${step4Delta > 0 ? '+' : ''}${step4Delta.toFixed(2)}h running=${step4HoursAfter.toFixed(2)}h`);
-        }
-        step4RunningHours = step4HoursAfter;
-      }
     });
-
-    logTotal('4-after-merge-reassign', result);
 
     // Clean up entries with effectively zero hours after merges
     Object.keys(result).forEach(k => {
       if (Math.abs(result[k]?.hours ?? 0) < 0.05) delete result[k];
     });
-
-    logTotal('5-after-zero-cleanup', result);
 
     // Reconciliation check — warn if hours were lost during merge application
     const inputHours = Object.values(calculations.adjustedLaborSummary ?? {}).reduce(
@@ -1605,7 +1552,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         result[k] = { ...result[k], hours: finalRoundedHours[i] };
       });
     }
-    logTotal('6-after-rounding', result);
+    
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, minHoursThreshold]);
 
@@ -2552,7 +2499,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   useEffect(() => {
-    if (exportReconciliationLog) {
+    if (import.meta.env.DEV && exportReconciliationLog) {
       console.group('[EXPORT RECONCILIATION]');
       console.log('Pre-merge total hours:', exportReconciliationLog.preTotal.toFixed(2));
       console.log('Post-merge total hours:', exportReconciliationLog.postTotal.toFixed(2));
