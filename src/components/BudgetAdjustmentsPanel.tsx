@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import type { EstimateItem } from '@/types/estimate';
 import { toast } from '@/hooks/use-toast';
