@@ -193,6 +193,14 @@ export const CodeHistoryDetail: React.FC<CodeHistoryDetailProps> = ({
             </div>
           </CollapsibleContent>
         </Collapsible>
+  );
+
+  if (standalone) return innerContent;
+
+  return (
+    <TableRow className="border-0">
+      <TableCell colSpan={colSpan} className="p-0 border-0">
+        {innerContent}
       </TableCell>
     </TableRow>
   );
