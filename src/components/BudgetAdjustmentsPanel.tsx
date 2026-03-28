@@ -1829,41 +1829,43 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
 
-      const sourceSystems = new Set<string>();
-      estimateData.forEach(item => {
-        if (!item.costCode) return;
-        const ip = (item.costCode || '').trim().split(/\s+/);
-        if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
-      });
+      if (!suggestions[entry.key]) {
+        const sourceSystems = new Set<string>();
+        estimateData.forEach(item => {
+          if (!item.costCode) return;
+          const ip = (item.costCode || '').trim().split(/\s+/);
+          if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
+        });
 
-      const systemTargetHeads = new Set<string>();
-      sourceSystems.forEach(sys => {
-        const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
-        if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
-      });
+        const systemTargetHeads = new Set<string>();
+        sourceSystems.forEach(sys => {
+          const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
+          if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
+        });
 
-      for (const targetHead of systemTargetHeads) {
-        const found = findTargetKey(sec, [targetHead]);
-        if (found) {
+        for (const targetHead of systemTargetHeads) {
+          const found = findTargetKey(sec, [targetHead]);
+          if (found) {
+            const sysNames = [...sourceSystems].slice(0, 2).join(', ');
+            suggestions[entry.key] = {
+              targetHead: found.head,
+              targetKey: found.key,
+              reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+            };
+            break;
+          }
+        }
+
+        // If no live target key found but we know the logical target, still suggest
+        if (!suggestions[entry.key] && systemTargetHeads.size > 0) {
+          const targetHead = [...systemTargetHeads][0];
           const sysNames = [...sourceSystems].slice(0, 2).join(', ');
           suggestions[entry.key] = {
-            targetHead: found.head,
-            targetKey: found.key,
-            reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+            targetHead,
+            targetKey: '',
+            reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
           };
-          break;
         }
-      }
-
-      // If no live target key found but we know the logical target, still suggest
-      if (!suggestions[entry.key] && systemTargetHeads.size > 0) {
-        const targetHead = [...systemTargetHeads][0];
-        const sysNames = [...sourceSystems].slice(0, 2).join(', ');
-        suggestions[entry.key] = {
-          targetHead,
-          targetKey: '',
-          reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
-        };
       }
 
       // Rule 3: Peer-merge fallback — suggest largest same-section code above threshold
@@ -1947,7 +1949,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             const p = k.trim().split(/\s+/);
             return p[0] === sec && 
                    p.slice(2).join(' ') === head && 
-                   k !== pKey &&
+                   k !== flKey &&
                    (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
           })
           .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
@@ -1961,40 +1963,42 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       // Rule C: System inference from source items
-      const srcSys2 = new Set<string>();
-      estimateData.forEach(item => {
-        if (!item.costCode) return;
-        const ip = (item.costCode || '').trim().split(/\s+/);
-        if (ip[0] === sec && ip[ip.length - 1] === head) srcSys2.add((item.system || '').trim());
-      });
+      if (!suggestions[pKey]) {
+        const srcSys2 = new Set<string>();
+        estimateData.forEach(item => {
+          if (!item.costCode) return;
+          const ip = (item.costCode || '').trim().split(/\s+/);
+          if (ip[0] === sec && ip[ip.length - 1] === head) srcSys2.add((item.system || '').trim());
+        });
 
-      const sysHeads2 = new Set<string>();
-      srcSys2.forEach(sys => {
-        const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
-        if (sysMapping?.laborCode && sysMapping.laborCode !== head) sysHeads2.add(sysMapping.laborCode);
-      });
+        const sysHeads2 = new Set<string>();
+        srcSys2.forEach(sys => {
+          const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
+          if (sysMapping?.laborCode && sysMapping.laborCode !== head) sysHeads2.add(sysMapping.laborCode);
+        });
 
-      for (const targetHead of sysHeads2) {
-        const found = findTargetKey(sec, [targetHead]);
-        if (found) {
+        for (const targetHead of sysHeads2) {
+          const found = findTargetKey(sec, [targetHead]);
+          if (found) {
+            const sysNames = [...srcSys2].slice(0, 2).join(', ');
+            suggestions[pKey] = {
+              targetHead: found.head,
+              targetKey: found.key,
+              reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+            };
+            break;
+          }
+        }
+
+        if (!suggestions[pKey] && sysHeads2.size > 0) {
+          const targetHead = [...sysHeads2][0];
           const sysNames = [...srcSys2].slice(0, 2).join(', ');
           suggestions[pKey] = {
-            targetHead: found.head,
-            targetKey: found.key,
-            reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${found.head}`,
+            targetHead,
+            targetKey: '',
+            reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
           };
-          break;
         }
-      }
-
-      if (!suggestions[pKey] && sysHeads2.size > 0) {
-        const targetHead = [...sysHeads2][0];
-        const sysNames = [...srcSys2].slice(0, 2).join(', ');
-        suggestions[pKey] = {
-          targetHead,
-          targetKey: '',
-          reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
-        };
       }
 
       // Rule D: Peer-merge fallback — largest same-section code above threshold
