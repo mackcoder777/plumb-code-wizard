@@ -4659,7 +4659,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     />
                                   );
                                 })()}
-                              </>
+                              </React.Fragment>
                               );
                             });
 
