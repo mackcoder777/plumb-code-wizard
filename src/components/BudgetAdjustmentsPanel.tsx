@@ -1504,6 +1504,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           result[mergedCode] = { ...group[0], code: mergedCode, hours: mergedHours, dollars: mergedDollars };
         }
       }
+
+      // Step-4 per-record drift tracking
+      if (import.meta.env.DEV) {
+        const step4HoursAfter = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
+        const step4Delta = step4HoursAfter - step4RunningHours;
+        if (Math.abs(step4Delta) > 0.01) {
+          const resolvedAction = (redistAdj && Object.keys(redistAdj).length > 0) ? 'redistribute'
+            : reassignTo === '__keep__' ? 'keep'
+            : reassignTo ? 'reassign'
+            : 'merge';
+          console.log(`[STEP4 DELTA] ${sec}|${head} action=${resolvedAction} delta=${step4Delta > 0 ? '+' : ''}${step4Delta.toFixed(2)}h running=${step4HoursAfter.toFixed(2)}h`);
+        }
+        step4RunningHours = step4HoursAfter;
+      }
     });
 
     logTotal('4-after-merge-reassign', result);
