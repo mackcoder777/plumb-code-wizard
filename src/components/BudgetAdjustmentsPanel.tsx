@@ -4592,8 +4592,76 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     })()}
                                   </TableCell>
                                 </TableRow>
+                                {/* Code History expandable detail */}
+                                {isSaved && (() => {
+                                  const savedMerge = savedMergesData?.find(m =>
+                                    (m.sec_code || '').trim() === row.sec &&
+                                    (m.cost_head || '').trim() === row.head
+                                  );
+                                  if (!savedMerge) return null;
+                                  const action = getSavedAction(savedMerge);
+                                  const actionType = action === '__redistribute__' ? 'redistribute' as const
+                                    : action === '__keep__' ? 'keep' as const
+                                    : action === '__merge__' ? 'merge' as const
+                                    : 'reassign' as const;
+
+                                  // Pre-merge source lines from adjustedLaborSummary
+                                  const premerge = calculations?.adjustedLaborSummary ?? {};
+                                  const sourceLines = Object.values(premerge)
+                                    .filter((entry: any) => {
+                                      const parts = (entry.code ?? '').trim().split(/\s+/);
+                                      const s = parts[0] ?? '';
+                                      const h = parts.slice(2).join(' ') || '';
+                                      return s === row.sec && h === row.head;
+                                    })
+                                    .map((entry: any) => ({
+                                      code: entry.code ?? '',
+                                      hours: entry.hours ?? 0,
+                                      act: (entry.code ?? '').trim().split(/\s+/)[1] ?? '0000',
+                                    }));
+
+                                  // Redistribute deltas
+                                  const redistDeltas = savedMerge.redistribute_adjustments &&
+                                    typeof savedMerge.redistribute_adjustments === 'object'
+                                    ? savedMerge.redistribute_adjustments as Record<string, number>
+                                    : null;
+
+                                  // Target entries from finalLaborSummary
+                                  const targetHead = actionType === 'reassign' ? action : row.head;
+                                  const targetEntries = Object.entries(finalLaborSummary ?? {})
+                                    .filter(([k]) => {
+                                      const parts = k.trim().split(/\s+/);
+                                      return parts[0] === row.sec && parts.slice(2).join(' ') === targetHead;
+                                    })
+                                    .map(([code, entry]) => ({ code, hours: entry.hours ?? 0 }));
+
+                                  return (
+                                    <CodeHistoryDetail
+                                      sec={row.sec}
+                                      head={row.head}
+                                      sourceLines={sourceLines}
+                                      actionType={actionType}
+                                      reassignTarget={actionType === 'reassign' ? action : null}
+                                      redistributeDeltas={redistDeltas}
+                                      targetEntries={targetEntries}
+                                      finalHours={row.combinedHours}
+                                      isOpen={expandedHistoryKeys.has(mergeKey)}
+                                      onToggle={() => {
+                                        setExpandedHistoryKeys(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(mergeKey)) next.delete(mergeKey);
+                                          else next.add(mergeKey);
+                                          return next;
+                                        });
+                                      }}
+                                      colSpan={5}
+                                    />
+                                  );
+                                })()}
+                              </>
                               );
                             });
+
                             })()}
                           </TableBody>
                         </Table>
