@@ -1335,6 +1335,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     };
     const reassignChainMap = buildReassignChainMap();
 
+    let step4RunningHours = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
+    const step4HoursBefore = step4RunningHours;
+
     remappedMerges.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
