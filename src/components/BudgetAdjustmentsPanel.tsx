@@ -290,6 +290,7 @@ export interface BudgetAdjustments {
     code: string;
     description: string;
     hours: number;
+    rawHours?: number;
     rate: number;
     dollars: number;
     type: 'field' | 'fab' | 'foreman';
@@ -1548,7 +1549,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // Re-round after merges/redistributions may have reintroduced fractional hours
     const finalKeys = Object.keys(result);
     if (finalKeys.length > 0) {
-      const finalRawHours = finalKeys.map(k => result[k].hours ?? 0);
+      // Preserve pre-rounding hours for stable threshold checks (prevents rounding jitter)
+      finalKeys.forEach(k => {
+        result[k] = { ...result[k], rawHours: result[k].hours ?? 0 };
+      });
+      const finalRawHours = finalKeys.map(k => result[k].rawHours ?? result[k].hours ?? 0);
       const finalRoundedHours = roundHoursPreservingTotal(finalRawHours);
       finalKeys.forEach((k, i) => {
         result[k] = { ...result[k], hours: finalRoundedHours[i] };
@@ -1701,7 +1706,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     const parsed = entries.map(item => {
       const parts = (item.code ?? '').trim().split(/\s+/);
-      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.hours ?? 0) < minHoursThreshold };
+      return { ...item, sec: parts[0] ?? '', act: parts[1] ?? '', head: parts.slice(2).join(' ') || '', isSmall: (item.rawHours ?? item.hours ?? 0) < minHoursThreshold };
     });
 
     const bySecHead: Record<string, typeof parsed> = {};
@@ -1718,7 +1723,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const [sec, ...headParts] = key.split('|');
         const head = headParts.join('|');
         const combinedHours = lines.reduce((s, l) => s + (l.hours ?? 0), 0);
-        return { key, head, sec: sec!, lines, combinedHours };
+        const combinedRawHours = lines.reduce((s, l) => s + ((l as any).rawHours ?? l.hours ?? 0), 0);
+        return { key, head, sec: sec!, lines, combinedHours, combinedRawHours };
       });
   }, [finalLaborSummary, minHoursThreshold]);
 
@@ -2176,7 +2182,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const filteredSmallCodeAnalysis = useMemo(() => {
     return smallCodeAnalysis.filter(row => {
       if (row.lines.length > 1) return true;
-      return savedMergeKeySet.has(row.key) || row.combinedHours < standaloneMaxHours;
+      return savedMergeKeySet.has(row.key) || (row.combinedRawHours ?? row.combinedHours) < standaloneMaxHours;
     });
   }, [smallCodeAnalysis, standaloneMaxHours, savedMergeKeySet]);
 
