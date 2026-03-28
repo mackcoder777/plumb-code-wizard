@@ -1151,7 +1151,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       });
     }
 
-    logTotal('1-initial', summary);
+
 
     // Normalize any stale numeric sections in the summary itself
     let result: Record<string, any> = {};
