@@ -1846,6 +1846,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         };
       }
 
+      // Rule 2b: Same cost head, different activity — highest priority after BG chain
+      // e.g. "12 00L2 SEQP" should suggest merging into "12 00L1 SEQP" or "12 0000 SEQP"
+      if (!suggestions[entry.key]) {
+        const sameHeadMatch = Object.entries(finalLaborSummary ?? {})
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && 
+                   p.slice(2).join(' ') === head && 
+                   k !== entry.key &&
+                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadMatch.length > 0) {
+          suggestions[entry.key] = {
+            targetHead: head,
+            targetKey: sameHeadMatch[0][0],
+            reason: `${head} → ${head} (same cost head, consolidated activity)`,
+          };
+        }
+      }
+
       // Rule 3: Peer-merge fallback — suggest largest same-section code above threshold
       if (!suggestions[entry.key]) {
         const sameSec = Object.entries(finalLaborSummary)
@@ -1955,6 +1976,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           targetKey: '',
           reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
         };
+      }
+
+      // Rule 2b (Pass 2): Same cost head, different activity
+      if (!suggestions[pKey]) {
+        const sameHeadMatch = Object.entries(finalLaborSummary)
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && 
+                   p.slice(2).join(' ') === head && 
+                   k !== pKey &&
+                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadMatch.length > 0) {
+          suggestions[pKey] = {
+            targetHead: head,
+            targetKey: sameHeadMatch[0][0],
+            reason: `${head} → ${head} (same cost head, consolidated activity)`,
+          };
+        }
       }
 
       // Rule D: Peer-merge fallback — largest same-section code above threshold
