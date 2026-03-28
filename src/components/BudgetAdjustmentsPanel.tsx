@@ -2086,35 +2086,72 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   const exportReconciliationLog = useMemo(() => {
     if (!finalLaborSummary || !calculations.adjustedLaborSummary) return null;
+
+    // Build chain map same way finalLaborSummary does
+    const directMap = new Map<string, string>();
+    (savedMergesData ?? []).forEach(m => {
+      const rt = (m as any).reassign_to_head as string | null;
+      if (rt && rt !== '__keep__' && !rt.startsWith('__')) {
+        directMap.set(`${m.sec_code}|${m.cost_head}`, rt);
+      }
+    });
+    const resolveChain = (sec: string, head: string, visited = new Set<string>()): string => {
+      const key = `${sec}|${head}`;
+      if (visited.has(key) || visited.size > 10) return head;
+      visited.add(key);
+      const next = directMap.get(key);
+      if (!next) return head;
+      return resolveChain(sec, next, visited);
+    };
+
     const preTotal = Object.values(calculations.adjustedLaborSummary)
       .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
     const postTotal = Object.values(finalLaborSummary)
       .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
-    const drift = Math.abs(preTotal - postTotal);
+    const drift = postTotal - preTotal;
+
     const mergeLog = (savedMergesData ?? []).map(m => {
       const sec = m.sec_code ?? '';
       const head = m.cost_head ?? '';
       const reassignTo = (m as any).reassign_to_head as string | null;
       const redistAdj = (m as any).redistribute_adjustments;
-      const targetHead = reassignTo && !reassignTo.startsWith('__')
-        ? reassignTo
+      const action = redistAdj && Object.keys(redistAdj as object).length > 0
+        ? 'redistribute'
+        : reassignTo === '__keep__' ? 'keep'
+        : reassignTo && !reassignTo.startsWith('__') ? 'reassign'
+        : 'merge';
+
+      // Resolve chain to terminal for reassigns
+      const terminalHead = (action === 'reassign' && reassignTo)
+        ? resolveChain(sec, reassignTo)
         : head;
+
       const targetEntry = Object.entries(finalLaborSummary).find(([k]) => {
         const p = k.trim().split(/\s+/);
-        return p[0] === sec && p.slice(2).join(' ') === targetHead;
+        return p[0] === sec && p.slice(2).join(' ') === terminalHead;
       });
+
       const sourceStillExists = Object.entries(finalLaborSummary).some(([k]) => {
         const p = k.trim().split(/\s+/);
         return p[0] === sec && p.slice(2).join(' ') === head;
       });
+
+      const sourceEliminated = action === 'reassign' ? !sourceStillExists : null;
+
       return {
-        rule: `${sec}|${head} → ${reassignTo ?? '0000 merge'}`,
-        targetHours: targetEntry ? (targetEntry[1].hours ?? 0) : 0,
-        sourceEliminated: !sourceStillExists,
-        action: redistAdj ? 'redistribute' : reassignTo === '__keep__' ? 'keep' : reassignTo ? 'reassign' : 'merge',
+        rule: `${sec}|${head} → ${action === 'reassign' ? terminalHead + (terminalHead !== reassignTo ? ' (chained)' : '') : '0000 ' + action}`,
+        targetHours: targetEntry ? Math.round(targetEntry[1].hours ?? 0) : 0,
+        sourceEliminated,
+        action,
       };
     });
-    return { preTotal, postTotal, drift, driftOk: drift < 0.5, mergeLog };
+
+    // Find codes that exist in post but NOT in pre (created by pipeline)
+    const preKeys = new Set(Object.keys(calculations.adjustedLaborSummary));
+    const newKeys = Object.keys(finalLaborSummary).filter(k => !preKeys.has(k));
+    const newKeyHours = newKeys.reduce((s, k) => s + (finalLaborSummary[k]?.hours ?? 0), 0);
+
+    return { preTotal, postTotal, drift, driftOk: Math.abs(drift) < 0.5, mergeLog, newKeys, newKeyHours };
   }, [finalLaborSummary, calculations.adjustedLaborSummary, savedMergesData]);
 
 
@@ -2452,6 +2489,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       console.log('Pre-merge total hours:', exportReconciliationLog.preTotal.toFixed(2));
       console.log('Post-merge total hours:', exportReconciliationLog.postTotal.toFixed(2));
       console.log('Hour drift:', exportReconciliationLog.drift.toFixed(3), exportReconciliationLog.driftOk ? '✓ OK' : '⚠ DRIFT DETECTED');
+      if (!exportReconciliationLog.driftOk) {
+        console.warn('[DRIFT] New keys created by pipeline (not in pre-merge):', exportReconciliationLog.newKeys);
+        console.warn('[DRIFT] Hours in new keys:', exportReconciliationLog.newKeyHours.toFixed(2));
+        const reassignRows = exportReconciliationLog.mergeLog.filter(r => r.action === 'reassign' && r.sourceEliminated === false);
+        console.warn('[DRIFT] Reassign rules where source was NOT eliminated:', reassignRows);
+      }
       console.table(exportReconciliationLog.mergeLog);
       console.groupEnd();
     }
