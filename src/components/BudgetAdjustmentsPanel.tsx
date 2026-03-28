@@ -2068,6 +2068,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         sec: m.sec_code,
         head: m.cost_head,
         combinedHours,
+        combinedRawHours: combinedHours,
         lines: premergeLines.length > 0
           ? premergeLines.map((l) => {
               const parts = (l.code ?? '').trim().split(/\s+/);
