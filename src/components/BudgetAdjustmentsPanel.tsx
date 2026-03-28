@@ -1363,6 +1363,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         }
       }
 
+      // Debug key inspection for known drift culprits
+      const _debugKeys = ['BGSD', 'DEMO'];
+      const _debugSecs: Record<string, string> = { 'BGSD': '12', 'DEMO': 'BD' };
+      if (_debugKeys.includes(head) && _debugSecs[head] === sec) {
+        const _resolvedAction = (redistAdj && Object.keys(redistAdj).length > 0) ? 'redistribute'
+          : reassignTo === '__keep__' ? 'keep'
+          : reassignTo ? 'reassign'
+          : 'merge';
+        const _inspectKeys = Object.keys(result).filter(k =>
+          k.includes(head) || k.includes(sec)
+        );
+        console.log(`[KEY INSPECT] ${sec}|${head} — keys in working matching sec or head:`, _inspectKeys);
+        console.log(`[KEY INSPECT] hours at each:`, _inspectKeys.map(k => `${k}: ${result[k]?.hours}`));
+        console.log(`[KEY INSPECT] reassign_to_head:`, reassignTo);
+        console.log(`[KEY INSPECT] resolved action:`, _resolvedAction);
+      }
+
       // Redistribute: apply per-activity hour deltas
       if (redistAdj && Object.keys(redistAdj).length > 0) {
         // Pre-validate: ensure ALL referenced codes exist before touching any
