@@ -1506,7 +1506,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       // Step-4 per-record drift tracking
-      if (import.meta.env.DEV) {
+      {
         const step4HoursAfter = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
         const step4Delta = step4HoursAfter - step4RunningHours;
         if (Math.abs(step4Delta) > 0.01) {
@@ -2501,7 +2501,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   useEffect(() => {
-    if (import.meta.env.DEV && exportReconciliationLog) {
+    if (exportReconciliationLog) {
       console.group('[EXPORT RECONCILIATION]');
       console.log('Pre-merge total hours:', exportReconciliationLog.preTotal.toFixed(2));
       console.log('Post-merge total hours:', exportReconciliationLog.postTotal.toFixed(2));
