@@ -2103,7 +2103,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       // Reassignment TARGET keys — only exclude if target result is above threshold
       ...(savedMergesData ?? [])
         .filter(m => {
-          if (!m.reassign_to_head || m.reassign_to_head === '__accepted__' || m.reassign_to_head === '__keep__') return false;
+          if (!m.reassign_to_head || m.reassign_to_head === '__keep__') return false;
           const resultEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
             const parts = k.trim().split(/\s+/);
             return parts[0] === m.sec_code && parts.slice(2).join(' ') === m.reassign_to_head;
@@ -2112,11 +2112,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         })
         .map(m => `${m.sec_code ?? ''}|${m.reassign_to_head ?? ''}`),
     ]);
-    const acceptedKeys = new Set(
-      (savedMergesData ?? [])
-        .filter(m => m.reassign_to_head === '__accepted__')
-        .map(m => `${m.sec_code}|${m.cost_head}`)
-    );
+    const acceptedKeys = new Set<string>();
     return { allPass1Keys, acceptedKeys };
   }, [standaloneGroups, savedOnlyRows, mergeGroups, savedMergesData, finalLaborSummary, minHoursThreshold]);
 
