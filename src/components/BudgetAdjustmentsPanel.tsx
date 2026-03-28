@@ -4208,7 +4208,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                           </select>
                                           {(() => {
                                             const target = reassignTargets[mergeKey];
-                                            if (!target || target === '__reassign__' || target === '__keep__' || target === '__accepted__') return null;
+                                            if (!target || target === '__reassign__' || target === '__keep__') return null;
                                             const targetEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
                                               const parts = k.trim().split(/\s+/);
                                               return parts[0] === row.sec && parts.slice(2).join(' ') === target;
@@ -4394,7 +4394,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         {/* Pre-action projection warning */}
                                         {(() => {
                                           const target = reassignTargets[mergeKey];
-                                          if (!target || target === '__reassign__' || target === '__keep__' || target === '__accepted__' || target === '__merge__') return null;
+                                          if (!target || target === '__reassign__' || target === '__keep__' || target === '__merge__') return null;
                                           const targetEntry = Object.entries(finalLaborSummary ?? {}).find(([k]) => {
                                             const parts = k.trim().split(/\s+/);
                                             return parts[0] === row.sec && parts.slice(2).join(' ') === target;
@@ -4437,13 +4437,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         );
                                         const action = savedEntry ? getSavedAction(savedEntry) : null;
                                         const isKept = action === '__keep__';
-                                        const isAccepted = action === '__accepted__';
                                         const isMerge = action === '__merge__';
                                         const isRedist = action === '__redistribute__';
                                         return (
                                           <div className="flex items-center gap-2">
-                                            <span className={`text-xs ${isKept ? 'text-blue-400' : isAccepted ? 'text-blue-400' : 'text-green-500'}`}>
-                                              {isKept ? '✓ Kept' : isAccepted ? '✓ Accepted' : isMerge ? '✓ Merged' : '✓ Saved'}
+                                            <span className={`text-xs ${isKept ? 'text-blue-400' : 'text-green-500'}`}>
+                                              {isKept ? '✓ Kept' : isMerge ? '✓ Merged' : '✓ Saved'}
                                             </span>
                                             <Button
                                               variant="ghost"
