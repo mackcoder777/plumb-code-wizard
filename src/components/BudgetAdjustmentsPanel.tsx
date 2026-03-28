@@ -1376,6 +1376,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Redistribute: apply per-activity hour deltas
       if (redistAdj && Object.keys(redistAdj).length > 0) {
+        const _redistHoursBefore = Object.values(result).reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
         // Pre-validate: ensure ALL referenced codes exist before touching any
         const redistEntries = Object.entries(redistAdj).filter(
           ([, delta]) => delta && (delta as number) !== 0
@@ -1451,6 +1452,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             };
             if (result[matchKey].hours <= 0.001) delete result[matchKey];
           });
+        }
+        // Zero-sum enforcement: redistribution must never change total hours.
+        // If some delta target keys were missing and their deltas were dropped,
+        // absorb the residual into the largest surviving matching key.
+        const _redistHoursAfter = Object.values(result).reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
+        const _redistDrift = _redistHoursAfter - _redistHoursBefore;
+        if (Math.abs(_redistDrift) > 0.01) {
+          const _liveMatchKeys = matchingKeys.filter(k => result[k] && (result[k].hours ?? 0) > 0.5);
+          if (_liveMatchKeys.length > 0) {
+            const _absorbKey = _liveMatchKeys.reduce((a, b) =>
+              (result[a]?.hours ?? 0) >= (result[b]?.hours ?? 0) ? a : b
+            );
+            const _absorbRate = (result[_absorbKey].hours ?? 0) > 0
+              ? (result[_absorbKey].dollars ?? 0) / (result[_absorbKey].hours ?? 1)
+              : 0;
+            result[_absorbKey] = {
+              ...result[_absorbKey],
+              hours: (result[_absorbKey].hours ?? 0) - _redistDrift,
+              dollars: (result[_absorbKey].dollars ?? 0) - _redistDrift * _absorbRate,
+            };
+          }
         }
         {
           const step4HoursAfter = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
