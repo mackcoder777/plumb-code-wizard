@@ -4305,12 +4305,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               return sourceRows.filter((row) => {
                                 if (standaloneFilter === 'in-export') return true;
                                 const isSaved = savedMergeKeySet.has(row.key);
-                                const savedMerge = isSaved ? (savedMergesData ?? []).find(m => m.sec_code === row.sec && m.cost_head === row.head) : null;
-                                const savedAction = savedMerge ? getSavedAction(savedMerge) : null;
-                                const isAccepted = savedAction === '__accepted__';
                                 if (standaloneFilter === 'open') return !isSaved;
-                                if (standaloneFilter === 'saved') return isSaved && !isAccepted;
-                                if (standaloneFilter === 'accepted') return isAccepted;
+                                if (standaloneFilter === 'saved') return isSaved;
+                                return true;
                                 return true;
                               }).map((row) => {
                               const mergeKey = row.key;
