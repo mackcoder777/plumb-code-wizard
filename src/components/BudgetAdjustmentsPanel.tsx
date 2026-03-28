@@ -1815,36 +1815,35 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const sameSec = Object.entries(finalLaborSummary ?? {})
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
-            return p[0] === sec && p.slice(2).join(' ') !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+            const targetHead = p.slice(2).join(' ');
+            return p[0] === sec && targetHead !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
           })
           .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
         if (sameSec.length > 0) {
           const tHead = sameSec[0][0].trim().split(/\s+/).slice(2).join(' ');
-          suggestions[entry.key] = {
-            targetHead: tHead,
-            targetKey: sameSec[0][0],
-            reason: `${head} → ${tHead} (largest in section)`,
-          };
+          if (ABOVE_GRADE_SYSTEM_CODES.has(tHead)) {
+            suggestions[entry.key] = {
+              targetHead: tHead,
+              targetKey: sameSec[0][0],
+              reason: `${head} → ${tHead} (largest in section)`,
+            };
+          }
         }
         return;
       }
 
       // Rule 2b: Same cost head, different activity — highest priority after BG chain
       // e.g. "12 00L2 SEQP" should suggest merging into "12 00L1 SEQP" or "12 0000 SEQP"
-      if (!suggestions[entry.key]) {
-        const sameHeadMatch = Object.entries(finalLaborSummary ?? {})
-          .filter(([k]) => {
-            const p = k.trim().split(/\s+/);
-            return p[0] === sec && 
-                   p.slice(2).join(' ') === head && 
-                   k !== entry.key &&
-                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
-          })
-          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
-        if (sameHeadMatch.length > 0) {
+      {
+        const sameHeadFirst = Object.entries(finalLaborSummary ?? {}).filter(([k]) => {
+          const p = k.trim().split(/\s+/);
+          const kHours = finalLaborSummary[k]?.hours ?? 0;
+          return p[0] === sec && p.slice(2).join(' ') === head && k !== entry.lines[0].code && (kHours + entry.combinedHours) >= minHoursThreshold;
+        }).sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadFirst.length > 0) {
           suggestions[entry.key] = {
             targetHead: head,
-            targetKey: sameHeadMatch[0][0],
+            targetKey: sameHeadFirst[0][0],
             reason: `${head} → ${head} (same cost head, consolidated activity)`,
           };
         }
@@ -1877,7 +1876,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           }
         }
 
-        // If no live target key found but we know the logical target, still suggest
         if (!suggestions[entry.key] && systemTargetHeads.size > 0) {
           const targetHead = [...systemTargetHeads][0];
           const sysNames = [...sourceSystems].slice(0, 2).join(', ');
@@ -1970,35 +1968,34 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const sameSec2 = Object.entries(finalLaborSummary ?? {})
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
-            return p[0] === sec && p.slice(2).join(' ') !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+            const targetHead = p.slice(2).join(' ');
+            return p[0] === sec && targetHead !== head && (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
           })
           .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
         if (sameSec2.length > 0) {
           const tHead2 = sameSec2[0][0].trim().split(/\s+/).slice(2).join(' ');
-          suggestions[pKey] = {
-            targetHead: tHead2,
-            targetKey: sameSec2[0][0],
-            reason: `${head} → ${tHead2} (largest in section)`,
-          };
+          if (ABOVE_GRADE_SYSTEM_CODES.has(tHead2)) {
+            suggestions[pKey] = {
+              targetHead: tHead2,
+              targetKey: sameSec2[0][0],
+              reason: `${head} → ${tHead2} (largest in section)`,
+            };
+          }
         }
         return;
       }
 
-      // Rule 2b (Pass 2): Same cost head, different activity
-      if (!suggestions[pKey]) {
-        const sameHeadMatch = Object.entries(finalLaborSummary)
-          .filter(([k]) => {
-            const p = k.trim().split(/\s+/);
-            return p[0] === sec && 
-                   p.slice(2).join(' ') === head && 
-                   k !== flKey &&
-                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
-          })
-          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
-        if (sameHeadMatch.length > 0) {
+      // Rule 2b (Pass 2): Same cost head, different activity — combined threshold
+      {
+        const sameHeadFirst2 = Object.entries(finalLaborSummary ?? {}).filter(([k]) => {
+          const p = k.trim().split(/\s+/);
+          const kHours = finalLaborSummary[k]?.hours ?? 0;
+          return p[0] === sec && p.slice(2).join(' ') === head && k !== flKey && (kHours + hrs) >= minHoursThreshold;
+        }).sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadFirst2.length > 0) {
           suggestions[pKey] = {
             targetHead: head,
-            targetKey: sameHeadMatch[0][0],
+            targetKey: sameHeadFirst2[0][0],
             reason: `${head} → ${head} (same cost head, consolidated activity)`,
           };
         }
