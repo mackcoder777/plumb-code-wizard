@@ -2463,6 +2463,56 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return '__merge__';
   };
 
+  /** Build CodeHistoryDetail props for a given sec|head entry */
+  const buildCodeHistoryProps = (sec: string, head: string, combinedHours: number) => {
+    const savedMerge = savedMergesData?.find(
+      m => (m.sec_code || '').trim() === (sec || '').trim() &&
+           (m.cost_head || '').trim() === (head || '').trim()
+    );
+    if (!savedMerge) return null;
+
+    const action = getSavedAction(savedMerge);
+    const actionType: 'merge' | 'reassign' | 'redistribute' | 'keep' | 'accepted' | null =
+      action === '__redistribute__' ? 'redistribute'
+      : action === '__keep__' ? 'keep'
+      : action === '__merge__' ? 'merge'
+      : action === 'keep' ? 'keep'
+      : action === 'accepted' ? 'accepted'
+      : 'reassign';
+
+    const premerge = calculations?.adjustedLaborSummary ?? {};
+    const sourceLines = Object.values(premerge)
+      .filter((entry) => {
+        const parts = (entry.code ?? '').trim().split(/\s+/);
+        const s = parts[0] ?? '';
+        const h = parts.slice(2).join(' ') || '';
+        return s === sec && h === head;
+      })
+      .map((entry: any) => ({
+        code: entry.code ?? '',
+        hours: entry.hours ?? 0,
+        act: (entry.code ?? '').trim().split(/\s+/)[1] ?? '0000',
+      }));
+
+    const redistDeltas = savedMerge.redistribute_adjustments &&
+      typeof savedMerge.redistribute_adjustments === 'object'
+      ? savedMerge.redistribute_adjustments as Record<string, number>
+      : null;
+
+    const targetHead = actionType === 'reassign' ? action : head;
+    const targetEntries = Object.entries(finalLaborSummary ?? {})
+      .filter(([k]) => {
+        const parts = k.trim().split(/\s+/);
+        return parts[0] === sec && parts.slice(2).join(' ') === targetHead;
+      })
+      .map(([code, entry]) => ({ code, hours: entry.hours ?? 0 }));
+
+    return {
+      sec, head, sourceLines, actionType, redistDeltas, targetEntries, combinedHours,
+      reassignTarget: actionType === 'reassign' ? action : null,
+    };
+  };
+
   const handleUndoMerge = async (sec: string, head: string) => {
     const targetSec = (sec || '').trim();
     const targetHead = (head || '').trim();
@@ -3624,24 +3674,76 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 <div className="mb-4 space-y-1">
                   {savedMergesData
                     .filter(m => !smallCodeAnalysis.some(s => s.sec === m.sec_code && s.head === m.cost_head))
-                    .map(m => (
-                      <div key={`${m.sec_code}|${m.cost_head}`} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-green-500 font-medium">✓ Saved</span>
-                          <span className="font-mono font-bold text-blue-400">SEC {m.sec_code} — {m.cost_head}</span>
-                          <span className="text-muted-foreground">→ merged to {m.merged_act}</span>
+                    .map(m => {
+                      const savedKey = `saved-top-${m.sec_code}|${m.cost_head}`;
+                      const historyProps = buildCodeHistoryProps(m.sec_code, m.cost_head, (() => {
+                        // Get final hours from finalLaborSummary for this sec|head
+                        return Object.entries(finalLaborSummary ?? {})
+                          .filter(([k]) => {
+                            const parts = k.trim().split(/\s+/);
+                            return parts[0] === m.sec_code && parts.slice(2).join(' ') === m.cost_head;
+                          })
+                          .reduce((s, [, e]) => s + (e.hours ?? 0), 0);
+                      })());
+                      return (
+                      <div key={`${m.sec_code}|${m.cost_head}`}>
+                        <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-muted/30 opacity-60">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-green-500 font-medium">✓ Saved</span>
+                            <span className="font-mono font-bold text-blue-400">SEC {m.sec_code} — {m.cost_head}</span>
+                            <span className="text-muted-foreground">→ merged to {m.merged_act}</span>
+                            {historyProps && historyProps.actionType !== 'keep' && historyProps.actionType !== 'accepted' && (
+                              <button
+                                className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
+                                onClick={() => {
+                                  setExpandedHistoryKeys(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(savedKey)) next.delete(savedKey);
+                                    else next.add(savedKey);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                {expandedHistoryKeys.has(savedKey) ? 'Hide History' : 'Code History'}
+                              </button>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-6 px-2 text-xs ${undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}`}
+                            onClick={() => handleUndoMerge(m.sec_code, m.cost_head)}
+                          >
+                            <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}` ? 'Undoing...' : 'Undo'}
+                          </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={`h-6 px-2 text-xs ${undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}` ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          disabled={undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}`}
-                          onClick={() => handleUndoMerge(m.sec_code, m.cost_head)}
-                        >
-                          <Undo2 className="h-3 w-3 mr-1" /> {undoingKey === `${(m.sec_code || '').trim()}|${(m.cost_head || '').trim()}` ? 'Undoing...' : 'Undo'}
-                        </Button>
+                        {historyProps && expandedHistoryKeys.has(savedKey) && (
+                          <div className="ml-3 mt-1 mb-2 border-l-2 border-border/40 pl-3">
+                            <CodeHistoryDetail
+                              sec={historyProps.sec}
+                              head={historyProps.head}
+                              sourceLines={historyProps.sourceLines}
+                              actionType={historyProps.actionType}
+                              reassignTarget={historyProps.reassignTarget}
+                              redistributeDeltas={historyProps.redistDeltas}
+                              targetEntries={historyProps.targetEntries}
+                              finalHours={historyProps.combinedHours}
+                              isOpen={true}
+                              onToggle={() => {
+                                setExpandedHistoryKeys(prev => {
+                                  const next = new Set(prev);
+                                  next.delete(savedKey);
+                                  return next;
+                                });
+                              }}
+                              colSpan={0}
+                            />
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                 </div>
               )}
 
@@ -3810,7 +3912,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               })
                               .filter((p) => p.sec === row.sec && p.head !== row.head);
                             return (
-                              <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
+                              <React.Fragment key={mergeKey}>
+                              <TableRow className={isSaved ? 'opacity-50' : ''}>
                                 <TableCell>
                                   {isSaved ? (
                                     <Checkbox checked disabled />
@@ -4113,6 +4216,34 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   )}
                                 </TableCell>
                               </TableRow>
+                              {isSaved && (() => {
+                                const historyProps = buildCodeHistoryProps(row.sec, row.head, row.combinedHours);
+                                if (!historyProps) return null;
+                                const mergeHistKey = `merge-${mergeKey}`;
+                                return (
+                                  <CodeHistoryDetail
+                                    sec={historyProps.sec}
+                                    head={historyProps.head}
+                                    sourceLines={historyProps.sourceLines}
+                                    actionType={historyProps.actionType}
+                                    reassignTarget={historyProps.reassignTarget}
+                                    redistributeDeltas={historyProps.redistDeltas}
+                                    targetEntries={historyProps.targetEntries}
+                                    finalHours={historyProps.combinedHours}
+                                    isOpen={expandedHistoryKeys.has(mergeHistKey)}
+                                    onToggle={() => {
+                                      setExpandedHistoryKeys(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(mergeHistKey)) next.delete(mergeHistKey);
+                                        else next.add(mergeHistKey);
+                                        return next;
+                                      });
+                                    }}
+                                    colSpan={6}
+                                  />
+                                );
+                              })()}
+                              </React.Fragment>
                             );
                           })}
                         </TableBody>
