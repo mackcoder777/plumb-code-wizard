@@ -1791,6 +1791,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       // Rule 2: Category override codes → infer target from source systems
       // Above-grade peer system codes are excluded — they cannot merge into each other
       if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+        // Rule 2b: same cost head, different activity — check first before peer-merge
+        const sameHeadMatch = Object.entries(finalLaborSummary ?? {})
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            const kHours = finalLaborSummary[k]?.hours ?? 0;
+            return p[0] === sec &&
+                   p.slice(2).join(' ') === head &&
+                   k !== entry.lines[0].code &&
+                   (kHours + entry.combinedHours) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadMatch.length > 0) {
+          suggestions[entry.key] = {
+            targetHead: head,
+            targetKey: sameHeadMatch[0][0],
+            reason: `${head} → ${head} (same cost head, consolidated activity)`,
+          };
+          return;
+        }
+
+        // No same-head match — fall through to peer-merge largest-in-section
         const sameSec = Object.entries(finalLaborSummary ?? {})
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
@@ -1925,6 +1946,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Rule B: Above-grade system codes → peer-merge into largest in section
       if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+        // Rule 2b (Pass 2): same cost head, different activity — check first
+        const sameHeadMatch2 = Object.entries(finalLaborSummary ?? {})
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            const kHours = finalLaborSummary[k]?.hours ?? 0;
+            return p[0] === sec &&
+                   p.slice(2).join(' ') === head &&
+                   k !== flKey &&
+                   (kHours + hrs) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadMatch2.length > 0) {
+          suggestions[pKey] = {
+            targetHead: head,
+            targetKey: sameHeadMatch2[0][0],
+            reason: `${head} → ${head} (same cost head, consolidated activity)`,
+          };
+          return;
+        }
+
+        // No same-head match — fall through to peer-merge largest-in-section
         const sameSec2 = Object.entries(finalLaborSummary ?? {})
           .filter(([k]) => {
             const p = k.trim().split(/\s+/);
