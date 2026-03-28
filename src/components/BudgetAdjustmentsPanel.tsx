@@ -1352,7 +1352,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       // If no direct key match, attempt fuzzy match by section + similar cost head
       if (matchingKeys.length === 0 && head) {
         const fuzzyKeys = Object.keys(result).filter(k => {
-          const parts = (result[k]?.code ?? '').trim().split(/\s+/);
+          const parts = k.trim().split(/\s+/);
+          if (parts.length < 3) return false;
           const kHead = parts.slice(2).join(' ');
           const kSec = parts[0];
           return kSec === sec && kHead !== head &&
@@ -1471,8 +1472,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
         // Reassign: move hours/dollars to the terminal target cost head in same SEC
         const targetKey = Object.keys(result).find(key => {
-          const parts = (result[key].code ?? '').trim().split(/\s+/);
-          return parts[0] === sec && parts.slice(2).join(' ') === effectiveTargetHead;
+          const parts = key.trim().split(/\s+/);
+          return parts.length >= 3 && parts[0] === sec && parts.slice(2).join(' ') === effectiveTargetHead;
         });
         // Exclude target from source keys to prevent double-counting
         const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
