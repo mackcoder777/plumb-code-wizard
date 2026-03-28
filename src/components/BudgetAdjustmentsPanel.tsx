@@ -1452,6 +1452,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
             if (result[matchKey].hours <= 0.001) delete result[matchKey];
           });
         }
+        {
+          const step4HoursAfter = Object.values(result).reduce((s, e) => s + (e.hours ?? 0), 0);
+          const step4Delta = step4HoursAfter - step4RunningHours;
+          if (Math.abs(step4Delta) > 0.01) {
+            console.log(`[STEP4 REDIST DELTA] ${sec}|${head} action=redistribute delta=${step4Delta > 0 ? '+' : ''}${step4Delta.toFixed(2)}h running=${step4HoursAfter.toFixed(2)}h`);
+          }
+          step4RunningHours = step4HoursAfter;
+        }
         return; // do not fall through to merge/reassign logic
       }
 
