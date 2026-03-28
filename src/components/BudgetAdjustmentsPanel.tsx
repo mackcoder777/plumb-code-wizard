@@ -1309,6 +1309,32 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       return { ...merge, sec_code: newSec };
     });
 
+    // Build a chain resolution map: for each sec|head, follow reassign_to_head until terminal
+    const buildReassignChainMap = (): Map<string, string> => {
+      const directMap = new Map<string, string>();
+      remappedMerges.forEach(m => {
+        const rt = (m as any).reassign_to_head as string | null;
+        if (rt && rt !== '__keep__' && rt !== '__merge__' && rt !== '__redistribute__' && !rt.startsWith('__')) {
+          directMap.set(`${m.sec_code}|${m.cost_head}`, rt);
+        }
+      });
+      const resolveChain = (sec: string, head: string, visited = new Set<string>()): string => {
+        const key = `${sec}|${head}`;
+        if (visited.has(key) || visited.size > 10) return head; // cycle/depth guard
+        visited.add(key);
+        const next = directMap.get(key);
+        if (!next) return head;
+        return resolveChain(sec, next, visited);
+      };
+      const resolved = new Map<string, string>();
+      directMap.forEach((_, key) => {
+        const [sec, head] = key.split('|');
+        resolved.set(key, resolveChain(sec, head));
+      });
+      return resolved;
+    };
+    const reassignChainMap = buildReassignChainMap();
+
     remappedMerges.forEach(merge => {
       const head = merge.cost_head;
       const sec = merge.sec_code;
@@ -1420,18 +1446,19 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       if (reassignTo) {
-        // Reassign: move hours/dollars to the target cost head in same SEC
-        // Find target key in same SEC with the reassign_to_head cost head
+        // Resolve through any reassignment chain to find the terminal target
+        const effectiveTargetHead = reassignChainMap.get(`${sec}|${head}`) ?? reassignTo;
+
+        // Reassign: move hours/dollars to the terminal target cost head in same SEC
         const targetKey = Object.keys(result).find(key => {
           const parts = (result[key].code ?? '').trim().split(/\s+/);
-          return parts[0] === sec && parts.slice(2).join(' ') === reassignTo;
+          return parts[0] === sec && parts.slice(2).join(' ') === effectiveTargetHead;
         });
         // Exclude target from source keys to prevent double-counting
         const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
         const sourceHours = sourceKeys.reduce((s, k) => s + (result[k]?.hours ?? 0), 0);
         const sourceDollars = sourceKeys.reduce((s, k) => s + (result[k]?.dollars ?? 0), 0);
         if (targetKey) {
-          // Normal path: target exists, accumulate source hours and delete source keys
           result[targetKey] = {
             ...result[targetKey],
             hours: result[targetKey].hours + sourceHours,
@@ -1439,19 +1466,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           };
           sourceKeys.forEach(k => delete result[k]);
         } else {
-          // Guard: do not create fake target keys for special action values
           const specialValues = ['__redistribute__', '__merge__', ''];
-          if (!reassignTo || specialValues.includes(reassignTo)) {
+          if (!effectiveTargetHead || specialValues.includes(effectiveTargetHead)) {
             matchingKeys.forEach(k => delete result[k]);
             return;
           }
-          // No target key found — create one using 0000 activity code
-          const newTargetKey = `${sec} 0000 ${reassignTo}`;
+          const newTargetKey = `${sec} 0000 ${effectiveTargetHead}`;
           result[newTargetKey] = {
             code: newTargetKey,
             sec: sec,
             activityCode: '0000',
-            head: reassignTo,
+            head: effectiveTargetHead,
             hours: sourceHours,
             dollars: sourceDollars,
             description: `Reassigned from ${head}`,
