@@ -1,105 +1,55 @@
 
+Goal: fix `standaloneAutoSuggestions` so Rule 2b (same cost head consolidation) is evaluated inside the `ABOVE_GRADE_SYSTEM_CODES` branches before their early `return`, in both passes, using the combined-hours threshold condition.
 
-# Fix: Generate Auto-Suggestions for ALL In-Export Rows
+Implementation plan
 
-## Root Cause
+1) Update Pass 1 (`standalone.forEach(entry => { ... })`)
+- In the existing block:
+  - `if (ABOVE_GRADE_SYSTEM_CODES.has(head)) { ... return; }`
+- Insert Rule 2b at the top of that block, before current peer-merge logic:
+  - Scan `Object.entries(finalLaborSummary ?? {})`
+  - Match same section + same head
+  - Exclude self using full key: `k !== entry.lines[0].code`
+  - Require `(kHours + entry.combinedHours) >= minHoursThreshold`
+  - Sort by target hours desc
+  - If found, set:
+    - `targetHead: head`
+    - `targetKey: sameHeadMatch[0][0]`
+    - `reason: \`${head} → ${head} (same cost head, consolidated activity)\``
+  - `return` immediately
+- Keep existing “largest in section” peer-merge logic exactly as-is for the no-match path, then keep existing `return`.
 
-`standaloneAutoSuggestions` only generates suggestions for codes in `smallCodeAnalysis` where `lines.length === 1`. But the "In Export" view shows rows from `inExportRows`, which comes from `finalLaborSummary` — a completely different source. Many codes in `inExportRows` either:
-1. Don't appear in `smallCodeAnalysis` at all (they only exist post-merge in `finalLaborSummary`)
-2. Appear in `smallCodeAnalysis` with multiple lines (`lines.length > 1`), so they're filtered out
+2) Update Pass 2 (`Object.entries(finalLaborSummary).forEach(([flKey, flEntry]) => { ... })`)
+- In the existing block:
+  - `if (ABOVE_GRADE_SYSTEM_CODES.has(head)) { ... return; }`
+- Insert same Rule 2b-first pattern at top of block:
+  - Scan `Object.entries(finalLaborSummary ?? {})`
+  - Match same section + same head
+  - Exclude self using full key: `k !== flKey`
+  - Require `(kHours + hrs) >= minHoursThreshold` (`hrs` is the source row hours already computed in pass 2)
+  - Sort by target hours desc
+  - If found, assign suggestion on `pKey` with same reason format and return
+- If no same-head match, fall through to the existing peer-merge largest-in-section logic unchanged, then return.
 
-This leaves most "In Export" rows without any suggestion — no ⚡ badge, no auto-populated dropdown, and no auto-resolve capability.
+3) Keep all other logic untouched
+- Do not change rule ordering outside these two `ABOVE_GRADE_SYSTEM_CODES` branches.
+- Do not change Rule C/Rule D behavior.
+- Do not alter suggestion keying (`entry.key` in pass 1, `pKey` in pass 2) or existing reason text outside the new Rule 2b insertions.
 
-## Fix
+Technical details
+- Why this works: current early return in `ABOVE_GRADE_SYSTEM_CODES` prevents downstream Rule 2b from ever running; moving a Rule 2b check into that branch preserves architecture while respecting current control flow.
+- Threshold rule applied exactly as requested: only suggest same-head when source+target meets/exceeds `minHoursThreshold`.
+- Self-exclusion uses full code keys in both passes (`entry.lines[0].code` and `flKey`) to prevent self-targeting.
 
-**File**: `src/components/BudgetAdjustmentsPanel.tsx`
-
-### Change 1: Extend suggestion generation to cover all inExportRows
-
-In the `standaloneAutoSuggestions` useMemo (~line 1640), after processing `standalone` entries from `smallCodeAnalysis`, add a second pass that iterates over `inExportRows` and generates suggestions for any key not already covered:
-
-```typescript
-// After existing standalone.forEach block (line 1766)...
-
-// Pass 2: Cover inExportRows not already in suggestions
-(inExportRows ?? []).forEach(ieRow => {
-  if (suggestions[ieRow.key]) return; // already have one
-  const sec = ieRow.sec;
-  const head = ieRow.head;
-
-  // Rule A: BG-to-above-grade chain
-  const chain = BG_TO_ABOVE_GRADE[head];
-  if (chain) {
-    const found = findTargetKey(sec, head === 'BGPD' ? ['PMPD', 'STRM'] : [...chain]);
-    if (found) {
-      suggestions[ieRow.key] = {
-        targetHead: found.head,
-        targetKey: found.key,
-        reason: `${head} → ${found.head}`,
-      };
-      return;
-    }
-  }
-
-  // Rule B: Above-grade system codes → accept
-  if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
-    suggestions[ieRow.key] = {
-      targetHead: '__accepted__',
-      targetKey: '',
-      reason: 'Above-grade system code — accept as standalone',
-    };
-    return;
-  }
-
-  // Rule C: System inference from source items
-  // (same logic as existing Rule 2)
-
-  // Rule D: Peer-merge fallback — largest same-section code
-  if (!suggestions[ieRow.key]) {
-    const sameSec = Object.entries(finalLaborSummary)
-      .filter(([k]) => {
-        const p = k.trim().split(/\s+/);
-        return p[0] === sec && p.slice(2).join(' ') !== head;
-      })
-      .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
-    if (sameSec.length > 0) {
-      const [targetFullKey, targetEntry] = sameSec[0];
-      const tHead = targetFullKey.trim().split(/\s+/).slice(2).join(' ');
-      suggestions[ieRow.key] = {
-        targetHead: tHead,
-        targetKey: targetFullKey,
-        reason: `Largest in section → ${tHead} (${(targetEntry.hours ?? 0).toFixed(0)}h)`,
-      };
-    }
-  }
-});
-```
-
-### Change 2: Add `inExportRows` to the useMemo dependency array
-
-Add `inExportRows` to the dependency array of `standaloneAutoSuggestions` (line 1768).
-
-### Change 3: Update autoInitRow for in-export context
-
-The `autoInitRow` function (line 1800) currently only looks up rows in `smallCodeAnalysis`. When called from the "In Export" view's Select All or individual checkbox, it needs to also handle `inExportRows` entries that aren't in `smallCodeAnalysis`:
-
-```typescript
-const autoInitRow = (key: string) => {
-  const row = smallCodeAnalysis.find(r => r.key === key);
-  // If not in smallCodeAnalysis, still apply suggestion for in-export rows
-  if (!row) {
-    if (standaloneAutoSuggestions?.[key]?.targetHead) {
-      setReassignTargets(prev => ({ ...prev, [key]: standaloneAutoSuggestions[key].targetHead }));
-    }
-    return;
-  }
-  // ... existing logic
-};
-```
-
-## Safety
-
-- **No orphans**: Same proven pathways — `__accepted__` early-returns, peer-merge accumulates-and-deletes
-- **No duplicate keys**: Deduplication fix already in place for rendered rows
-- **No hour drift**: Suggestions are just dropdown pre-selections; actual hour movement uses the same reassign logic
-
+Validation plan (post-change)
+1. Reproduce failing case (`12 00L2 SEQP`) and confirm suggestion becomes:
+   - `SEQP → SEQP (same cost head, consolidated activity)` when combined hours meet threshold.
+2. Confirm fallback behavior:
+   - If no qualifying same-head target exists, above-grade peer-merge largest-in-section still appears.
+3. Regression checks:
+   - BG chain (Rule 1/Rule A) still takes precedence.
+   - Non-above-grade paths still use existing Rule 2b/Rule C/Rule D flow unchanged.
+4. QC spot checks from project checklist relevant to this change:
+   - Auto-suggestions do not emit sentinel values.
+   - Targets remain real cost heads.
+   - In Export rows remain aligned with `finalLaborSummary`.
