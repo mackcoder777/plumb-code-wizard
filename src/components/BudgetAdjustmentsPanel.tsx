@@ -2084,6 +2084,39 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Stale merges are now surfaced as a warning banner for the user to handle manually
   // useEffect(() => { ... }, [staleMergeUpdates.length]);
 
+  const exportReconciliationLog = useMemo(() => {
+    if (!finalLaborSummary || !calculations.adjustedLaborSummary) return null;
+    const preTotal = Object.values(calculations.adjustedLaborSummary)
+      .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
+    const postTotal = Object.values(finalLaborSummary)
+      .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
+    const drift = Math.abs(preTotal - postTotal);
+    const mergeLog = (savedMergesData ?? []).map(m => {
+      const sec = m.sec_code ?? '';
+      const head = m.cost_head ?? '';
+      const reassignTo = (m as any).reassign_to_head as string | null;
+      const redistAdj = (m as any).redistribute_adjustments;
+      const targetHead = reassignTo && !reassignTo.startsWith('__')
+        ? reassignTo
+        : head;
+      const targetEntry = Object.entries(finalLaborSummary).find(([k]) => {
+        const p = k.trim().split(/\s+/);
+        return p[0] === sec && p.slice(2).join(' ') === targetHead;
+      });
+      const sourceStillExists = Object.entries(finalLaborSummary).some(([k]) => {
+        const p = k.trim().split(/\s+/);
+        return p[0] === sec && p.slice(2).join(' ') === head;
+      });
+      return {
+        rule: `${sec}|${head} → ${reassignTo ?? '0000 merge'}`,
+        targetHours: targetEntry ? (targetEntry[1].hours ?? 0) : 0,
+        sourceEliminated: !sourceStillExists,
+        action: redistAdj ? 'redistribute' : reassignTo === '__keep__' ? 'keep' : reassignTo ? 'reassign' : 'merge',
+      };
+    });
+    return { preTotal, postTotal, drift, driftOk: drift < 0.5, mergeLog };
+  }, [finalLaborSummary, calculations.adjustedLaborSummary, savedMergesData]);
+
 
   // Filtered view for standalone hour threshold
   const filteredSmallCodeAnalysis = useMemo(() => {
@@ -2414,6 +2447,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   };
 
   useEffect(() => {
+    if (import.meta.env.DEV && exportReconciliationLog) {
+      console.group('[EXPORT RECONCILIATION]');
+      console.log('Pre-merge total hours:', exportReconciliationLog.preTotal.toFixed(2));
+      console.log('Post-merge total hours:', exportReconciliationLog.postTotal.toFixed(2));
+      console.log('Hour drift:', exportReconciliationLog.drift.toFixed(3), exportReconciliationLog.driftOk ? '✓ OK' : '⚠ DRIFT DETECTED');
+      console.table(exportReconciliationLog.mergeLog);
+      console.groupEnd();
+    }
     const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
     onAdjustmentsChange({
       jobsiteZipCode,
