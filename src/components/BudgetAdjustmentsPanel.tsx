@@ -2077,11 +2077,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               };
             })
           : [{
-              code: `${m.sec_code} 0000 ${m.cost_head}`,
+              code: `${m.sec_code} ${m.merged_act || '0000'} ${m.cost_head}`,
               hours: combinedHours,
               description: '',
               sec: m.sec_code,
-              act: '0000',
+              act: m.merged_act || '0000',
               head: m.cost_head,
               isSmall: combinedHours < minHoursThreshold,
               dollars: 0,
@@ -4491,7 +4491,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       return (
                                         <span className="text-xs font-mono text-green-400">
                                           {isKeep && '↔ Kept as-is'}
-                                          {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
+                                          {isMerge && `⊕ Merged → ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
                                           {isRedistribute && '⇄ Redistributed'}
                                         </span>
