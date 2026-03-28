@@ -4437,7 +4437,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 })
                                 .filter((p) => p.sec === row.sec && p.head !== row.head);
                               return (
-                                <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
+                                <React.Fragment key={mergeKey}>
+                                <TableRow className={isSaved ? 'opacity-50' : ''}>
                                   <TableCell>
                                     {isSaved ? (
                                       <Checkbox checked disabled />
