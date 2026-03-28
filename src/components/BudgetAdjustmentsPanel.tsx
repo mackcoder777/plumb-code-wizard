@@ -2497,7 +2497,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         merged_act: m.merged_act,
       })) ?? [],
     });
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary, savedMergesData]);
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary, savedMergesData, exportReconciliationLog]);
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
