@@ -28,7 +28,7 @@ interface CodeHistoryDetailProps {
   isOpen: boolean;
   /** Toggle callback */
   onToggle: () => void;
-  /** Number of columns in parent table for colspan */
+  /** Number of columns in parent table for colspan (0 = standalone/non-table mode) */
   colSpan: number;
 }
 
