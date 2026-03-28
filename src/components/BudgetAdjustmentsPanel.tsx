@@ -1808,6 +1808,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return;
       }
 
+      // Rule 2b: Same cost head, different activity — highest priority after BG chain
+      // e.g. "12 00L2 SEQP" should suggest merging into "12 00L1 SEQP" or "12 0000 SEQP"
+      if (!suggestions[entry.key]) {
+        const sameHeadMatch = Object.entries(finalLaborSummary ?? {})
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && 
+                   p.slice(2).join(' ') === head && 
+                   k !== entry.key &&
+                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadMatch.length > 0) {
+          suggestions[entry.key] = {
+            targetHead: head,
+            targetKey: sameHeadMatch[0][0],
+            reason: `${head} → ${head} (same cost head, consolidated activity)`,
+          };
+        }
+      }
+
       const sourceSystems = new Set<string>();
       estimateData.forEach(item => {
         if (!item.costCode) return;
@@ -1835,7 +1856,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       }
 
       // If no live target key found but we know the logical target, still suggest
-      // so the user sees a recommendation even if the target doesn't exist yet
       if (!suggestions[entry.key] && systemTargetHeads.size > 0) {
         const targetHead = [...systemTargetHeads][0];
         const sysNames = [...sourceSystems].slice(0, 2).join(', ');
@@ -1844,27 +1864,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           targetKey: '',
           reason: `System${sourceSystems.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
         };
-      }
-
-      // Rule 2b: Same cost head, different activity — highest priority after BG chain
-      // e.g. "12 00L2 SEQP" should suggest merging into "12 00L1 SEQP" or "12 0000 SEQP"
-      if (!suggestions[entry.key]) {
-        const sameHeadMatch = Object.entries(finalLaborSummary ?? {})
-          .filter(([k]) => {
-            const p = k.trim().split(/\s+/);
-            return p[0] === sec && 
-                   p.slice(2).join(' ') === head && 
-                   k !== entry.key &&
-                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
-          })
-          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
-        if (sameHeadMatch.length > 0) {
-          suggestions[entry.key] = {
-            targetHead: head,
-            targetKey: sameHeadMatch[0][0],
-            reason: `${head} → ${head} (same cost head, consolidated activity)`,
-          };
-        }
       }
 
       // Rule 3: Peer-merge fallback — suggest largest same-section code above threshold
@@ -1941,6 +1940,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return;
       }
 
+      // Rule 2b (Pass 2): Same cost head, different activity
+      if (!suggestions[pKey]) {
+        const sameHeadMatch = Object.entries(finalLaborSummary)
+          .filter(([k]) => {
+            const p = k.trim().split(/\s+/);
+            return p[0] === sec && 
+                   p.slice(2).join(' ') === head && 
+                   k !== pKey &&
+                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
+          })
+          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
+        if (sameHeadMatch.length > 0) {
+          suggestions[pKey] = {
+            targetHead: head,
+            targetKey: sameHeadMatch[0][0],
+            reason: `${head} → ${head} (same cost head, consolidated activity)`,
+          };
+        }
+      }
+
       // Rule C: System inference from source items
       const srcSys2 = new Set<string>();
       estimateData.forEach(item => {
@@ -1976,26 +1995,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           targetKey: '',
           reason: `System${srcSys2.size > 1 ? 's' : ''} (${sysNames}) → ${targetHead}`,
         };
-      }
-
-      // Rule 2b (Pass 2): Same cost head, different activity
-      if (!suggestions[pKey]) {
-        const sameHeadMatch = Object.entries(finalLaborSummary)
-          .filter(([k]) => {
-            const p = k.trim().split(/\s+/);
-            return p[0] === sec && 
-                   p.slice(2).join(' ') === head && 
-                   k !== pKey &&
-                   (finalLaborSummary[k]?.hours ?? 0) >= minHoursThreshold;
-          })
-          .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
-        if (sameHeadMatch.length > 0) {
-          suggestions[pKey] = {
-            targetHead: head,
-            targetKey: sameHeadMatch[0][0],
-            reason: `${head} → ${head} (same cost head, consolidated activity)`,
-          };
-        }
       }
 
       // Rule D: Peer-merge fallback — largest same-section code above threshold
