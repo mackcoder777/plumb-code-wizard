@@ -565,7 +565,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
     return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
   });
-  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'accepted' | 'residual' | 'in-export'>('all');
+  const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
   const queryClient = useQueryClient();
@@ -1415,7 +1415,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return; // do not fall through to merge/reassign logic
       }
 
-      if (reassignTo === '__keep__' || reassignTo === '__accepted__') {
+      if (reassignTo === '__keep__') {
         return; // hours stay on original code, nothing to do
       }
 
@@ -1606,12 +1606,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     if (acceptedCleanupRanRef.current) return;
     if (!savedMergesData?.length || !finalLaborSummary || !projectId || projectId === 'default') return;
     const stale = savedMergesData.filter(m => {
-      if (m.reassign_to_head !== '__accepted__') return false;
-      const liveKey = Object.keys(finalLaborSummary).find(k => {
-        const p = k.trim().split(/\s+/);
-        return p[0] === m.sec_code && p.slice(2).join(' ') === m.cost_head;
-      });
-      return liveKey && (finalLaborSummary[liveKey]?.hours ?? 0) < minHoursThreshold;
+      // Delete ALL __accepted__ records — the action is architecturally broken
+      if (m.reassign_to_head === '__accepted__') return true;
+      return false;
     });
     if (stale.length === 0) return;
     acceptedCleanupRanRef.current = true;
@@ -1999,7 +1996,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const key = `${m.sec_code}|${m.cost_head}`;
       if (analysisKeys.has(key)) return; // already visible
 
-      // Recover original lines from pre-merge adjustedLaborSummary
+      // Read hours from finalLaborSummary (post-pipeline) so UI matches export
+      const flsLines = Object.entries(finalLaborSummary ?? {}).filter(([k]) => {
+        const parts = k.trim().split(/\s+/);
+        const sec = parts[0] ?? '';
+        const head = parts.slice(2).join(' ') || '';
+        return sec === m.sec_code && head === m.cost_head;
+      });
+
+      const combinedHours = flsLines.reduce((s, [, entry]) => s + (entry.hours ?? 0), 0);
+
+      // Also recover pre-merge lines for line detail display
       const premerge = calculations?.adjustedLaborSummary ?? {};
       const premergeLines = Object.values(premerge).filter((entry) => {
         const parts = (entry.code ?? '').trim().split(/\s+/);
@@ -2007,8 +2014,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         const head = parts.slice(2).join(' ') || '';
         return sec === m.sec_code && head === m.cost_head;
       });
-
-      const combinedHours = premergeLines.reduce((s, l) => s + (l.hours ?? 0), 0);
 
       rows.push({
         key,
@@ -2048,7 +2053,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
 
     return rows;
-  }, [savedMergesData, smallCodeAnalysis, calculations?.adjustedLaborSummary]);
+  }, [savedMergesData, smallCodeAnalysis, calculations?.adjustedLaborSummary, finalLaborSummary, minHoursThreshold]);
 
   // DISABLED: auto-update was too aggressive and caused duplicate key errors + data loss
   // Stale merges are now surfaced as a warning banner for the user to handle manually
@@ -4067,7 +4072,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 <SelectItem value="all">All (&lt; {minHoursThreshold}h)</SelectItem>
                                 <SelectItem value="open">Open only</SelectItem>
                                 <SelectItem value="saved">Saved only</SelectItem>
-                                <SelectItem value="accepted">Accepted only</SelectItem>
+                                
                                 <SelectItem value="residual">Residual (post-action)</SelectItem>
                                 <SelectItem value="in-export">In Export ({totalSmallInExport})</SelectItem>
                               </SelectContent>
@@ -4208,7 +4213,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                               .map((p) => (
                                               <option key={p.key} value={p.head}>{p.head}</option>
                                             ))}
-                                            <option value="__accepted__">✓ Accept as-is (intentionally small)</option>
                                             <option value="__keep__">Keep as-is</option>
                                           </select>
                                           {(() => {
@@ -4239,15 +4243,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                               className="text-xs text-blue-600 underline hover:text-blue-800"
                                             >
                                               Reassign →
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
-                                                setReassignTargets(prev => ({ ...prev, [mergeKey]: '__accepted__' }));
-                                              }}
-                                              className="text-xs text-green-600 underline hover:text-green-800"
-                                            >
-                                              Accept as-is ✓
                                             </button>
                                           </div>
                                         </div>
@@ -4410,7 +4405,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             .map((p) => (
                                             <option key={p.key} value={p.head}>{p.head}</option>
                                           ))}
-                                          <option value="__accepted__">✓ Accept as-is (intentionally small)</option>
+                                          
                                           <option value="__keep__">Keep as-is</option>
                                         </select>
                                         {/* Pre-action projection warning */}
@@ -4442,15 +4437,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             className="text-xs text-blue-600 underline hover:text-blue-800"
                                           >
                                             Reassign →
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              setConsolidations(prev => ({ ...prev, [mergeKey]: true }));
-                                              setReassignTargets(prev => ({ ...prev, [mergeKey]: '__accepted__' }));
-                                            }}
-                                            className="text-xs text-green-600 underline hover:text-green-800"
-                                          >
-                                            Accept as-is ✓
                                           </button>
                                         </div>
                                       </div>
