@@ -4491,7 +4491,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       return (
                                         <span className="text-xs font-mono text-green-400">
                                           {isKeep && '↔ Kept as-is'}
-                                          {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
+                                          {isMerge && `⊕ Merged — ${row.sec} ${savedMerge?.merged_act || row.lines[0]?.act || '0000'} ${row.head} → ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
                                           {isRedistribute && '⇄ Redistributed'}
                                         </span>
