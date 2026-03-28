@@ -3574,10 +3574,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       const mergeSavedCount = mergeGroups.filter(g => savedMergeKeySet.has(g.key)).length;
                       const standaloneOpenCount = standaloneGroups.filter(g => !savedMergeKeySet.has(g.key)).length;
                       const standaloneSavedCount = standaloneGroups.filter(g => savedMergeKeySet.has(g.key)).length;
-                      const standaloneAcceptedCount = standaloneGroups.filter(g => {
-                        const saved = (savedMergesData ?? []).find(m => m.sec_code === g.sec && m.cost_head === g.head);
-                        return saved && saved.reassign_to_head === '__accepted__';
-                      }).length;
                       return (
                         <>
                           <button
@@ -3618,8 +3614,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   : 'bg-green-100 text-green-700'
                               )}>
                                 {standaloneOpenCount > 0 ? `${standaloneOpenCount} open` : '✓ all saved'}
-                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount - standaloneAcceptedCount} saved` : ''}
-                                {standaloneAcceptedCount > 0 ? `, ${standaloneAcceptedCount} accepted` : ''}
+                                {standaloneSavedCount > 0 && standaloneOpenCount > 0 ? `, ${standaloneSavedCount} saved` : ''}
+                                
                               </span>
                             </span>
                           </button>
@@ -4345,10 +4341,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       return (
                                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                           <span className="text-xs text-blue-500 font-normal">
-                                            ⚡ {suggestion.targetHead === '__accepted__'
-                                              ? <span className="font-semibold">Accept as-is</span>
-                                              : <span className="font-mono font-semibold">{suggestion.targetHead}</span>
-                                            }
+                                            ⚡ <span className="font-mono font-semibold">{suggestion.targetHead}</span>
                                           </span>
                                           <span className="text-xs text-muted-foreground font-normal">— {suggestion.reason}</span>
                                           <button
@@ -4358,7 +4351,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                             }}
                                             className="text-xs text-blue-600 hover:text-blue-800 underline font-normal"
                                           >
-                                            {suggestion.targetHead === '__accepted__' ? 'Accept' : 'Apply'}
+                                            Apply
                                           </button>
                                         </div>
                                       );
@@ -4374,13 +4367,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                       const action = getSavedAction(savedMerge);
                                       const isRedistribute = action === '__redistribute__';
                                       const isKeep = action === '__keep__';
-                                      const isAccepted = action === '__accepted__';
                                       const isMerge = action === '__merge__';
-                                      const isReassign = !isRedistribute && !isKeep && !isMerge && !isAccepted;
+                                      const isReassign = !isRedistribute && !isKeep && !isMerge;
                                       return (
-                                        <span className={`text-xs font-mono ${isAccepted ? 'text-blue-400' : 'text-green-400'}`}>
+                                        <span className="text-xs font-mono text-green-400">
                                           {isKeep && '↔ Kept as-is'}
-                                          {isAccepted && '✓ Accepted as-is'}
                                           {isMerge && `⊕ Merged — ${row.sec} 0000 ${row.head}`}
                                           {isReassign && `→ Reassigned to ${row.sec} ${action}`}
                                           {isRedistribute && '⇄ Redistributed'}
