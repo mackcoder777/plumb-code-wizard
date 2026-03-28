@@ -37,6 +37,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { roundHoursPreservingTotal } from '@/utils/budgetExportSystem';
+import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
