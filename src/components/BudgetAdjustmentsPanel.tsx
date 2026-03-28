@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import type { EstimateItem } from '@/types/estimate';
 import { toast } from '@/hooks/use-toast';
@@ -37,6 +37,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { roundHoursPreservingTotal } from '@/utils/budgetExportSystem';
+import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
@@ -555,6 +556,7 @@ const [consolidations, setConsolidations] = useState<Record<string, boolean>>({}
 const [undoingKey, setUndoingKey] = useState<string | null>(null);
 const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge');
   const lastCheckedIndexRef = useRef<number>(-1);
+  const [expandedHistoryKeys, setExpandedHistoryKeys] = useState<Set<string>>(new Set());
   
   const shiftKeyRef = useRef<boolean>(false);
   const [reassignTargets, setReassignTargets] = useState<Record<string, string>>({});
@@ -4435,7 +4437,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 })
                                 .filter((p) => p.sec === row.sec && p.head !== row.head);
                               return (
-                                <TableRow key={mergeKey} className={isSaved ? 'opacity-50' : ''}>
+                                <React.Fragment key={mergeKey}>
+                                <TableRow className={isSaved ? 'opacity-50' : ''}>
                                   <TableCell>
                                     {isSaved ? (
                                       <Checkbox checked disabled />
@@ -4590,8 +4593,76 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     })()}
                                   </TableCell>
                                 </TableRow>
+                                {/* Code History expandable detail */}
+                                {isSaved && (() => {
+                                  const savedMerge = savedMergesData?.find(m =>
+                                    (m.sec_code || '').trim() === row.sec &&
+                                    (m.cost_head || '').trim() === row.head
+                                  );
+                                  if (!savedMerge) return null;
+                                  const action = getSavedAction(savedMerge);
+                                  const actionType = action === '__redistribute__' ? 'redistribute' as const
+                                    : action === '__keep__' ? 'keep' as const
+                                    : action === '__merge__' ? 'merge' as const
+                                    : 'reassign' as const;
+
+                                  // Pre-merge source lines from adjustedLaborSummary
+                                  const premerge = calculations?.adjustedLaborSummary ?? {};
+                                  const sourceLines = Object.values(premerge)
+                                    .filter((entry: any) => {
+                                      const parts = (entry.code ?? '').trim().split(/\s+/);
+                                      const s = parts[0] ?? '';
+                                      const h = parts.slice(2).join(' ') || '';
+                                      return s === row.sec && h === row.head;
+                                    })
+                                    .map((entry: any) => ({
+                                      code: entry.code ?? '',
+                                      hours: entry.hours ?? 0,
+                                      act: (entry.code ?? '').trim().split(/\s+/)[1] ?? '0000',
+                                    }));
+
+                                  // Redistribute deltas
+                                  const redistDeltas = savedMerge.redistribute_adjustments &&
+                                    typeof savedMerge.redistribute_adjustments === 'object'
+                                    ? savedMerge.redistribute_adjustments as Record<string, number>
+                                    : null;
+
+                                  // Target entries from finalLaborSummary
+                                  const targetHead = actionType === 'reassign' ? action : row.head;
+                                  const targetEntries = Object.entries(finalLaborSummary ?? {})
+                                    .filter(([k]) => {
+                                      const parts = k.trim().split(/\s+/);
+                                      return parts[0] === row.sec && parts.slice(2).join(' ') === targetHead;
+                                    })
+                                    .map(([code, entry]) => ({ code, hours: entry.hours ?? 0 }));
+
+                                  return (
+                                    <CodeHistoryDetail
+                                      sec={row.sec}
+                                      head={row.head}
+                                      sourceLines={sourceLines}
+                                      actionType={actionType}
+                                      reassignTarget={actionType === 'reassign' ? action : null}
+                                      redistributeDeltas={redistDeltas}
+                                      targetEntries={targetEntries}
+                                      finalHours={row.combinedHours}
+                                      isOpen={expandedHistoryKeys.has(mergeKey)}
+                                      onToggle={() => {
+                                        setExpandedHistoryKeys(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(mergeKey)) next.delete(mergeKey);
+                                          else next.add(mergeKey);
+                                          return next;
+                                        });
+                                      }}
+                                      colSpan={5}
+                                    />
+                                  );
+                                })()}
+                              </React.Fragment>
                               );
                             });
+
                             })()}
                           </TableBody>
                         </Table>
