@@ -61,18 +61,18 @@ export const CodeHistoryDetail: React.FC<CodeHistoryDetailProps> = ({
 
   const totalSourceHours = sourceLines.reduce((s, l) => s + l.hours, 0);
 
-  return (
-    <TableRow className="border-0">
-      <TableCell colSpan={colSpan} className="p-0 border-0">
-        <Collapsible open={isOpen} onOpenChange={onToggle}>
-          <CollapsibleTrigger asChild>
-            <button className="w-full flex items-center gap-1.5 px-4 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
-              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              <ActionIcon className="h-3 w-3" />
-              <span>Code History</span>
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
+  const standalone = colSpan === 0;
+
+  const innerContent = (
+    <Collapsible open={isOpen} onOpenChange={onToggle}>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center gap-1.5 px-4 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
+          {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <ActionIcon className="h-3 w-3" />
+          <span>Code History</span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
             <div className="px-6 pb-3 pt-1 space-y-2 bg-muted/10 border-t border-border/30">
               {/* Source codes */}
               <div>
