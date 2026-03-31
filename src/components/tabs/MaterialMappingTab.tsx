@@ -34,6 +34,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns, getCodeFromDescription } from '@/hooks/useMaterialMappingPatterns';
 import { SmartAssignPreviewDialog } from '@/components/SmartAssignPreviewDialog';
+import { validateMaterialCodeAssignment } from '@/utils/materialCodeValidation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
