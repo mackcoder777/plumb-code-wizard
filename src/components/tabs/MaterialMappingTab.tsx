@@ -34,6 +34,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns, getCodeFromDescription } from '@/hooks/useMaterialMappingPatterns';
 import { SmartAssignPreviewDialog } from '@/components/SmartAssignPreviewDialog';
+import { validateMaterialCodeAssignment } from '@/utils/materialCodeValidation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface MaterialMappingTabProps {
   data: EstimateItem[];
@@ -92,6 +103,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     unmatched: EstimateItem[];
   } | null>(null);
   const smartAssignSavingRef = useRef(false);
+
+  // Material code mismatch validation state
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    materialSpec: string;
+    newCode: string;
+    warning: { expectedCode: string; expectedDescription: string; reason: string };
+    onConfirm: () => void;
+  } | null>(null);
+  const [mismatchFilter, setMismatchFilter] = useState(false);
 
   // Get unique systems from data
   const uniqueSystems = useMemo(() => {
@@ -361,7 +381,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   // Filter groups
   const filteredGroups = useMemo(() => {
-    return groups.map(group => {
+    const filtered = groups.map(group => {
       // If system filter is active, filter subGroups to only include those with matching items
       if (systemFilter !== 'all') {
         const filteredSubGroups = group.subGroups.map(sg => {
@@ -395,11 +415,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         
         if (filteredSubGroups.length === 0) return null;
         
-        // Recalculate group stats based on filtered items
         const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
         const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
         
-        // FIX: Recalculate parent group's assignedCode based on filtered subGroups
         const allSubCodes = new Set(
           filteredSubGroups
             .map(g => g.assignedCode)
@@ -427,7 +445,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     }).filter((group): group is MaterialGroup => {
       if (!group) return false;
       
-      // Enhanced search: match Material Spec OR Item Type names
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const specMatches = group.materialSpec.toLowerCase().includes(searchLower);
@@ -438,18 +455,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       }
       
       if (filterStatus === 'assigned' && group.assignmentStatus !== 'complete') return false;
-      // Show groups that have ANY unassigned children (not just completely unassigned groups)
       if (filterStatus === 'unassigned' && group.assignmentStatus === 'complete') return false;
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
       if (filterStatus === 'dismissed') {
-        // Only show groups that have dismissed items
         const hasDismissed = group.subGroups.some(sg => 
           sg.items.some(i => i.excludedFromMaterialBudget)
         );
         if (!hasDismissed) return false;
       }
       if (filterStatus === 'zero-value') {
-        // Only show groups with $0 value items
         const hasZeroValue = group.subGroups.some(sg => 
           sg.items.some(i => (i.materialDollars || 0) <= 0)
         );
@@ -457,12 +471,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       }
       return true;
     }).map(group => {
-      // Apply child-level filtering based on filterStatus
       if (filterStatus === 'all') return group;
       
       const filteredSubGroups = group.subGroups.filter(sg => {
         if (filterStatus === 'assigned') return sg.isFullyAssigned;
-        // Show subgroups that have ANY unassigned items (not just completely unassigned)
         if (filterStatus === 'unassigned') return !sg.isFullyAssigned;
         if (filterStatus === 'needs-attention') return !sg.isFullyAssigned;
         if (filterStatus === 'dismissed') {
@@ -474,19 +486,16 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         return true;
       });
       
-      // If no subgroups match, still return group but with filtered subgroups
       return {
         ...group,
         subGroups: filteredSubGroups
       };
     }).map(group => {
-      // Apply Item Type filter if active
       if (itemTypeFilter === 'all') return group;
       
       const filteredSubGroups = group.subGroups.filter(sg => sg.itemType === itemTypeFilter);
       if (filteredSubGroups.length === 0) return null;
       
-      // Recalculate group stats
       const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
       const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
       
@@ -497,7 +506,18 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         totalMaterial: filteredTotalMaterial
       };
     }).filter((group): group is MaterialGroup => group !== null);
-  }, [groups, searchTerm, filterStatus, systemFilter, itemTypeFilter]);
+
+    // Apply mismatch filter if active
+    if (mismatchFilter) {
+      return filtered.filter(g => {
+        return g.subGroups.some(sg => {
+          if (!sg.assignedCode || sg.assignedCode === 'MIXED') return false;
+          return validateMaterialCodeAssignment(g.materialSpec, sg.assignedCode) !== null;
+        });
+      });
+    }
+    return filtered;
+  }, [groups, searchTerm, filterStatus, systemFilter, itemTypeFilter, mismatchFilter]);
 
   // Groups needing attention (exclude $0 value and dismissed items)
   const groupsNeedingAttention = useMemo(() => {
@@ -676,6 +696,28 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       });
     }
   }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes, batchLearnPatterns]);
+
+  // Validation wrapper for code assignment — shows confirmation dialog on mismatch
+  const handleAssignCodeWithValidation = useCallback((
+    groupKey: string,
+    code: string,
+    materialSpec: string
+  ) => {
+    const warning = validateMaterialCodeAssignment(materialSpec, code);
+    if (warning) {
+      setPendingAssignment({
+        materialSpec,
+        newCode: code,
+        warning,
+        onConfirm: () => {
+          handleAssignCode(groupKey, code);
+          setPendingAssignment(null);
+        },
+      });
+    } else {
+      handleAssignCode(groupKey, code);
+    }
+  }, [handleAssignCode]);
 
   // Dismiss items from material budget (for $0 value groups)
   const handleDismissGroup = useCallback(async (groupKey: string, dismissed: boolean = true) => {
@@ -1517,6 +1559,18 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                   </SelectContent>
                 </Select>
               </div>
+              {/* Mismatch filter toggle */}
+              <button
+                onClick={() => setMismatchFilter(!mismatchFilter)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm border transition-colors ${
+                  mismatchFilter
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                    : 'border-border text-muted-foreground hover:border-amber-500/50'
+                }`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Mismatched
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -1632,7 +1686,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                         <PopoverContent className="w-80 p-0" align="start">
                           <CodePicker 
                             groupKey={group.materialSpec} 
-                            onSelect={(code) => handleAssignCode(group.materialSpec, code)} 
+                            onSelect={(code) => handleAssignCodeWithValidation(group.materialSpec, code, group.materialSpec)} 
                           />
                         </PopoverContent>
                       </Popover>
@@ -1769,17 +1823,40 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                         const selectedInGroup = groupItemIds.filter(id => selectedItems.has(id));
                                         
                                         if (selectedInGroup.length > 0) {
-                                          // Update only selected items
                                           handleItemLevelAssign(code);
                                         } else {
-                                          // No items selected, update entire group
-                                          handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code);
+                                          handleAssignCodeWithValidation(`${group.materialSpec}|${typeGroup.itemType}`, code, group.materialSpec);
                                         }
                                       }} 
                                     />
                                   </PopoverContent>
                                 </Popover>
                               )}
+                              {/* Mismatch warning badge */}
+                              {(() => {
+                                const assignedCode = typeGroup.assignedCode;
+                                if (!assignedCode || assignedCode === 'MIXED') return null;
+                                const warning = validateMaterialCodeAssignment(group.materialSpec, assignedCode);
+                                if (!warning) return null;
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 cursor-help">
+                                          <AlertTriangle className="h-3 w-3 mr-1" />
+                                          Mismatch
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <p className="text-xs font-semibold mb-1">{warning.reason}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Click the code selector to reassign to {warning.expectedCode} ({warning.expectedDescription})
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })()}
                               {/* Show N/A badge for $0 items */}
                               {typeGroup.totalMaterial <= 0 && (
                                 <Badge variant="outline" className="text-muted-foreground border-muted bg-muted/30">
@@ -2130,6 +2207,39 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         isSaving={isSaving}
         materialCodes={allMaterialCodes}
       />
+      {/* Material Code Mismatch Confirmation Dialog */}
+      <AlertDialog open={!!pendingAssignment} onOpenChange={(open) => { if (!open) setPendingAssignment(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Possible Code Mismatch
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>{pendingAssignment?.warning.reason}</p>
+                <p>
+                  Are you sure you want to assign <strong>{pendingAssignment?.newCode}</strong> instead of{' '}
+                  <strong className="text-amber-600">
+                    {pendingAssignment?.warning.expectedCode} (
+                    {pendingAssignment?.warning.expectedDescription})
+                  </strong>
+                  ?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel — Use {pendingAssignment?.warning.expectedCode}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingAssignment?.onConfirm()}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Assign {pendingAssignment?.newCode} Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
