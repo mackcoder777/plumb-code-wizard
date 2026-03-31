@@ -1686,7 +1686,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                         <PopoverContent className="w-80 p-0" align="start">
                           <CodePicker 
                             groupKey={group.materialSpec} 
-                            onSelect={(code) => handleAssignCode(group.materialSpec, code)} 
+                            onSelect={(code) => handleAssignCodeWithValidation(group.materialSpec, code, group.materialSpec)} 
                           />
                         </PopoverContent>
                       </Popover>
