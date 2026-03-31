@@ -381,7 +381,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
 
   // Filter groups
   const filteredGroups = useMemo(() => {
-    return groups.map(group => {
+    const filtered = groups.map(group => {
       // If system filter is active, filter subGroups to only include those with matching items
       if (systemFilter !== 'all') {
         const filteredSubGroups = group.subGroups.map(sg => {
@@ -415,11 +415,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         
         if (filteredSubGroups.length === 0) return null;
         
-        // Recalculate group stats based on filtered items
         const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
         const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
         
-        // FIX: Recalculate parent group's assignedCode based on filtered subGroups
         const allSubCodes = new Set(
           filteredSubGroups
             .map(g => g.assignedCode)
@@ -447,7 +445,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     }).filter((group): group is MaterialGroup => {
       if (!group) return false;
       
-      // Enhanced search: match Material Spec OR Item Type names
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const specMatches = group.materialSpec.toLowerCase().includes(searchLower);
@@ -458,18 +455,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       }
       
       if (filterStatus === 'assigned' && group.assignmentStatus !== 'complete') return false;
-      // Show groups that have ANY unassigned children (not just completely unassigned groups)
       if (filterStatus === 'unassigned' && group.assignmentStatus === 'complete') return false;
       if (filterStatus === 'needs-attention' && !group.hasUnassignedChildren) return false;
       if (filterStatus === 'dismissed') {
-        // Only show groups that have dismissed items
         const hasDismissed = group.subGroups.some(sg => 
           sg.items.some(i => i.excludedFromMaterialBudget)
         );
         if (!hasDismissed) return false;
       }
       if (filterStatus === 'zero-value') {
-        // Only show groups with $0 value items
         const hasZeroValue = group.subGroups.some(sg => 
           sg.items.some(i => (i.materialDollars || 0) <= 0)
         );
@@ -477,12 +471,10 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       }
       return true;
     }).map(group => {
-      // Apply child-level filtering based on filterStatus
       if (filterStatus === 'all') return group;
       
       const filteredSubGroups = group.subGroups.filter(sg => {
         if (filterStatus === 'assigned') return sg.isFullyAssigned;
-        // Show subgroups that have ANY unassigned items (not just completely unassigned)
         if (filterStatus === 'unassigned') return !sg.isFullyAssigned;
         if (filterStatus === 'needs-attention') return !sg.isFullyAssigned;
         if (filterStatus === 'dismissed') {
@@ -494,19 +486,16 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         return true;
       });
       
-      // If no subgroups match, still return group but with filtered subgroups
       return {
         ...group,
         subGroups: filteredSubGroups
       };
     }).map(group => {
-      // Apply Item Type filter if active
       if (itemTypeFilter === 'all') return group;
       
       const filteredSubGroups = group.subGroups.filter(sg => sg.itemType === itemTypeFilter);
       if (filteredSubGroups.length === 0) return null;
       
-      // Recalculate group stats
       const filteredItemCount = filteredSubGroups.reduce((sum, sg) => sum + sg.items.length, 0);
       const filteredTotalMaterial = filteredSubGroups.reduce((sum, sg) => sg.totalMaterial + sum, 0);
       
@@ -521,7 +510,6 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     // Apply mismatch filter if active
     if (mismatchFilter) {
       return filtered.filter(g => {
-        // Check if any assigned subgroup has a mismatch warning
         return g.subGroups.some(sg => {
           if (!sg.assignedCode || sg.assignedCode === 'MIXED') return false;
           return validateMaterialCodeAssignment(g.materialSpec, sg.assignedCode) !== null;
