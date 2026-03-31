@@ -2207,6 +2207,39 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         isSaving={isSaving}
         materialCodes={allMaterialCodes}
       />
+      {/* Material Code Mismatch Confirmation Dialog */}
+      <AlertDialog open={!!pendingAssignment} onOpenChange={(open) => { if (!open) setPendingAssignment(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Possible Code Mismatch
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>{pendingAssignment?.warning.reason}</p>
+                <p>
+                  Are you sure you want to assign <strong>{pendingAssignment?.newCode}</strong> instead of{' '}
+                  <strong className="text-amber-600">
+                    {pendingAssignment?.warning.expectedCode} (
+                    {pendingAssignment?.warning.expectedDescription})
+                  </strong>
+                  ?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel — Use {pendingAssignment?.warning.expectedCode}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingAssignment?.onConfirm()}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Assign {pendingAssignment?.newCode} Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
