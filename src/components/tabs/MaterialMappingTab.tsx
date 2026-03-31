@@ -104,6 +104,15 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
   } | null>(null);
   const smartAssignSavingRef = useRef(false);
 
+  // Material code mismatch validation state
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    materialSpec: string;
+    newCode: string;
+    warning: { expectedCode: string; expectedDescription: string; reason: string };
+    onConfirm: () => void;
+  } | null>(null);
+  const [mismatchFilter, setMismatchFilter] = useState(false);
+
   // Get unique systems from data
   const uniqueSystems = useMemo(() => {
     const systems = new Set<string>();
