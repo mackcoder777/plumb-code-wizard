@@ -697,6 +697,28 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     }
   }, [groups, data, onDataUpdate, projectId, batchUpdateMaterialCodes, batchLearnPatterns]);
 
+  // Validation wrapper for code assignment — shows confirmation dialog on mismatch
+  const handleAssignCodeWithValidation = useCallback((
+    groupKey: string,
+    code: string,
+    materialSpec: string
+  ) => {
+    const warning = validateMaterialCodeAssignment(materialSpec, code);
+    if (warning) {
+      setPendingAssignment({
+        materialSpec,
+        newCode: code,
+        warning,
+        onConfirm: () => {
+          handleAssignCode(groupKey, code);
+          setPendingAssignment(null);
+        },
+      });
+    } else {
+      handleAssignCode(groupKey, code);
+    }
+  }, [handleAssignCode]);
+
   // Dismiss items from material budget (for $0 value groups)
   const handleDismissGroup = useCallback(async (groupKey: string, dismissed: boolean = true) => {
     const [spec, type] = groupKey.split('|');
