@@ -1832,6 +1832,31 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                   </PopoverContent>
                                 </Popover>
                               )}
+                              {/* Mismatch warning badge */}
+                              {(() => {
+                                const assignedCode = typeGroup.assignedCode;
+                                if (!assignedCode || assignedCode === 'MIXED') return null;
+                                const warning = validateMaterialCodeAssignment(group.materialSpec, assignedCode);
+                                if (!warning) return null;
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 cursor-help">
+                                          <AlertTriangle className="h-3 w-3 mr-1" />
+                                          Mismatch
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs">
+                                        <p className="text-xs font-semibold mb-1">{warning.reason}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Click the code selector to reassign to {warning.expectedCode} ({warning.expectedDescription})
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })()}
                               {/* Show N/A badge for $0 items */}
                               {typeGroup.totalMaterial <= 0 && (
                                 <Badge variant="outline" className="text-muted-foreground border-muted bg-muted/30">
