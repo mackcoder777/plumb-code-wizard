@@ -1823,11 +1823,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                         const selectedInGroup = groupItemIds.filter(id => selectedItems.has(id));
                                         
                                         if (selectedInGroup.length > 0) {
-                                          // Update only selected items
                                           handleItemLevelAssign(code);
                                         } else {
-                                          // No items selected, update entire group
-                                          handleAssignCode(`${group.materialSpec}|${typeGroup.itemType}`, code);
+                                          handleAssignCodeWithValidation(`${group.materialSpec}|${typeGroup.itemType}`, code, group.materialSpec);
                                         }
                                       }} 
                                     />
