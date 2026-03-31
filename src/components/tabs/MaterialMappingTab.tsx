@@ -1559,6 +1559,18 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                   </SelectContent>
                 </Select>
               </div>
+              {/* Mismatch filter toggle */}
+              <button
+                onClick={() => setMismatchFilter(!mismatchFilter)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm border transition-colors ${
+                  mismatchFilter
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                    : 'border-border text-muted-foreground hover:border-amber-500/50'
+                }`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Mismatched
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
