@@ -1325,24 +1325,26 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
     };
     
     return (
-      <Command className="rounded-lg border shadow-md">
-        <CommandInput placeholder="Search material codes..." />
-        <CommandList>
-          <CommandEmpty>No codes found.</CommandEmpty>
-          <CommandGroup>
-            {allMaterialCodes.map(code => (
-              <CommandItem
-                key={code.code}
-                value={`${code.code} ${code.description}`}
-                onSelect={() => onSelect(code.code)}
-                className="cursor-pointer"
-              >
-                <span className="font-mono font-semibold">{code.code}</span>
-                <span className="ml-2 opacity-70 truncate">{code.description}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
+      <div>
+        <Command className="rounded-lg border shadow-md">
+          <CommandInput placeholder="Search material codes..." />
+          <CommandList>
+            <CommandEmpty>No codes found.</CommandEmpty>
+            <CommandGroup>
+              {allMaterialCodes.map(code => (
+                <CommandItem
+                  key={code.code}
+                  value={`${code.code} ${code.description}`}
+                  onSelect={() => onSelect(code.code)}
+                  className="cursor-pointer"
+                >
+                  <span className="font-mono font-semibold">{code.code}</span>
+                  <span className="ml-2 opacity-70 truncate">{code.description}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
         <div className="border-t p-3">
           <div className="text-xs text-muted-foreground mb-2 text-center">
             Or enter code manually
@@ -1354,6 +1356,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
               onChange={(e) => setManualCode(e.target.value.toUpperCase())}
               className="h-8 text-sm font-mono"
               onKeyDown={(e) => {
+                e.stopPropagation();
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   handleManualApply();
@@ -1369,7 +1372,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
             </Button>
           </div>
         </div>
-      </Command>
+      </div>
     );
   };
 
@@ -1914,6 +1917,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                       <Input
                                         placeholder="Search items..."
                                         value={getSearchForGroup(groupKey)}
+                                        onKeyDown={(e) => e.stopPropagation()}
                                         onChange={(e) => {
                                           setExpandedItemSearch(prev => ({ ...prev, [groupKey]: e.target.value }));
                                           setExpandedItemPages(prev => ({ ...prev, [groupKey]: 1 }));
