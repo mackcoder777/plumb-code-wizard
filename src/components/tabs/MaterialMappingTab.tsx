@@ -517,7 +517,19 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         totalMaterial: filteredTotalMaterial
       };
     }).filter((group): group is MaterialGroup => group !== null);
-  }, [groups, searchTerm, filterStatus, systemFilter, itemTypeFilter]);
+
+    // Apply mismatch filter if active
+    if (mismatchFilter) {
+      return filtered.filter(g => {
+        // Check if any assigned subgroup has a mismatch warning
+        return g.subGroups.some(sg => {
+          if (!sg.assignedCode || sg.assignedCode === 'MIXED') return false;
+          return validateMaterialCodeAssignment(g.materialSpec, sg.assignedCode) !== null;
+        });
+      });
+    }
+    return filtered;
+  }, [groups, searchTerm, filterStatus, systemFilter, itemTypeFilter, mismatchFilter]);
 
   // Groups needing attention (exclude $0 value and dismissed items)
   const groupsNeedingAttention = useMemo(() => {
