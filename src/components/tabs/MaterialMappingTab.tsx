@@ -1917,6 +1917,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
                                       <Input
                                         placeholder="Search items..."
                                         value={getSearchForGroup(groupKey)}
+                                        onKeyDown={(e) => e.stopPropagation()}
                                         onChange={(e) => {
                                           setExpandedItemSearch(prev => ({ ...prev, [groupKey]: e.target.value }));
                                           setExpandedItemPages(prev => ({ ...prev, [groupKey]: 1 }));
