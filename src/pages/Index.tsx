@@ -835,7 +835,7 @@ const EnhancedCostCodeManager = () => {
     if (savedItems.length > 0 && currentProject?.id) {
       // GUARD: If project likely has floor mappings but they haven't loaded yet, wait
       // We check if dbFloorMappings is still empty — the query may not have resolved yet
-      const floorMappingsLoaded = dbFloorMappings.length > 0;
+      const floorMappingsLoaded = floorMappingsFetched;
       const hasFloorsInData = savedItems.some(i => i.floor && i.floor.trim());
       if (hasFloorsInData && !floorMappingsLoaded) {
         // Floor data exists but mappings haven't loaded — skip this cycle, will re-run when they load
