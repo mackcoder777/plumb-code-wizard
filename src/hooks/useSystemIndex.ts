@@ -4,6 +4,7 @@ import { EstimateItem } from '@/types/estimate';
 export interface SystemIndexEntry {
   system: string;
   itemCount: number;
+  totalHours: number;
   previewItems: Array<{
     id: string;
     system?: string | null;
@@ -27,6 +28,7 @@ function buildIndexSync(data: EstimateItem[]): { systemIndex: SystemIndexEntry[]
   const startTime = performance.now();
   const systemMap = new Map<string, {
     count: number;
+    totalHours: number;
     previewItems: typeof data;
     itemTypeCounts: Map<string, number>;
   }>();
@@ -34,10 +36,11 @@ function buildIndexSync(data: EstimateItem[]): { systemIndex: SystemIndexEntry[]
   for (const item of data) {
     const systemKey = item.system || 'Unknown';
     if (!systemMap.has(systemKey)) {
-      systemMap.set(systemKey, { count: 0, previewItems: [], itemTypeCounts: new Map() });
+      systemMap.set(systemKey, { count: 0, totalHours: 0, previewItems: [], itemTypeCounts: new Map() });
     }
     const entry = systemMap.get(systemKey)!;
     entry.count++;
+    entry.totalHours += item.hours || 0;
     if (entry.previewItems.length < 5) {
       entry.previewItems.push(item);
     }
@@ -49,6 +52,7 @@ function buildIndexSync(data: EstimateItem[]): { systemIndex: SystemIndexEntry[]
     .map(([system, entry]) => ({
       system,
       itemCount: entry.count,
+      totalHours: entry.totalHours,
       previewItems: entry.previewItems.map(item => ({
         id: String(item.id),
         system: item.system ?? undefined,

@@ -266,6 +266,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return systemIndex.map(entry => ({
       system: entry.system,
       itemCount: entry.itemCount,
+      totalHours: entry.totalHours,
       laborCode: mappings[normalizeSystemKey(entry.system)]?.laborCode,
       suggestedLaborCode: suggestions[normalizeSystemKey(entry.system)]?.laborCode,
       appliedInfo: appliedSystems[normalizeSystemKey(entry.system)],
@@ -327,6 +328,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return systemMappings.map(sm => ({
       system: sm.system,
       itemCount: sm.itemCount,
+      totalHours: sm.totalHours,
       status: sm.laborCode ? 'mapped' as const : 'unmapped' as const,
     }));
   }, [systemMappings]);
@@ -1269,6 +1271,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                     <SystemCard
                                       system={sm.system}
                                       itemCount={sm.itemCount}
+                                      totalHours={sm.totalHours}
                                       laborCode={sm.laborCode}
                                       suggestedLaborCode={sm.suggestedLaborCode}
                                       appliedInfo={sm.appliedInfo}

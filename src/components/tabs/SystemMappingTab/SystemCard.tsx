@@ -16,6 +16,7 @@ import { EstimateItem } from '@/types/estimate';
 interface SystemCardProps {
   system: string;
   itemCount: number;
+  totalHours?: number;
   laborCode?: string;
   suggestedLaborCode?: string;
   appliedInfo?: { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean };
@@ -42,6 +43,7 @@ interface SystemCardProps {
 const SystemCardComponent: React.FC<SystemCardProps> = ({
   system,
   itemCount,
+  totalHours,
   laborCode,
   suggestedLaborCode,
   appliedInfo,
@@ -244,7 +246,7 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
             {getStatusIcon()}
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg truncate">{system}</h3>
-              <p className="text-sm text-muted-foreground">{itemCount.toLocaleString()} items</p>
+              <p className="text-sm text-muted-foreground">{itemCount.toLocaleString()} items{totalHours ? ` • ${totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })}h` : ''}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -571,6 +573,7 @@ export const SystemCard = memo(SystemCardComponent, (prevProps, nextProps) => {
   return (
     prevProps.system === nextProps.system &&
     prevProps.itemCount === nextProps.itemCount &&
+    prevProps.totalHours === nextProps.totalHours &&
     prevProps.laborCode === nextProps.laborCode &&
     prevProps.suggestedLaborCode === nextProps.suggestedLaborCode &&
     prevProps.appliedInfo?.appliedAt === nextProps.appliedInfo?.appliedAt &&
