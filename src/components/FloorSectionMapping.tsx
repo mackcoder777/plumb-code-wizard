@@ -1003,6 +1003,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                     <SectionCodeInput
                       value={buildingSection}
                       onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
+                      onAddCustomCode={handleAddCustomCode}
                       customCodes={customCodes}
                       className="h-8"
                     />
