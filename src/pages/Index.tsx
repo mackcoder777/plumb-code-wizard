@@ -843,7 +843,7 @@ const EnhancedCostCodeManager = () => {
         return;
       }
 
-      const systemMappingsLoaded = savedMappings.length > 0;
+      const systemMappingsLoaded = mappingsFetched;
       const hasSystemsInData = savedItems.some(i => i.system && i.system.trim());
       if (hasSystemsInData && !systemMappingsLoaded) {
         console.log('[Load] Deferring: system mappings not yet loaded');
