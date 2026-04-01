@@ -343,6 +343,7 @@ export type Database = {
         Row: {
           activity_code: string
           created_at: string | null
+          description: string | null
           floor_pattern: string
           id: string
           project_id: string
@@ -352,6 +353,7 @@ export type Database = {
         Insert: {
           activity_code?: string
           created_at?: string | null
+          description?: string | null
           floor_pattern: string
           id?: string
           project_id: string
@@ -361,6 +363,7 @@ export type Database = {
         Update: {
           activity_code?: string
           created_at?: string | null
+          description?: string | null
           floor_pattern?: string
           id?: string
           project_id?: string
