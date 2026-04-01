@@ -501,14 +501,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const suggestion = suggestions[systemKey];
     if (!suggestion) return;
 
-    startTransition(() => {
-      setMappings(prev => ({
-        ...prev,
-        [systemKey]: {
-          laborCode: suggestion.laborCode || prev[systemKey]?.laborCode,
-        }
-      }));
-    });
+    setMappings(prev => ({
+      ...prev,
+      [systemKey]: {
+        laborCode: suggestion.laborCode || prev[systemKey]?.laborCode,
+      }
+    }));
 
     toast({
       title: "Suggestion Applied",
