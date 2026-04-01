@@ -393,13 +393,24 @@ export function MaterialDescSection({
   }, []);
 
   const handleBulkAssign = useCallback(async (code: string) => {
-    for (const desc of selectedDescs) {
-      if (code === '__CATEGORY__') {
-        if (overrideMap.has(desc)) await onDelete(desc);
-      } else {
-        await onSave(desc, code);
-      }
-    }
+    const descs = Array.from(selectedDescs);
+    const total = descs.length;
+    let completed = 0;
+    setBulkProgress({ active: true, completed: 0, total });
+
+    await Promise.all(
+      descs.map(async (desc) => {
+        if (code === '__CATEGORY__') {
+          if (overrideMap.has(desc)) await onDelete(desc);
+        } else {
+          await onSave(desc, code);
+        }
+        completed += 1;
+        setBulkProgress({ active: true, completed, total });
+      })
+    );
+
+    setBulkProgress({ active: false, completed: 0, total: 0 });
     setSelectedDescs(new Set());
   }, [selectedDescs, overrideMap, onSave, onDelete]);
 
