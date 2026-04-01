@@ -810,12 +810,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemKey = normalizeSystemKey(system);
     
     // Update local state
-    startTransition(() => {
-      setMappings(prev => ({
-        ...prev,
-        [systemKey]: { laborCode },
-      }));
-    });
+    setMappings(prev => ({
+      ...prev,
+      [systemKey]: { laborCode },
+    }));
     
     // Auto-save to database
     if (projectId) {
