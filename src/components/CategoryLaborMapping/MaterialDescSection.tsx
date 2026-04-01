@@ -447,14 +447,22 @@ export function MaterialDescSection({
 
         {selectedDescs.size > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-primary">
-              {selectedDescs.size} selected:
-            </span>
-            <BulkCombobox
-              categoryLaborCode={categoryLaborCode}
-              laborCodes={laborCodes}
-              onAssign={handleBulkAssign}
-            />
+            {bulkProgress.active ? (
+              <span className="text-xs font-medium text-primary animate-pulse">
+                Saving {bulkProgress.completed} of {bulkProgress.total}…
+              </span>
+            ) : (
+              <>
+                <span className="text-xs font-medium text-primary">
+                  {selectedDescs.size} selected:
+                </span>
+                <BulkCombobox
+                  categoryLaborCode={categoryLaborCode}
+                  laborCodes={laborCodes}
+                  onAssign={handleBulkAssign}
+                />
+              </>
+            )}
           </div>
         )}
       </div>

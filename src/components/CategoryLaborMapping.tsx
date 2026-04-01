@@ -373,42 +373,73 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                           </div>
                           
                           <div className="flex-shrink-0 w-64">
-                            <Select
-                              value={currentCode || 'none'}
-                              onValueChange={(value) => handleMappingChange(cat.category, value)}
+                            <Popover
+                              open={comboOpenMap[cat.category] || false}
+                              onOpenChange={(open) => setComboOpenMap(prev => ({ ...prev, [cat.category]: open }))}
                             >
-                            <SelectTrigger className={cn(
-                                "h-9 bg-background text-foreground [&>span]:text-foreground [&_span]:text-foreground",
-                                isMapped && "border-primary/50",
-                                usesSystem && "border-muted-foreground/50"
-                              )}>
-                <SelectValue placeholder="Select labor code...">
-                  {currentCode && currentCode !== 'none'
-                    ? (currentCode === '__SYSTEM__'
-                        ? <span className="flex items-center gap-2"><Link2 className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground font-medium">Use System Mapping</span></span>
-                        : <span className="font-mono text-foreground">{currentCode}</span>)
-                    : undefined}
-                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">
-                                  <span className="text-muted-foreground">No mapping (unset)</span>
-                                </SelectItem>
-                                <SelectItem value={SYSTEM_MAPPING_VALUE}>
-                                  <span className="flex items-center gap-2">
-                                    <Link2 className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-muted-foreground font-medium">Use System Mapping</span>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  className={cn(
+                                    "w-full justify-between h-9 text-sm font-normal",
+                                    isMapped && "border-primary/50",
+                                    usesSystem && "border-muted-foreground/50"
+                                  )}
+                                >
+                                  <span className="truncate">
+                                    {!currentCode || currentCode === 'none'
+                                      ? 'Inherit System (default)'
+                                      : currentCode === '__SYSTEM__'
+                                        ? 'Use System Mapping'
+                                        : `${currentCode} — ${laborCodes.find(c => c.code === currentCode)?.description || ''}`}
                                   </span>
-                                </SelectItem>
-                                <SelectSeparator />
-                                {laborCodes.map((code) => (
-                                  <SelectItem key={code.id} value={code.code}>
-                                    <span className="font-mono text-foreground">{code.code}</span>
-                                    <span className="ml-2 text-muted-foreground">- {code.description}</span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[350px] p-0 z-50" align="end">
+                                <Command>
+                                  <CommandInput placeholder="Search labor codes..." />
+                                  <CommandList className="max-h-[300px]">
+                                    <CommandEmpty>No codes found</CommandEmpty>
+                                    <CommandGroup>
+                                      <CommandItem
+                                        value="inherit system default none"
+                                        onSelect={() => { handleMappingChange(cat.category, 'none'); setComboOpenMap(prev => ({ ...prev, [cat.category]: false })); }}
+                                        className="text-sm"
+                                      >
+                                        <Check className={cn("mr-2 h-3 w-3", (!currentCode || currentCode === 'none') ? "opacity-100" : "opacity-0")} />
+                                        Inherit System (default)
+                                      </CommandItem>
+                                      <CommandItem
+                                        value="use system mapping explicit"
+                                        onSelect={() => { handleMappingChange(cat.category, SYSTEM_MAPPING_VALUE); setComboOpenMap(prev => ({ ...prev, [cat.category]: false })); }}
+                                        className="text-sm"
+                                      >
+                                        <Check className={cn("mr-2 h-3 w-3", usesSystem ? "opacity-100" : "opacity-0")} />
+                                        <Link2 className="h-3 w-3 mr-1 text-muted-foreground" />
+                                        Use System Mapping
+                                      </CommandItem>
+                                    </CommandGroup>
+                                    <CommandSeparator />
+                                    <CommandGroup heading="Labor Codes">
+                                      {laborCodes.map((code) => (
+                                        <CommandItem
+                                          key={code.id}
+                                          value={`${code.code} ${code.description}`}
+                                          onSelect={() => { handleMappingChange(cat.category, code.code); setComboOpenMap(prev => ({ ...prev, [cat.category]: false })); }}
+                                          className="text-xs"
+                                        >
+                                          <Check className={cn("mr-2 h-3 w-3", currentCode === code.code ? "opacity-100" : "opacity-0")} />
+                                          <span className="font-mono mr-2">{code.code}</span>
+                                          <span className="truncate text-muted-foreground">{code.description}</span>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
                           </div>
                         </div>
                         
