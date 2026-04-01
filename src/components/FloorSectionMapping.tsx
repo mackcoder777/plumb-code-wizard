@@ -95,7 +95,9 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, on
 
   const handleAddCustom = () => {
     if (customCode.trim().length >= 1 && customCode.trim().length <= 3) {
-      onChange(customCode.trim().toUpperCase());
+      const code = customCode.trim().toUpperCase();
+      onAddCustomCode?.(code, customLabel.trim() || 'Custom');
+      onChange(code);
       setCustomCode('');
       setCustomLabel('');
       setIsAddingCustom(false);
