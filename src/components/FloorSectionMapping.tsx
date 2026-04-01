@@ -638,6 +638,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   }, [estimateData]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleAddCustomCode = useCallback((code: string, label: string) => {
+    setCustomDescriptions(prev => ({ ...prev, [code]: label }));
+  }, []);
+
   const handleSectionChangeForFloors = useCallback((childFloors: string[], sectionCode: string) => {
     setLocalMappings(prev => {
       const next = { ...prev };
