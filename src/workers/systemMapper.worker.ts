@@ -39,6 +39,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
     // Build system map with counts and preview items
     const systemMap = new Map<string, {
       count: number;
+      totalHours: number;
       previewItems: EstimateItemMinimal[];
       itemTypeCounts: Map<string, number>;
     }>();
@@ -50,6 +51,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       if (!systemMap.has(systemKey)) {
         systemMap.set(systemKey, {
           count: 0,
+          totalHours: 0,
           previewItems: [],
           itemTypeCounts: new Map(),
         });
@@ -57,6 +59,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       
       const entry = systemMap.get(systemKey)!;
       entry.count++;
+      entry.totalHours += item.hours || 0;
       
       // Store only first 5 items as preview
       if (entry.previewItems.length < 5) {
