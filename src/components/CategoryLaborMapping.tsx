@@ -206,6 +206,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
       return;
     }
     
+    setHasInteracted(true);
     if (laborCode === 'none') {
       // Delete mapping
       deleteMappingMutation.mutate(
