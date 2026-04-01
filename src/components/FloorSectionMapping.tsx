@@ -66,7 +66,7 @@ interface SectionCodeInputProps {
   className?: string;
 }
 
-const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, customCodes, className }) => {
+const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, onAddCustomCode, customCodes, className }) => {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
