@@ -19,7 +19,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers, ChevronsUpDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers, ChevronsUpDown, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { TableRowCombobox } from '@/components/tabs/SystemMappingTab/TableRowCombobox';
 import { MaterialDescSection } from '@/components/CategoryLaborMapping/MaterialDescSection';
@@ -111,6 +111,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   const [isOpen, setIsOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [comboOpenMap, setComboOpenMap] = useState<Record<string, boolean>>({});
+  const [hasInteracted, setHasInteracted] = useState(false);
   
   // Get category index from estimate data
   const categoryIndex = useCategoryIndex(data);
@@ -205,6 +206,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
       return;
     }
     
+    setHasInteracted(true);
     if (laborCode === 'none') {
       // Delete mapping
       deleteMappingMutation.mutate(
@@ -279,7 +281,24 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
               )}
               <Tag className="h-5 w-5 text-primary" />
               <div>
-                <h3 className="font-semibold">Category Labor Mapping</h3>
+                <div className="flex items-center">
+                  <h3 className="font-semibold">Category Labor Mapping</h3>
+                  {hasInteracted && (
+                    <span className="flex items-center gap-1 text-xs ml-3">
+                      {(saveMappingMutation.isPending || deleteMappingMutation.isPending) ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                          <span className="text-muted-foreground">Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-3 w-3 text-green-500" />
+                          <span className="text-green-600 dark:text-green-400">All changes saved</span>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   Assign labor codes by Report Category (takes priority over System mapping)
                 </p>
