@@ -1065,6 +1065,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 zoneBreakdown={floorZoneBreakdown[floor]}
                 onSectionChange={handleSectionChangeForFloors}
                 onActivityChange={handleActivityChangeForFloor}
+                onAddCustomCode={handleAddCustomCode}
                 gridCols={gridCols}
                 customCodes={customCodes}
                 buildingMappings={buildingMappings}
