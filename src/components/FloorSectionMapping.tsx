@@ -760,7 +760,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     } catch {
       toast({ title: "Save Failed", description: "Failed to save floor mappings. Please try again.", variant: "destructive" });
     }
-  }, [projectId, localMappings, localActivityMappings, batchSave]);
+  }, [projectId, localMappings, localActivityMappings, customDescriptions, batchSave]);
 
   const handleApplySectionCodes = useCallback(() => {
     if (onApplySectionCodes) {
