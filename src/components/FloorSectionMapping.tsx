@@ -333,6 +333,7 @@ interface StandaloneFloorRowProps {
   zoneBreakdown: Record<string, number> | undefined;
   onSectionChange: (floors: string[], section: string) => void;
   onActivityChange: (floor: string, activity: string) => void;
+  onAddCustomCode?: (code: string, label: string) => void;
   gridCols: string;
   customCodes: Array<{ value: string; label: string }>;
   buildingMappings?: BuildingSectionMapping[];
