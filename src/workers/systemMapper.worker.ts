@@ -14,6 +14,7 @@ interface EstimateItemMinimal {
 interface SystemIndexEntry {
   system: string;
   itemCount: number;
+  totalHours: number;
   previewItems: EstimateItemMinimal[];
   itemTypeCounts: Record<string, number>;
 }
