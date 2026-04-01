@@ -1135,7 +1135,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             <span className="font-medium text-sm">{sm.system}</span>
                           </div>
                           <Badge variant="secondary" className="text-xs">
-                            {sm.itemCount} items
+                            {sm.itemCount} items • {(sm.totalHours || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}h
                           </Badge>
                         </div>
                       ))}
