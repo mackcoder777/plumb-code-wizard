@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, startTransition } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
@@ -421,14 +421,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemCount = systemsToUpdate.length;
     
     // Update local state
-    startTransition(() => {
-      setMappings(prev => {
-        const next = { ...prev };
-        systemsToUpdate.forEach(systemKey => {
-          next[systemKey] = { laborCode };
-        });
-        return next;
+    setMappings(prev => {
+      const next = { ...prev };
+      systemsToUpdate.forEach(systemKey => {
+        next[systemKey] = { laborCode };
       });
+      return next;
     });
 
     // Persist to database
@@ -464,18 +462,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [selectedSystems, projectId, batchSaveMappings, batchRecordMappingPatterns]);
 
   const handleItemTypeMappingChange = useCallback((system: string, itemType: string, type: 'laborCode', value: string) => {
-    startTransition(() => {
-      setItemTypeMappings(prev => ({
-        ...prev,
-        [system]: {
-          ...prev[system],
-          [itemType]: {
-            ...prev[system]?.[itemType],
-            [type]: value === 'none' ? undefined : value,
-          }
+    setItemTypeMappings(prev => ({
+      ...prev,
+      [system]: {
+        ...prev[system],
+        [itemType]: {
+          ...prev[system]?.[itemType],
+          [type]: value === 'none' ? undefined : value,
         }
-      }));
-    });
+      }
+    }));
   }, []);
 
   const handleAutoSuggest = useCallback(() => {
@@ -505,14 +501,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const suggestion = suggestions[systemKey];
     if (!suggestion) return;
 
-    startTransition(() => {
-      setMappings(prev => ({
-        ...prev,
-        [systemKey]: {
-          laborCode: suggestion.laborCode || prev[systemKey]?.laborCode,
-        }
-      }));
-    });
+    setMappings(prev => ({
+      ...prev,
+      [systemKey]: {
+        laborCode: suggestion.laborCode || prev[systemKey]?.laborCode,
+      }
+    }));
 
     toast({
       title: "Suggestion Applied",
@@ -816,12 +810,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemKey = normalizeSystemKey(system);
     
     // Update local state
-    startTransition(() => {
-      setMappings(prev => ({
-        ...prev,
-        [systemKey]: { laborCode },
-      }));
-    });
+    setMappings(prev => ({
+      ...prev,
+      [systemKey]: { laborCode },
+    }));
     
     // Auto-save to database
     if (projectId) {
