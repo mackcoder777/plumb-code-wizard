@@ -266,6 +266,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return systemIndex.map(entry => ({
       system: entry.system,
       itemCount: entry.itemCount,
+      totalHours: entry.totalHours,
       laborCode: mappings[normalizeSystemKey(entry.system)]?.laborCode,
       suggestedLaborCode: suggestions[normalizeSystemKey(entry.system)]?.laborCode,
       appliedInfo: appliedSystems[normalizeSystemKey(entry.system)],
