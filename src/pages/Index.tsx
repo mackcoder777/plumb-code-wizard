@@ -586,7 +586,7 @@ const EnhancedCostCodeManager = () => {
   const { data: dbCostCodes = [] } = useCostCodes();
   
   // Fetch floor-to-section mappings for labor code section derivation
-  const { data: dbFloorMappings = [] } = useFloorSectionMappings(activeProjectId || null);
+  const { data: dbFloorMappings = [], isFetched: floorMappingsFetched } = useFloorSectionMappings(activeProjectId || null);
   
   // Fetch system-to-activity mappings for labor code activity segment
   const { data: dbActivityMappings = [] } = useSystemActivityMappings(activeProjectId || null);
