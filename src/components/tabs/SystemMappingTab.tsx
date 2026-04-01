@@ -421,14 +421,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemCount = systemsToUpdate.length;
     
     // Update local state
-    startTransition(() => {
-      setMappings(prev => {
-        const next = { ...prev };
-        systemsToUpdate.forEach(systemKey => {
-          next[systemKey] = { laborCode };
-        });
-        return next;
+    setMappings(prev => {
+      const next = { ...prev };
+      systemsToUpdate.forEach(systemKey => {
+        next[systemKey] = { laborCode };
       });
+      return next;
     });
 
     // Persist to database
