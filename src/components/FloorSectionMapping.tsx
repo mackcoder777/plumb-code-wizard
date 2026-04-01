@@ -544,6 +544,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
+  const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
