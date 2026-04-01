@@ -449,6 +449,22 @@ const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   // Plastic / CPVC → PLST
   PLST: 'PLST',
   CPVC: 'PLST',
+  AWST: 'PLST',
+  BGSD: 'CSTF',
+  BGNG: 'CRBN',
+  BGAW: 'PLST',
+  BGTP: 'COPR',
+  BGWT: 'COPR',
+  BGCN: 'CRBN',
+  BGPD: 'CSTF',
+  INDR: 'CSTF',
+  TRAP: 'COPR',
+  PMPD: 'CSTF',
+  WATR: 'COPR',
+  FNSH: 'FNSH',
+  FOVT: 'FUEL',
+  DEMO: '',
+  SEQP: '',
 };
 
 const FAB_COST_HEAD_DESCRIPTIONS: Record<string, string> = {
