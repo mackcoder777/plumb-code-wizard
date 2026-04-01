@@ -607,13 +607,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     if (dbMappings.length > 0) {
       const sec: Record<string, string> = {};
       const act: Record<string, string> = {};
+      const descriptions: Record<string, string> = {};
       dbMappings.forEach(m => {
         sec[m.floor_pattern] = m.section_code;
         const storedAct = m.activity_code || '0000';
         act[m.floor_pattern] = storedAct === '0000' ? deriveStandaloneActivity(m.floor_pattern) : storedAct;
+        if (m.description && m.description !== 'Custom') {
+          descriptions[m.section_code] = m.description;
+        }
       });
       setLocalMappings(sec);
       setLocalActivityMappings(act);
+      setCustomDescriptions(prev => ({ ...prev, ...descriptions }));
       setHasChanges(false);
     }
   }, [dbMappings]);
