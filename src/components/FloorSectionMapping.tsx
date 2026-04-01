@@ -596,11 +596,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const custom: Array<{ value: string; label: string }> = [];
     Object.values(localMappings).forEach(code => {
       if (code && !commonValues.has(code) && !custom.find(c => c.value === code)) {
-        custom.push({ value: code, label: 'Custom' });
+        custom.push({ value: code, label: customDescriptions[code] || 'Custom' });
       }
     });
     return custom;
-  }, [localMappings]);
+  }, [localMappings, customDescriptions]);
 
   // Init from DB
   useEffect(() => {
