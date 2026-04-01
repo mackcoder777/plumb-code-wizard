@@ -367,6 +367,7 @@ export function MaterialDescSection({
 }: MaterialDescSectionProps) {
   const [selectedDescs, setSelectedDescs] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ active: boolean; completed: number; total: number }>({ active: false, completed: 0, total: 0 });
 
   const visibleGroups = useMemo(
     () => showAll ? materialDescGroups : materialDescGroups.slice(0, INITIAL_SHOW),
@@ -392,13 +393,24 @@ export function MaterialDescSection({
   }, []);
 
   const handleBulkAssign = useCallback(async (code: string) => {
-    for (const desc of selectedDescs) {
-      if (code === '__CATEGORY__') {
-        if (overrideMap.has(desc)) await onDelete(desc);
-      } else {
-        await onSave(desc, code);
-      }
-    }
+    const descs = Array.from(selectedDescs);
+    const total = descs.length;
+    let completed = 0;
+    setBulkProgress({ active: true, completed: 0, total });
+
+    await Promise.all(
+      descs.map(async (desc) => {
+        if (code === '__CATEGORY__') {
+          if (overrideMap.has(desc)) await onDelete(desc);
+        } else {
+          await onSave(desc, code);
+        }
+        completed += 1;
+        setBulkProgress({ active: true, completed, total });
+      })
+    );
+
+    setBulkProgress({ active: false, completed: 0, total: 0 });
     setSelectedDescs(new Set());
   }, [selectedDescs, overrideMap, onSave, onDelete]);
 
@@ -435,14 +447,22 @@ export function MaterialDescSection({
 
         {selectedDescs.size > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-primary">
-              {selectedDescs.size} selected:
-            </span>
-            <BulkCombobox
-              categoryLaborCode={categoryLaborCode}
-              laborCodes={laborCodes}
-              onAssign={handleBulkAssign}
-            />
+            {bulkProgress.active ? (
+              <span className="text-xs font-medium text-primary animate-pulse">
+                Saving {bulkProgress.completed} of {bulkProgress.total}…
+              </span>
+            ) : (
+              <>
+                <span className="text-xs font-medium text-primary">
+                  {selectedDescs.size} selected:
+                </span>
+                <BulkCombobox
+                  categoryLaborCode={categoryLaborCode}
+                  laborCodes={laborCodes}
+                  onAssign={handleBulkAssign}
+                />
+              </>
+            )}
           </div>
         )}
       </div>
