@@ -16,6 +16,7 @@ import { EstimateItem } from '@/types/estimate';
 interface SystemCardProps {
   system: string;
   itemCount: number;
+  totalHours?: number;
   laborCode?: string;
   suggestedLaborCode?: string;
   appliedInfo?: { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean };
