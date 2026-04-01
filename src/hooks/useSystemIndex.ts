@@ -4,6 +4,7 @@ import { EstimateItem } from '@/types/estimate';
 export interface SystemIndexEntry {
   system: string;
   itemCount: number;
+  totalHours: number;
   previewItems: Array<{
     id: string;
     system?: string | null;
