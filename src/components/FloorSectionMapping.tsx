@@ -61,6 +61,7 @@ const COMMON_SECTION_CODES = [
 interface SectionCodeInputProps {
   value: string;
   onChange: (value: string) => void;
+  onAddCustomCode?: (code: string, label: string) => void;
   customCodes: Array<{ value: string; label: string }>;
   className?: string;
 }

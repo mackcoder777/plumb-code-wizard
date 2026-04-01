@@ -7,6 +7,7 @@ export interface FloorSectionMapping {
   floor_pattern: string;
   section_code: string;
   activity_code: string;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
