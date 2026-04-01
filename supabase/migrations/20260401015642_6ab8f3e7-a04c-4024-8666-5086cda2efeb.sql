@@ -1,0 +1,1 @@
+ALTER TABLE public.floor_section_mappings ADD COLUMN IF NOT EXISTS description text DEFAULT NULL;

@@ -7,6 +7,7 @@ export interface FloorSectionMapping {
   floor_pattern: string;
   section_code: string;
   activity_code: string;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,13 +86,14 @@ export function useBatchSaveFloorSectionMappings() {
       mappings,
     }: {
       projectId: string;
-      mappings: Array<{ floorPattern: string; sectionCode: string; activityCode?: string }>;
+      mappings: Array<{ floorPattern: string; sectionCode: string; activityCode?: string; description?: string | null }>;
     }) => {
       const records = mappings.map(m => ({
         project_id: projectId,
         floor_pattern: m.floorPattern,
         section_code: m.sectionCode,
         activity_code: m.activityCode || '0000',
+        description: m.description || null,
         updated_at: new Date().toISOString(),
       }));
       

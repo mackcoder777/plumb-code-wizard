@@ -61,11 +61,12 @@ const COMMON_SECTION_CODES = [
 interface SectionCodeInputProps {
   value: string;
   onChange: (value: string) => void;
+  onAddCustomCode?: (code: string, label: string) => void;
   customCodes: Array<{ value: string; label: string }>;
   className?: string;
 }
 
-const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, customCodes, className }) => {
+const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, onAddCustomCode, customCodes, className }) => {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
@@ -94,7 +95,9 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, cu
 
   const handleAddCustom = () => {
     if (customCode.trim().length >= 1 && customCode.trim().length <= 3) {
-      onChange(customCode.trim().toUpperCase());
+      const code = customCode.trim().toUpperCase();
+      onAddCustomCode?.(code, customLabel.trim() || 'Custom');
+      onChange(code);
       setCustomCode('');
       setCustomLabel('');
       setIsAddingCustom(false);
@@ -330,6 +333,7 @@ interface StandaloneFloorRowProps {
   zoneBreakdown: Record<string, number> | undefined;
   onSectionChange: (floors: string[], section: string) => void;
   onActivityChange: (floor: string, activity: string) => void;
+  onAddCustomCode?: (code: string, label: string) => void;
   gridCols: string;
   customCodes: Array<{ value: string; label: string }>;
   buildingMappings?: BuildingSectionMapping[];
@@ -384,6 +388,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   zoneBreakdown,
   onSectionChange,
   onActivityChange,
+  onAddCustomCode,
   gridCols,
   customCodes,
   buildingMappings,
@@ -440,6 +445,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
           <SectionCodeInput
             value={sectionCode}
             onChange={(val) => onSectionChange([floor], val)}
+            onAddCustomCode={onAddCustomCode}
             customCodes={customCodes}
             className="h-8"
           />
@@ -541,6 +547,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
+  const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -592,24 +599,29 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const custom: Array<{ value: string; label: string }> = [];
     Object.values(localMappings).forEach(code => {
       if (code && !commonValues.has(code) && !custom.find(c => c.value === code)) {
-        custom.push({ value: code, label: 'Custom' });
+        custom.push({ value: code, label: customDescriptions[code] || 'Custom' });
       }
     });
     return custom;
-  }, [localMappings]);
+  }, [localMappings, customDescriptions]);
 
   // Init from DB
   useEffect(() => {
     if (dbMappings.length > 0) {
       const sec: Record<string, string> = {};
       const act: Record<string, string> = {};
+      const descriptions: Record<string, string> = {};
       dbMappings.forEach(m => {
         sec[m.floor_pattern] = m.section_code;
         const storedAct = m.activity_code || '0000';
         act[m.floor_pattern] = storedAct === '0000' ? deriveStandaloneActivity(m.floor_pattern) : storedAct;
+        if (m.description && m.description !== 'Custom') {
+          descriptions[m.section_code] = m.description;
+        }
       });
       setLocalMappings(sec);
       setLocalActivityMappings(act);
+      setCustomDescriptions(prev => ({ ...prev, ...descriptions }));
       setHasChanges(false);
     }
   }, [dbMappings]);
@@ -626,6 +638,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   }, [estimateData]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleAddCustomCode = useCallback((code: string, label: string) => {
+    setCustomDescriptions(prev => ({ ...prev, [code]: label }));
+  }, []);
+
   const handleSectionChangeForFloors = useCallback((childFloors: string[], sectionCode: string) => {
     setLocalMappings(prev => {
       const next = { ...prev };
@@ -712,6 +728,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       floorPattern,
       sectionCode,
       activityCode: localActivityMappings[floorPattern] || '0000',
+      description: customDescriptions[sectionCode] || null,
     }));
     try {
       await batchSave.mutateAsync({ projectId, mappings: mappingsToSave });
@@ -743,7 +760,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     } catch {
       toast({ title: "Save Failed", description: "Failed to save floor mappings. Please try again.", variant: "destructive" });
     }
-  }, [projectId, localMappings, localActivityMappings, batchSave]);
+  }, [projectId, localMappings, localActivityMappings, customDescriptions, batchSave]);
 
   const handleApplySectionCodes = useCallback(() => {
     if (onApplySectionCodes) {
@@ -987,6 +1004,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                     <SectionCodeInput
                       value={buildingSection}
                       onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
+                      onAddCustomCode={handleAddCustomCode}
                       customCodes={customCodes}
                       className="h-8"
                     />
@@ -1048,6 +1066,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 zoneBreakdown={floorZoneBreakdown[floor]}
                 onSectionChange={handleSectionChangeForFloors}
                 onActivityChange={handleActivityChangeForFloor}
+                onAddCustomCode={handleAddCustomCode}
                 gridCols={gridCols}
                 customCodes={customCodes}
                 buildingMappings={buildingMappings}
