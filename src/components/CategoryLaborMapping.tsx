@@ -110,6 +110,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [comboOpenMap, setComboOpenMap] = useState<Record<string, boolean>>({});
   
   // Get category index from estimate data
   const categoryIndex = useCategoryIndex(data);
