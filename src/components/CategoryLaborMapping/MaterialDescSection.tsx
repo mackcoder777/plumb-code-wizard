@@ -367,6 +367,7 @@ export function MaterialDescSection({
 }: MaterialDescSectionProps) {
   const [selectedDescs, setSelectedDescs] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ active: boolean; completed: number; total: number }>({ active: false, completed: 0, total: 0 });
 
   const visibleGroups = useMemo(
     () => showAll ? materialDescGroups : materialDescGroups.slice(0, INITIAL_SHOW),
