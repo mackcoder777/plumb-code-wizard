@@ -338,19 +338,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const systemKey = normalizeSystemKey(system);
     const newValue = value === 'none' ? undefined : value;
     
-    startTransition(() => {
-      setMappings(prev => {
-        const next = { ...prev };
-        if (!newValue) {
-          delete next[systemKey];
-          return next;
-        }
-        next[systemKey] = {
-          ...next[systemKey],
-          [type]: newValue,
-        };
+    setMappings(prev => {
+      const next = { ...prev };
+      if (!newValue) {
+        delete next[systemKey];
         return next;
-      });
+      }
+      next[systemKey] = {
+        ...next[systemKey],
+        [type]: newValue,
+      };
+      return next;
     });
     
     // Auto-save to database
