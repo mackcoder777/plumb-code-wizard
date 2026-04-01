@@ -462,18 +462,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   }, [selectedSystems, projectId, batchSaveMappings, batchRecordMappingPatterns]);
 
   const handleItemTypeMappingChange = useCallback((system: string, itemType: string, type: 'laborCode', value: string) => {
-    startTransition(() => {
-      setItemTypeMappings(prev => ({
-        ...prev,
-        [system]: {
-          ...prev[system],
-          [itemType]: {
-            ...prev[system]?.[itemType],
-            [type]: value === 'none' ? undefined : value,
-          }
+    setItemTypeMappings(prev => ({
+      ...prev,
+      [system]: {
+        ...prev[system],
+        [itemType]: {
+          ...prev[system]?.[itemType],
+          [type]: value === 'none' ? undefined : value,
         }
-      }));
-    });
+      }
+    }));
   }, []);
 
   const handleAutoSuggest = useCallback(() => {
