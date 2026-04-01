@@ -246,7 +246,7 @@ const SystemCardComponent: React.FC<SystemCardProps> = ({
             {getStatusIcon()}
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg truncate">{system}</h3>
-              <p className="text-sm text-muted-foreground">{itemCount.toLocaleString()} items</p>
+              <p className="text-sm text-muted-foreground">{itemCount.toLocaleString()} items{totalHours ? ` • ${totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })}h` : ''}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
