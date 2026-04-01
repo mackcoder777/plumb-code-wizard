@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, startTransition } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EstimateItem } from '@/types/estimate';
 import { COST_CODES_DB } from '@/data/costCodes';
