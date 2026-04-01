@@ -18,7 +18,8 @@ import {
   Calculator,
   Info,
   DollarSign,
-  Undo2
+  Undo2,
+  AlertTriangle
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -449,6 +450,22 @@ const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   // Plastic / CPVC → PLST
   PLST: 'PLST',
   CPVC: 'PLST',
+  AWST: 'PLST',
+  BGSD: 'CSTF',
+  BGNG: 'CRBN',
+  BGAW: 'PLST',
+  BGTP: 'COPR',
+  BGWT: 'COPR',
+  BGCN: 'CRBN',
+  BGPD: 'CSTF',
+  INDR: 'CSTF',
+  TRAP: 'COPR',
+  PMPD: 'CSTF',
+  WATR: 'COPR',
+  FNSH: 'FNSH',
+  FOVT: 'FUEL',
+  DEMO: '',
+  SEQP: '',
 };
 
 const FAB_COST_HEAD_DESCRIPTIONS: Record<string, string> = {
@@ -3346,6 +3363,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 </span>
               </summary>
 
+              {(() => {
+                const unroutedStripped = Object.entries(fabCodeMap).filter(
+                  ([costHead, fabCode]) =>
+                    fabricationConfigs[costHead]?.enabled && !fabCode
+                );
+                return unroutedStripped.length > 0 ? (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 mt-3 mb-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-sm text-amber-300">
+                      <span className="font-semibold">
+                        {unroutedStripped.length} cost head{unroutedStripped.length > 1 ? 's have' : ' has'} fab strip ON but no routing code assigned:
+                      </span>{' '}
+                      <span className="font-mono">
+                        {unroutedStripped.map(([ch]) => ch).join(', ')}
+                      </span>
+                      . Stripped hours will not appear in any fab line. Select a Routes To code or disable the strip.
+                    </div>
+                  </div>
+                ) : null;
+              })()}
               <div className="mt-3 rounded-lg border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -3430,6 +3467,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                     }
                                   }}>Add</Button>
                                   <Button size="sm" variant="ghost" onClick={() => setCustomFabEntry(null)}>Cancel</Button>
+                                </div>
+                              )}
+                              {fabricationConfigs[costHead]?.enabled && !currentFabCostHead && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0" />
+                                  <span className="text-xs text-amber-400">
+                                    No routing — stripped hours will be lost
+                                  </span>
                                 </div>
                               )}
                             </TableCell>
