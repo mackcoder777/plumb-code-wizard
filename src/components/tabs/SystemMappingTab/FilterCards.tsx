@@ -24,7 +24,7 @@ interface FilterCardsProps {
   };
   activeStatusFilter: 'all' | 'mapped' | 'partial' | 'unmapped' | null;
   onStatusFilterChange: (filter: 'all' | 'mapped' | 'partial' | 'unmapped' | null) => void;
-  topSystems: Array<{ system: string; itemCount: number; status: 'mapped' | 'partial' | 'unmapped' }>;
+  topSystems: Array<{ system: string; itemCount: number; totalHours: number; status: 'mapped' | 'partial' | 'unmapped' }>;
   activeSystemFilter: string | null;
   onSystemFilterChange: (system: string | null) => void;
   showAllSystems: boolean;
