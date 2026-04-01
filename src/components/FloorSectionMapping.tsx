@@ -445,6 +445,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
           <SectionCodeInput
             value={sectionCode}
             onChange={(val) => onSectionChange([floor], val)}
+            onAddCustomCode={onAddCustomCode}
             customCodes={customCodes}
             className="h-8"
           />
