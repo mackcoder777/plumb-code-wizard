@@ -573,6 +573,7 @@ export const SystemCard = memo(SystemCardComponent, (prevProps, nextProps) => {
   return (
     prevProps.system === nextProps.system &&
     prevProps.itemCount === nextProps.itemCount &&
+    prevProps.totalHours === nextProps.totalHours &&
     prevProps.laborCode === nextProps.laborCode &&
     prevProps.suggestedLaborCode === nextProps.suggestedLaborCode &&
     prevProps.appliedInfo?.appliedAt === nextProps.appliedInfo?.appliedAt &&

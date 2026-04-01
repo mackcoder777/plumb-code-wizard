@@ -84,6 +84,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       .map(([system, entry]) => ({
         system,
         itemCount: entry.count,
+        totalHours: entry.totalHours,
         previewItems: entry.previewItems,
         itemTypeCounts: Object.fromEntries(entry.itemTypeCounts),
       }))

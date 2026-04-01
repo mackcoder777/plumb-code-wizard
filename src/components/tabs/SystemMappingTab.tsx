@@ -1271,6 +1271,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                                     <SystemCard
                                       system={sm.system}
                                       itemCount={sm.itemCount}
+                                      totalHours={sm.totalHours}
                                       laborCode={sm.laborCode}
                                       suggestedLaborCode={sm.suggestedLaborCode}
                                       appliedInfo={sm.appliedInfo}

@@ -52,6 +52,7 @@ function buildIndexSync(data: EstimateItem[]): { systemIndex: SystemIndexEntry[]
     .map(([system, entry]) => ({
       system,
       itemCount: entry.count,
+      totalHours: entry.totalHours,
       previewItems: entry.previewItems.map(item => ({
         id: String(item.id),
         system: item.system ?? undefined,
