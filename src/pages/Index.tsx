@@ -569,8 +569,8 @@ const EnhancedCostCodeManager = () => {
 
   // Database hooks for persistence
   const activeProjectId = currentProject?.id || pendingProjectId;
-  const { data: savedMappings = [] } = useSystemMappings(activeProjectId || null);
-  const { data: savedItems = [], isLoading: itemsLoading } = useEstimateItems(activeProjectId || null);
+  const { data: savedMappings = [], isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
+  const { data: savedItems = [], isLoading: itemsLoading, isFetched: itemsFetched } = useEstimateItems(activeProjectId || null);
   const saveMapping = useSaveMapping();
   const verifyMappingMutation = useVerifyMapping();
   const batchSaveMappings = useBatchSaveMappings();
