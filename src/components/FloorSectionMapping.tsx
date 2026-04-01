@@ -388,6 +388,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   zoneBreakdown,
   onSectionChange,
   onActivityChange,
+  onAddCustomCode,
   gridCols,
   customCodes,
   buildingMappings,
