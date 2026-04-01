@@ -328,6 +328,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     return systemMappings.map(sm => ({
       system: sm.system,
       itemCount: sm.itemCount,
+      totalHours: sm.totalHours,
       status: sm.laborCode ? 'mapped' as const : 'unmapped' as const,
     }));
   }, [systemMappings]);
