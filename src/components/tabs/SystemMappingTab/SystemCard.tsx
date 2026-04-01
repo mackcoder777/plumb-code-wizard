@@ -43,6 +43,7 @@ interface SystemCardProps {
 const SystemCardComponent: React.FC<SystemCardProps> = ({
   system,
   itemCount,
+  totalHours,
   laborCode,
   suggestedLaborCode,
   appliedInfo,
