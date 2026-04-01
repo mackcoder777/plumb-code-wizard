@@ -3363,6 +3363,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 </span>
               </summary>
 
+              {(() => {
+                const unroutedStripped = Object.entries(fabCodeMap).filter(
+                  ([costHead, fabCode]) =>
+                    fabricationConfigs[costHead]?.enabled && !fabCode
+                );
+                return unroutedStripped.length > 0 ? (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 mt-3 mb-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-sm text-amber-300">
+                      <span className="font-semibold">
+                        {unroutedStripped.length} cost head{unroutedStripped.length > 1 ? 's have' : ' has'} fab strip ON but no routing code assigned:
+                      </span>{' '}
+                      <span className="font-mono">
+                        {unroutedStripped.map(([ch]) => ch).join(', ')}
+                      </span>
+                      . Stripped hours will not appear in any fab line. Select a Routes To code or disable the strip.
+                    </div>
+                  </div>
+                ) : null;
+              })()}
               <div className="mt-3 rounded-lg border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
