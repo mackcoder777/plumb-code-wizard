@@ -569,8 +569,8 @@ const EnhancedCostCodeManager = () => {
 
   // Database hooks for persistence
   const activeProjectId = currentProject?.id || pendingProjectId;
-  const { data: savedMappings = [] } = useSystemMappings(activeProjectId || null);
-  const { data: savedItems = [], isLoading: itemsLoading } = useEstimateItems(activeProjectId || null);
+  const { data: savedMappings = [], isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
+  const { data: savedItems = [], isLoading: itemsLoading, isFetched: itemsFetched } = useEstimateItems(activeProjectId || null);
   const saveMapping = useSaveMapping();
   const verifyMappingMutation = useVerifyMapping();
   const batchSaveMappings = useBatchSaveMappings();
@@ -586,7 +586,7 @@ const EnhancedCostCodeManager = () => {
   const { data: dbCostCodes = [] } = useCostCodes();
   
   // Fetch floor-to-section mappings for labor code section derivation
-  const { data: dbFloorMappings = [] } = useFloorSectionMappings(activeProjectId || null);
+  const { data: dbFloorMappings = [], isFetched: floorMappingsFetched } = useFloorSectionMappings(activeProjectId || null);
   
   // Fetch system-to-activity mappings for labor code activity segment
   const { data: dbActivityMappings = [] } = useSystemActivityMappings(activeProjectId || null);
@@ -835,7 +835,7 @@ const EnhancedCostCodeManager = () => {
     if (savedItems.length > 0 && currentProject?.id) {
       // GUARD: If project likely has floor mappings but they haven't loaded yet, wait
       // We check if dbFloorMappings is still empty — the query may not have resolved yet
-      const floorMappingsLoaded = dbFloorMappings.length > 0;
+      const floorMappingsLoaded = floorMappingsFetched;
       const hasFloorsInData = savedItems.some(i => i.floor && i.floor.trim());
       if (hasFloorsInData && !floorMappingsLoaded) {
         // Floor data exists but mappings haven't loaded — skip this cycle, will re-run when they load
@@ -843,7 +843,7 @@ const EnhancedCostCodeManager = () => {
         return;
       }
 
-      const systemMappingsLoaded = savedMappings.length > 0;
+      const systemMappingsLoaded = mappingsFetched;
       const hasSystemsInData = savedItems.some(i => i.system && i.system.trim());
       if (hasSystemsInData && !systemMappingsLoaded) {
         console.log('[Load] Deferring: system mappings not yet loaded');
