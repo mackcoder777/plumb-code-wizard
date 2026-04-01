@@ -3469,6 +3469,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                   <Button size="sm" variant="ghost" onClick={() => setCustomFabEntry(null)}>Cancel</Button>
                                 </div>
                               )}
+                              {fabricationConfigs[costHead]?.enabled && !currentFabCostHead && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0" />
+                                  <span className="text-xs text-amber-400">
+                                    No routing — stripped hours will be lost
+                                  </span>
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <Input
