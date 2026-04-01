@@ -728,6 +728,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       floorPattern,
       sectionCode,
       activityCode: localActivityMappings[floorPattern] || '0000',
+      description: customDescriptions[sectionCode] || null,
     }));
     try {
       await batchSave.mutateAsync({ projectId, mappings: mappingsToSave });
