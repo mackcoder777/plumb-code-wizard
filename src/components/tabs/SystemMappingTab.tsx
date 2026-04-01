@@ -863,7 +863,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         <div className="sticky top-0 z-50 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-6 py-3 text-amber-800">
           <div className="flex items-center gap-2 text-sm font-medium">
             <span>⚠️</span>
-            <span>You have unapplied mapping changes. Click "Apply All Mappings" before leaving this tab.</span>
+            <span>You have unapplied system mapping changes. Click "Apply All Mappings" before leaving this tab.</span>
           </div>
           <Button
             size="sm"

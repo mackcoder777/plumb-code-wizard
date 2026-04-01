@@ -3224,18 +3224,18 @@ const EnhancedCostCodeManager = () => {
           />
         </div>
 
-        {/* Unapplied mapping changes warning dialog */}
+        {/* Unapplied system mapping changes warning dialog */}
         {showMappingWarning && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-              <h3 className="text-lg font-semibold text-gray-900">Unapplied Mapping Changes</h3>
-              <p className="mt-2 text-sm text-gray-600">
-                You have mapping changes that haven't been applied to estimate items yet. What would you like to do?
+            <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-2xl border border-border">
+              <h3 className="text-lg font-semibold text-foreground">Unapplied System Mapping Changes</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                You have system mapping changes that haven't been applied to estimate items yet. Category mappings are saved automatically. What would you like to do?
               </p>
               <div className="mt-5 flex gap-3 justify-end">
                 <button
                   onClick={() => { setShowMappingWarning(false); setPendingTab(null); }}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
                 >
                   Cancel
                 </button>
@@ -3244,9 +3244,19 @@ const EnhancedCostCodeManager = () => {
                     setShowMappingWarning(false);
                     if (pendingTab) { setActiveTab(pendingTab); setPendingTab(null); }
                   }}
-                  className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                  className="rounded-lg border border-destructive/30 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10"
                 >
                   Discard &amp; Continue
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMappingWarning(false);
+                    setPendingTab(null);
+                    // Stay on mapping tab so user can click Apply All
+                  }}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  Go Back &amp; Apply
                 </button>
               </div>
             </div>

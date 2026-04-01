@@ -19,7 +19,7 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers, ChevronsUpDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, Eye, ExternalLink, Layers, ChevronsUpDown, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { TableRowCombobox } from '@/components/tabs/SystemMappingTab/TableRowCombobox';
 import { MaterialDescSection } from '@/components/CategoryLaborMapping/MaterialDescSection';
