@@ -1135,18 +1135,28 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
                             <span className="font-medium text-sm">{sm.system}</span>
                           </div>
                           <Badge variant="secondary" className="text-xs">
-                            {sm.itemCount} items
+                            {sm.itemCount} items • {(sm.totalHours || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}h
                           </Badge>
                         </div>
                       ))}
                     </div>
                     
-                    {/* Total Items Summary */}
+                    {/* Total Items & Hours Summary */}
                     <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                      <span className="text-sm font-medium text-muted-foreground">Total Items</span>
-                      <span className="text-lg font-bold tabular-nums">
-                        {filteredSystems.reduce((sum, sm) => sum + sm.itemCount, 0).toLocaleString()}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-muted-foreground">Total Items</span>
+                          <span className="text-lg font-bold tabular-nums ml-4">
+                            {filteredSystems.reduce((sum, sm) => sum + sm.itemCount, 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-muted-foreground">Total Hours</span>
+                          <span className="text-lg font-bold tabular-nums ml-4">
+                            {filteredSystems.reduce((sum, sm) => sum + (sm.totalHours || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}h
+                          </span>
+                        </div>
+                      </div>
                     </div>
                     
                     {/* Single Labor Code Assignment */}
