@@ -304,9 +304,9 @@ export function resolveFloorMappingStatic(
       if (prefixMatch) {
         const prefix = prefixMatch[1].toUpperCase();
         const activity = prefix.length <= 3 ? '0' + prefix : prefix;
-        return { section: canonicalSection, activity };
+        return { section: canonicalSection, activity, hasExplicitMapping };
       }
-      return { section: canonicalSection, activity: floorActivity };
+      return { section: canonicalSection, activity: floorActivity, hasExplicitMapping };
     }
   }
 
