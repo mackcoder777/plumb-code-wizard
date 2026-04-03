@@ -68,8 +68,8 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ data, onDataUpdate
                       <td className="p-3 font-mono text-sm">{rule.pattern.source}</td>
                       <td className="p-3">{rule.field}</td>
                       <td className="p-3">
-                        {rule.codes.material && <Badge variant="secondary" className="mr-1">{rule.codes.material}</Badge>}
-                        {rule.codes.labor && <Badge variant="default">{rule.codes.labor}</Badge>}
+                        {rule.codes.material && <Badge variant="secondary" className="mr-1 max-w-[160px] truncate" title={getCodeDescription(rule.codes.material, costCodesData)}>{getCodeDescriptionShort(rule.codes.material, costCodesData)}</Badge>}
+                        {rule.codes.labor && <Badge variant="default" className="max-w-[160px] truncate" title={getCodeDescription(rule.codes.labor, costCodesData)}>{getCodeDescriptionShort(rule.codes.labor, costCodesData)}</Badge>}
                       </td>
                       <td className="p-3">{rule.description}</td>
                       <td className="p-3">{matchCount}</td>

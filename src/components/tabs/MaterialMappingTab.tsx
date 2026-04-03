@@ -1298,9 +1298,9 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       
       // Partially assigned - show yellow
       return (
-        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30" title={uniqueCodes.map(c => getCodeDescription(c, allMaterialCodes)).join('\n')}>
           <Layers className="h-3 w-3 mr-1" />
-          Mixed ({uniqueCodes.join(', ')})
+          Mixed ({uniqueCodes.slice(0, 2).map(c => getCodeDescriptionShort(c, allMaterialCodes)).join(', ')}{uniqueCodes.length > 2 ? ` +${uniqueCodes.length - 2}` : ''})
         </Badge>
       );
     }

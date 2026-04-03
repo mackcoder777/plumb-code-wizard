@@ -357,7 +357,7 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             <SelectContent>
               <SelectItem value="">All Cost Heads</SelectItem>
               {filterOptions.costHeads.map((head, index) => (
-                <SelectItem key={`head-${index}-${head}`} value={head}>{head}</SelectItem>
+                <SelectItem key={`head-${index}-${head}`} value={head}>{getCodeDescription(head, costCodesData)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

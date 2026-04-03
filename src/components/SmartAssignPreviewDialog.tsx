@@ -109,9 +109,9 @@ export const SmartAssignPreviewDialog: React.FC<SmartAssignPreviewDialogProps> =
         <Tabs key={defaultTab} defaultValue={defaultTab} className="flex-1 min-h-0 flex flex-col">
           <TabsList className="w-full flex-wrap h-auto gap-1 p-1">
             {codes.map(code => (
-              <TabsTrigger key={code} value={code} className="text-xs gap-1">
+              <TabsTrigger key={code} value={code} className="text-xs gap-1 max-w-[180px]" title={getCodeLabel(code, materialCodes)}>
                 <Check className="h-3 w-3" />
-                {code}
+                <span className="truncate">{getCodeDescriptionShort(code, materialCodes || [], 18)}</span>
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
                   {codeGroups[code].length}
                 </Badge>
