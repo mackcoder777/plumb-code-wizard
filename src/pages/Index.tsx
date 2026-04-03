@@ -978,7 +978,7 @@ const EnhancedCostCodeManager = () => {
         if (appliedCode) {
           const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
           const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.report_cat || item.item_type || undefined);
+          const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.report_cat || item.item_type || undefined);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
