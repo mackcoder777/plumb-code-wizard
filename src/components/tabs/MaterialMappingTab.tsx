@@ -1287,9 +1287,11 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (isFullyAssigned) {
         // Fully assigned with multiple codes - show green
         return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono">
+          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono" title={uniqueCodes.map(c => getCodeDescription(c, allMaterialCodes)).join('\n')}>
             <Check className="h-3 w-3 mr-1" />
-            {uniqueCodes.join(', ')}
+            {uniqueCodes.length <= 2
+              ? uniqueCodes.map(c => getCodeDescriptionShort(c, allMaterialCodes)).join(', ')
+              : `${uniqueCodes.slice(0, 2).join(', ')} +${uniqueCodes.length - 2}`}
           </Badge>
         );
       }
