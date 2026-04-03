@@ -1626,9 +1626,36 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       return !hasSourceInRaw;
     });
 
+    // activityOrphans: merge records whose source activity codes no longer exist
+    // (e.g., after clearing all ACT to 0000 — 00L1/00L2 keys collapsed into 0000)
+    const activityOrphans = savedMergesData.filter(m => {
+      if (toDelete.some(d => d.id === m.id) || nullNullOrphans.some(d => d.id === m.id)) return false;
+      if (m.reassign_to_head === '__keep__') return false;
+
+      const sec = (m.sec_code || '').trim();
+      const head = (m.cost_head || '').trim();
+      if (!sec || !head) return false;
+
+      const liveKeys = rawKeys.filter(k => {
+        const parts = k.trim().split(/\s+/);
+        return parts[0] === sec && parts.slice(2).join(' ') === head;
+      });
+
+      // Zero live keys = fully orphaned
+      if (liveKeys.length === 0) return true;
+
+      // One live key at 0000 activity = collapse happened, merge is moot
+      if (liveKeys.length === 1) {
+        const parts = liveKeys[0].trim().split(/\s+/);
+        if (parts[1] === '0000') return true;
+      }
+
+      return false;
+    });
+
     // Combine but deduplicate by id
     const seen = new Set<string>();
-    const allToDelete = [...toDelete, ...nullNullOrphans].filter(m => {
+    const allToDelete = [...toDelete, ...nullNullOrphans, ...activityOrphans].filter(m => {
       if (seen.has(m.id)) return false;
       seen.add(m.id);
       return true;
