@@ -344,7 +344,7 @@ export function resolveFloorMappingStatic(
     return { section: getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings), activity: '0000', hasExplicitMapping: false };
   }
 
-  return { section: '01', activity: '0000' };
+  return { section: '01', activity: '0000', hasExplicitMapping: false };
 }
 
 export function useBuildingSectionMappings(projectId: string | null) {
