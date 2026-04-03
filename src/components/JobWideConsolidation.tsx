@@ -21,7 +21,7 @@ interface JobWideConsolidationProps {
     id: string;
     sec_code: string;
     cost_head: string;
-    reassign_to_head: string | null;
+    reassign_to_head?: string | null;
     merged_act: string;
   }>;
 }
