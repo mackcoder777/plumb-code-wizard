@@ -828,9 +828,6 @@ const EnhancedCostCodeManager = () => {
                        ).find(c => c.code === costHead)?.description || 
                        (costHead ? 'Unknown' : 'Unassigned');
 
-    // Resolve activity using category (reportCat/itemType) for category-level overrides
-    const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
-
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
       section: section,
@@ -841,7 +838,7 @@ const EnhancedCostCodeManager = () => {
       matchReason: matchReason,
       description: description
     };
-  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor]);
+  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor, codeFormatMode, tradePrefix]);
 
   // Guard ref to prevent auto-apply from running multiple times per project
   const hasAutoAppliedRef = useRef<string | null>(null);
