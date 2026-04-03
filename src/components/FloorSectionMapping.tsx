@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info, Shuffle } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info, Shuffle, X } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import {
   useFloorSectionMappings,
