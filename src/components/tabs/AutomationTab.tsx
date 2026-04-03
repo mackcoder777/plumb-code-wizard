@@ -14,6 +14,7 @@ interface AutomationTabProps {
 }
 
 export const AutomationTab: React.FC<AutomationTabProps> = ({ data, onDataUpdate }) => {
+  const { data: costCodesData = [] } = useCostCodes();
   const matchedItems = data.filter(item => item.suggestedCodes.length > 0).length;
   const accuracy = data.length > 0 ? Math.round((matchedItems / data.length) * 100) : 0;
 
