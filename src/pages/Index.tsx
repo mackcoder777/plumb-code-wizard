@@ -774,14 +774,25 @@ const EnhancedCostCodeManager = () => {
 
   // Generate cost code with audit trail - uses smart matching against database codes
   const generateCostCode = useCallback((item) => {
-    // Use zone-aware section resolution
-    const section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+    // Multitrade mode: SEC = trade prefix, ACT = building identifier
+    let section: string;
+    let activity: string;
 
-    // Get activity code: floor activity takes priority over system activity
-    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+    if (codeFormatMode === 'multitrade') {
+      section = tradePrefix || 'PL';
+      // ACT = building identifier from zone/drawing resolution
+      const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+      activity = buildingSection !== '01' ? buildingSection : '0000';
+    } else {
+      // Standard mode: SEC = building, ACT = floor/level
+      section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+      const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+      activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+    }
+
     const systemLower = (item.system || '').toLowerCase().trim();
 
-    // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
+    // Priority 1: Check custom mappings (user overrides)
     const customMapping = customMappings[systemLower];
     let costHead = (typeof customMapping === 'object' ? customMapping?.laborCode : customMapping) || null;
     let confidence = costHead ? 1.0 : 0;
@@ -790,11 +801,10 @@ const EnhancedCostCodeManager = () => {
 
     // Priority 2 (removed): DEFAULT_COST_HEAD_MAPPING hardcoded patterns are no longer
     // used in the priority chain. Cost heads come from explicit user system mappings only.
-    // See CLAUDE.md Section 16 Rule 7 and Section 6.
 
     // Priority 3: Smart matching against database cost codes
     if (!costHead && dbCostCodes.length > 0) {
-      const match = findBestMatch(item.system, dbCostCodes, 'L'); // Prefer Labor codes
+      const match = findBestMatch(item.system, dbCostCodes, 'L');
       if (match && match.confidence >= 0.5) {
         costHead = match.code;
         confidence = match.confidence;
@@ -803,7 +813,7 @@ const EnhancedCostCodeManager = () => {
       }
     }
 
-    // Priority 4: No match found - leave unassigned
+    // Priority 4: No match found
     if (!costHead) {
       costHead = '';
       confidence = 0;
@@ -811,7 +821,6 @@ const EnhancedCostCodeManager = () => {
       matchReason = 'No confident match found';
     }
 
-    // Find description from database or hardcoded codes
     const description = dbCostCodes.find(c => c.code === costHead)?.description ||
                        DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 
                        Object.values(STANDARD_COST_CODES).flatMap(cat => 
