@@ -49,6 +49,7 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
   });
   const [sortField, setSortField] = useState<string>('');
   const [sortAsc, setSortAsc] = useState(true);
+  const { data: costCodesData = [] } = useCostCodes();
   const [selectedItem, setSelectedItem] = useState<EstimateItem | null>(null);
   const [showCostCodeModal, setShowCostCodeModal] = useState(false);
   
