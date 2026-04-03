@@ -1051,8 +1051,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                       className="h-8"
                     />
 
-                    {/* Activity — varies per child, show dash */}
-                    <div className="text-sm text-muted-foreground pl-2">—</div>
+                    {/* Activity — varies per child, show dash + clear button */}
+                    <div className="flex items-center gap-1 pl-2">
+                      <span className="text-sm text-muted-foreground">—</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => handleClearGroupActivity(group.childFloors)}
+                      >
+                        Clear ACT
+                      </Button>
+                    </div>
 
                     {/* Total count */}
                     <div className="text-right">
