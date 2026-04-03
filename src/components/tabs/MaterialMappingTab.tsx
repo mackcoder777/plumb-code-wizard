@@ -35,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns, getCodeFromDescription } from '@/hooks/useMaterialMappingPatterns';
 import { SmartAssignPreviewDialog } from '@/components/SmartAssignPreviewDialog';
 import { validateMaterialCodeAssignment } from '@/utils/materialCodeValidation';
+import { getCodeDescription, getCodeDescriptionShort } from '@/utils/codeDescriptions';
 import {
   AlertDialog,
   AlertDialogAction,
