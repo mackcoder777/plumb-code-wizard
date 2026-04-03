@@ -553,7 +553,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
-      const activityCode = resolved.activity !== '0000'
+      const activityCode = resolved.hasExplicitMapping
         ? resolved.activity
         : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
