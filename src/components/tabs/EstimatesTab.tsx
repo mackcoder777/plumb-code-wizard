@@ -20,6 +20,8 @@ import { toast } from '@/components/ui/use-toast';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo } from '@/utils/budgetExportSystem';
 import { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
+import { useCostCodes } from '@/hooks/useCostCodes';
+import { getCodeDescription, getCodeDescriptionShort } from '@/utils/codeDescriptions';
 
 interface EstimatesTabProps {
   data: EstimateItem[];
