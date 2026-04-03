@@ -786,6 +786,30 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     setHasChanges(false);
   }, [dbMappings]);
 
+  const handleClearAllActivity = useCallback(() => {
+    setLocalActivityMappings(prev => {
+      const next: Record<string, string> = {};
+      Object.keys(prev).forEach(k => { next[k] = '0000'; });
+      Object.keys(localMappings).forEach(k => { next[k] = '0000'; });
+      return next;
+    });
+    setHasChanges(true);
+    toast({ title: "Activity codes cleared", description: "All activity codes set to 0000. Save to persist." });
+  }, [localMappings]);
+
+  const handleClearGroupActivity = useCallback((childFloors: string[]) => {
+    setLocalActivityMappings(prev => {
+      const next = { ...prev };
+      childFloors.forEach(f => { next[f] = '0000'; });
+      return next;
+    });
+    setHasChanges(true);
+    toast({
+      title: "Activity codes cleared",
+      description: `Set ${childFloors.length} floor${childFloors.length !== 1 ? 's' : ''} to 0000.`
+    });
+  }, []);
+
   const handleAutoSuggestAll = useCallback(() => {
     const newSec: Record<string, string> = {};
     const newAct: Record<string, string> = {};
