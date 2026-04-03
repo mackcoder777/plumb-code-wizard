@@ -47,6 +47,10 @@ import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
 import { useQueryClient } from '@tanstack/react-query';
 import { PatternManagement } from '@/components/PatternManagement';
 import { BudgetChat, EstimateSummary } from '@/components/BudgetChat';
+import { ProjectSettingsPanel } from '@/components/ProjectSettingsPanel';
+import { CodeHealthDashboard } from '@/components/CodeHealthDashboard';
+import { JobWideConsolidation } from '@/components/JobWideConsolidation';
+import { DuplicateScopeDetection } from '@/components/DuplicateScopeDetection';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -559,6 +563,20 @@ const EnhancedCostCodeManager = () => {
   const [datasetProfile, setDatasetProfile] = useState<DatasetProfile | null>(null);
   const [pendingUploadFileName, setPendingUploadFileName] = useState<string>('');
   
+  // Trade Section Mode state
+  const [codeFormatMode, setCodeFormatMode] = useState<'standard' | 'multitrade'>('standard');
+  const [tradePrefix, setTradePrefix] = useState('PL');
+  const [dismissedDuplicateFlags, setDismissedDuplicateFlags] = useState<string[]>([]);
+
+  // Load project settings when project changes
+  useEffect(() => {
+    if (currentProject) {
+      setCodeFormatMode((currentProject as any).code_format_mode || 'standard');
+      setTradePrefix((currentProject as any).trade_prefix || 'PL');
+      setDismissedDuplicateFlags((currentProject as any).dismissed_duplicate_flags || []);
+    }
+  }, [currentProject]);
+
   // Budget adjustments state
   const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
   const [bidLaborRate, setBidLaborRate] = useState(() => {
@@ -756,14 +774,25 @@ const EnhancedCostCodeManager = () => {
 
   // Generate cost code with audit trail - uses smart matching against database codes
   const generateCostCode = useCallback((item) => {
-    // Use zone-aware section resolution
-    const section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+    // Multitrade mode: SEC = trade prefix, ACT = building identifier
+    let section: string;
+    let activity: string;
 
-    // Get activity code: floor activity takes priority over system activity
-    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+    if (codeFormatMode === 'multitrade') {
+      section = tradePrefix || 'PL';
+      // ACT = building identifier from zone/drawing resolution
+      const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+      activity = buildingSection !== '01' ? buildingSection : '0000';
+    } else {
+      // Standard mode: SEC = building, ACT = floor/level
+      section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+      const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+      activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+    }
+
     const systemLower = (item.system || '').toLowerCase().trim();
 
-    // Priority 1: Check custom mappings (user overrides) - labor code takes priority for cost code assignment
+    // Priority 1: Check custom mappings (user overrides)
     const customMapping = customMappings[systemLower];
     let costHead = (typeof customMapping === 'object' ? customMapping?.laborCode : customMapping) || null;
     let confidence = costHead ? 1.0 : 0;
@@ -772,11 +801,10 @@ const EnhancedCostCodeManager = () => {
 
     // Priority 2 (removed): DEFAULT_COST_HEAD_MAPPING hardcoded patterns are no longer
     // used in the priority chain. Cost heads come from explicit user system mappings only.
-    // See CLAUDE.md Section 16 Rule 7 and Section 6.
 
     // Priority 3: Smart matching against database cost codes
     if (!costHead && dbCostCodes.length > 0) {
-      const match = findBestMatch(item.system, dbCostCodes, 'L'); // Prefer Labor codes
+      const match = findBestMatch(item.system, dbCostCodes, 'L');
       if (match && match.confidence >= 0.5) {
         costHead = match.code;
         confidence = match.confidence;
@@ -785,7 +813,7 @@ const EnhancedCostCodeManager = () => {
       }
     }
 
-    // Priority 4: No match found - leave unassigned
+    // Priority 4: No match found
     if (!costHead) {
       costHead = '';
       confidence = 0;
@@ -793,16 +821,12 @@ const EnhancedCostCodeManager = () => {
       matchReason = 'No confident match found';
     }
 
-    // Find description from database or hardcoded codes
     const description = dbCostCodes.find(c => c.code === costHead)?.description ||
                        DEFAULT_COST_HEAD_MAPPING[costHead]?.description || 
                        Object.values(STANDARD_COST_CODES).flatMap(cat => 
                          Object.values(cat).flat()
                        ).find(c => c.code === costHead)?.description || 
                        (costHead ? 'Unknown' : 'Unassigned');
-
-    // Resolve activity using category (reportCat/itemType) for category-level overrides
-    const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
 
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
@@ -814,7 +838,7 @@ const EnhancedCostCodeManager = () => {
       matchReason: matchReason,
       description: description
     };
-  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor]);
+  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor, codeFormatMode, tradePrefix]);
 
   // Guard ref to prevent auto-apply from running multiple times per project
   const hasAutoAppliedRef = useRef<string | null>(null);
@@ -2301,6 +2325,20 @@ const EnhancedCostCodeManager = () => {
           }}
         />
 
+        {/* Project Settings — Trade Section Mode */}
+        {currentProject && estimateData.length > 0 && (
+          <div className="px-6 pt-4">
+            <ProjectSettingsPanel
+              projectId={currentProject.id}
+              codeFormatMode={codeFormatMode}
+              tradePrefix={tradePrefix}
+              onSettingsChange={(mode, prefix) => {
+                setCodeFormatMode(mode);
+                setTradePrefix(prefix);
+              }}
+            />
+          </div>
+        )}
         {/* Tabs */}
         <div className="flex border-b bg-gray-50 items-center">
           {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'buyout', 'rules'].map((tab) => (
@@ -2859,6 +2897,29 @@ const EnhancedCostCodeManager = () => {
                 </p>
               </div>
             )}
+              {/* Code Health Dashboard */}
+              {budgetAdjustments && (
+                <div className="px-6 pt-6 space-y-4">
+                  <CodeHealthDashboard
+                    finalLaborSummary={budgetAdjustments.adjustedLaborSummary}
+                  />
+                  <DuplicateScopeDetection
+                    adjustedLaborSummary={budgetAdjustments.adjustedLaborSummary}
+                    projectId={currentProject?.id || 'default'}
+                    dismissedFlags={dismissedDuplicateFlags}
+                    onDismissFlag={(flag) => setDismissedDuplicateFlags(prev => [...prev, flag])}
+                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
+                  />
+                  <JobWideConsolidation
+                    finalLaborSummary={budgetAdjustments.adjustedLaborSummary}
+                    projectId={currentProject?.id || 'default'}
+                    tradePrefix={tradePrefix}
+                    codeFormatMode={codeFormatMode}
+                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
+                    savedMerges={budgetAdjustments.savedMerges?.map((m, i) => ({ id: String(i), ...m })) || []}
+                  />
+                </div>
+              )}
               <div className="p-6 space-y-6" style={estimateData.length === 0 ? { display: 'none' } : undefined}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -2941,10 +3002,18 @@ const EnhancedCostCodeManager = () => {
                         }
                       }
 
-                      // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
-                      const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
+                      // Resolve SEC and ACT based on code format mode
+                      let section: string;
+                      let activity: string;
+                      if (codeFormatMode === 'multitrade') {
+                        section = tradePrefix || 'PL';
+                        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                        activity = buildingSection !== '01' ? buildingSection : '0000';
+                      } else {
+                        section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                        const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                        activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
+                      }
                       const fullCode = `${section} ${activity} ${costHead}`;
 
                       if (!summary[fullCode]) {
