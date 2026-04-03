@@ -2891,6 +2891,29 @@ const EnhancedCostCodeManager = () => {
                 </p>
               </div>
             )}
+              {/* Code Health Dashboard */}
+              {budgetAdjustments && (
+                <div className="px-6 pt-6 space-y-4">
+                  <CodeHealthDashboard
+                    finalLaborSummary={budgetAdjustments.adjustedLaborSummary}
+                  />
+                  <DuplicateScopeDetection
+                    adjustedLaborSummary={budgetAdjustments.adjustedLaborSummary}
+                    projectId={currentProject?.id || 'default'}
+                    dismissedFlags={dismissedDuplicateFlags}
+                    onDismissFlag={(flag) => setDismissedDuplicateFlags(prev => [...prev, flag])}
+                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
+                  />
+                  <JobWideConsolidation
+                    finalLaborSummary={budgetAdjustments.adjustedLaborSummary}
+                    projectId={currentProject?.id || 'default'}
+                    tradePrefix={tradePrefix}
+                    codeFormatMode={codeFormatMode}
+                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
+                    savedMerges={budgetAdjustments.savedMerges?.map((m, i) => ({ id: String(i), ...m })) || []}
+                  />
+                </div>
+              )}
               <div className="p-6 space-y-6" style={estimateData.length === 0 ? { display: 'none' } : undefined}>
                 <div className="flex items-center justify-between">
                   <div>
