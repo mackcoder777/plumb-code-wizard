@@ -16,7 +16,7 @@ import {
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
-import { BuildingSectionMapping, deriveStandaloneActivity } from '@/hooks/useBuildingSectionMappings';
+import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
 import { supabase } from '@/integrations/supabase/client';
 import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -26,7 +26,7 @@ interface FloorSectionMappingPanelProps {
   estimateData: EstimateItem[];
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
-  onApplySectionCodes?: (mappings: Record<string, string>) => void;
+  onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>) => void;
   datasetProfile?: DatasetProfile | null;
   onProfileOverride?: (override: PatternOverride | null) => void;
   onReanalyze?: () => void;
@@ -614,8 +614,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       const descriptions: Record<string, string> = {};
       dbMappings.forEach(m => {
         sec[m.floor_pattern] = m.section_code;
-        const storedAct = m.activity_code || '0000';
-        act[m.floor_pattern] = storedAct === '0000' ? deriveStandaloneActivity(m.floor_pattern) : storedAct;
+        const storedAct = m.activity_code ?? '0000';
+        act[m.floor_pattern] = storedAct;
         if (m.description && m.description !== 'Custom') {
           descriptions[m.section_code] = m.description;
         }
@@ -765,21 +765,21 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const handleApplySectionCodes = useCallback(() => {
     if (onApplySectionCodes) {
-      onApplySectionCodes(localMappings);
+      onApplySectionCodes(localMappings, localActivityMappings);
       toast({
         title: "Section Codes Applied",
         description: `Updated section codes on ${itemCounts.withCodes} items with labor codes.`,
       });
     }
-  }, [localMappings, onApplySectionCodes, itemCounts]);
+  }, [localMappings, localActivityMappings, onApplySectionCodes, itemCounts]);
 
   const handleReset = useCallback(() => {
     const sec: Record<string, string> = {};
     const act: Record<string, string> = {};
     dbMappings.forEach(m => {
       sec[m.floor_pattern] = m.section_code;
-      const storedAct = m.activity_code || '0000';
-      act[m.floor_pattern] = storedAct === '0000' ? deriveStandaloneActivity(m.floor_pattern) : storedAct;
+      const storedAct = m.activity_code ?? '0000';
+      act[m.floor_pattern] = storedAct;
     });
     setLocalMappings(sec);
     setLocalActivityMappings(act);

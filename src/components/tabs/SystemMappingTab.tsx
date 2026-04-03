@@ -525,7 +525,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
-  const handleApplySectionCodes = useCallback(async (floorMappingsToApply: Record<string, string>) => {
+  const handleApplySectionCodes = useCallback(async (_floorMappingsToApply: Record<string, string>, activityMappingsToApply: Record<string, string>) => {
     let itemsUpdated = 0;
     const dbUpdates: Array<{ id: string; cost_code: string }> = [];
     
@@ -553,9 +553,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
-      const activityCode = resolved.hasExplicitMapping
-        ? resolved.activity
-        : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+      const liveActivity = item.floor ? activityMappingsToApply[item.floor] : undefined;
+      const activityCode = liveActivity !== undefined
+        ? liveActivity
+        : resolved.hasExplicitMapping
+          ? resolved.activity
+          : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
