@@ -2319,6 +2319,20 @@ const EnhancedCostCodeManager = () => {
           }}
         />
 
+        {/* Project Settings — Trade Section Mode */}
+        {currentProject && estimateData.length > 0 && (
+          <div className="px-6 pt-4">
+            <ProjectSettingsPanel
+              projectId={currentProject.id}
+              codeFormatMode={codeFormatMode}
+              tradePrefix={tradePrefix}
+              onSettingsChange={(mode, prefix) => {
+                setCodeFormatMode(mode);
+                setTradePrefix(prefix);
+              }}
+            />
+          </div>
+        )}
         {/* Tabs */}
         <div className="flex border-b bg-gray-50 items-center">
           {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'buyout', 'rules'].map((tab) => (
