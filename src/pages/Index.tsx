@@ -802,7 +802,7 @@ const EnhancedCostCodeManager = () => {
                        (costHead ? 'Unknown' : 'Unassigned');
 
     // Resolve activity using category (reportCat/itemType) for category-level overrides
-    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+    const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
 
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
