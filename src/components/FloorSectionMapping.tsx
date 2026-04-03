@@ -883,6 +883,23 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
               <Wand2 className="h-4 w-4 mr-1" />
               Auto-Suggest
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Activity
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={handleClearAllActivity}
+                >
+                  Set All Activity to 0000
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {itemCounts.withCodes > 0 && onApplySectionCodes && (
               <Button
                 size="sm"
