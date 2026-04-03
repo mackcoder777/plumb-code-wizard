@@ -341,7 +341,7 @@ export function resolveFloorMappingStatic(
   // Drawing-based fallback
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    return { section: getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings), activity: '0000' };
+    return { section: getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings), activity: '0000', hasExplicitMapping: false };
   }
 
   return { section: '01', activity: '0000' };
