@@ -9,6 +9,9 @@ export interface EstimateProject {
   total_items: number;
   created_at: string;
   updated_at: string;
+  code_format_mode?: 'standard' | 'multitrade';
+  trade_prefix?: string;
+  dismissed_duplicate_flags?: string[];
 }
 
 export interface SystemMapping {
