@@ -293,7 +293,7 @@ export function resolveFloorMappingStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity, hasExplicitMapping };
     }
     // Priority 2: User-configured zone patterns with activity extraction from zone prefix
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
