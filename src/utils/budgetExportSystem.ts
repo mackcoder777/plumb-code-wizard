@@ -897,7 +897,7 @@ function prepareLaborReportData(
 
       return {
         'SEC': sec,
-        'ACT': item.laborAct || item.suggestedCode?.activity || '0000',
+        'ACT': item.suggestedCode?.activity || '0000',
         'COST HEAD': costHead,
         'DESCRIPTION': item.laborDescription || item.suggestedCode?.description || '',
         'Drawing': item.drawing || '',
