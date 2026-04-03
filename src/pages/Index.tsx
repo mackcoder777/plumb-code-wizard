@@ -563,6 +563,20 @@ const EnhancedCostCodeManager = () => {
   const [datasetProfile, setDatasetProfile] = useState<DatasetProfile | null>(null);
   const [pendingUploadFileName, setPendingUploadFileName] = useState<string>('');
   
+  // Trade Section Mode state
+  const [codeFormatMode, setCodeFormatMode] = useState<'standard' | 'multitrade'>('standard');
+  const [tradePrefix, setTradePrefix] = useState('PL');
+  const [dismissedDuplicateFlags, setDismissedDuplicateFlags] = useState<string[]>([]);
+
+  // Load project settings when project changes
+  useEffect(() => {
+    if (currentProject) {
+      setCodeFormatMode((currentProject as any).code_format_mode || 'standard');
+      setTradePrefix((currentProject as any).trade_prefix || 'PL');
+      setDismissedDuplicateFlags((currentProject as any).dismissed_duplicate_flags || []);
+    }
+  }, [currentProject]);
+
   // Budget adjustments state
   const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
   const [bidLaborRate, setBidLaborRate] = useState(() => {
