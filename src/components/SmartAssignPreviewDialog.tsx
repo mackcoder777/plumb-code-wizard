@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { AlertCircle, Check, Loader2 } from 'lucide-react';
 import { EstimateItem } from '@/types/estimate';
 import { DESCRIPTION_CODE_KEYWORDS } from '@/hooks/useMaterialMappingPatterns';
+import { getCodeDescriptionShort } from '@/utils/codeDescriptions';
 
 interface SmartAssignPreviewDialogProps {
   open: boolean;
