@@ -283,8 +283,9 @@ export function resolveFloorMappingStatic(
   options?: ResolutionOptions
 ): FloorMappingResult {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
-  const floorActivity = (fromFloor?.activity && fromFloor.activity !== '0000')
-    ? fromFloor.activity
+  const hasExplicitMapping = !!fromFloor;
+  const floorActivity = hasExplicitMapping
+    ? (fromFloor.activity || '0000')
     : deriveStandaloneActivity(floor);
 
   // Standalone floors: zone-based section takes priority, preserve floor's activity
@@ -292,7 +293,7 @@ export function resolveFloorMappingStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity, hasExplicitMapping };
     }
     // Priority 2: User-configured zone patterns with activity extraction from zone prefix
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
@@ -303,14 +304,14 @@ export function resolveFloorMappingStatic(
       if (prefixMatch) {
         const prefix = prefixMatch[1].toUpperCase();
         const activity = prefix.length <= 3 ? '0' + prefix : prefix;
-        return { section: canonicalSection, activity };
+        return { section: canonicalSection, activity, hasExplicitMapping };
       }
-      return { section: canonicalSection, activity: floorActivity };
+      return { section: canonicalSection, activity: floorActivity, hasExplicitMapping };
     }
   }
 
   // Non-standalone floor with a mapping — use it directly
-  if (fromFloor) return fromFloor;
+  if (fromFloor) return { ...fromFloor, hasExplicitMapping: true };
 
   // Zone-based building fallback for section, activity stays default
   const profile = options?.datasetProfile;
@@ -322,7 +323,7 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000' };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000', hasExplicitMapping: false };
     }
   }
 
@@ -333,17 +334,17 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000' };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000', hasExplicitMapping: false };
     }
   }
 
   // Drawing-based fallback
   const buildingId = getBuildingFromDrawing(drawing);
   if (buildingId) {
-    return { section: getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings), activity: '0000' };
+    return { section: getCanonicalSectionForBuilding(buildingId, floorMappings, buildingMappings), activity: '0000', hasExplicitMapping: false };
   }
 
-  return { section: '01', activity: '0000' };
+  return { section: '01', activity: '0000', hasExplicitMapping: false };
 }
 
 export function useBuildingSectionMappings(projectId: string | null) {

@@ -517,7 +517,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Helper to build full labor code with zone-aware section resolution
   const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string }): string => {
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
-    const activity = resolved.activity !== '0000'
+    const activity = resolved.hasExplicitMapping
       ? resolved.activity
       : (item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000');
     return `${resolved.section} ${activity} ${costHead}`;
@@ -553,7 +553,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
-      const activityCode = resolved.activity !== '0000'
+      const activityCode = resolved.hasExplicitMapping
         ? resolved.activity
         : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;

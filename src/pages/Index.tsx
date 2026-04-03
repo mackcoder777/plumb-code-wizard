@@ -802,7 +802,7 @@ const EnhancedCostCodeManager = () => {
                        (costHead ? 'Unknown' : 'Unassigned');
 
     // Resolve activity using category (reportCat/itemType) for category-level overrides
-    const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+    const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
 
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
@@ -896,7 +896,7 @@ const EnhancedCostCodeManager = () => {
             const persistedHead = parts.slice(2).join(' ');
             const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const activity = floorMap.activity !== '0000' ? floorMap.activity : parts[1];
+            const activity = floorMap.hasExplicitMapping ? floorMap.activity : parts[1];
 
             // Validate cost head against current mappings — respecting priority:
             // Category mapping > System mapping > keep persisted
@@ -978,7 +978,7 @@ const EnhancedCostCodeManager = () => {
         if (appliedCode) {
           const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
           const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.report_cat || item.item_type || undefined);
+          const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.report_cat || item.item_type || undefined);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
@@ -1088,7 +1088,7 @@ const EnhancedCostCodeManager = () => {
       
       const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
       const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+      const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
@@ -1854,7 +1854,7 @@ const EnhancedCostCodeManager = () => {
         // Get section from floor mappings for THIS specific item's floor
         const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const activity = floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+        const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
@@ -2946,7 +2946,7 @@ const EnhancedCostCodeManager = () => {
                       // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
                       const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const activity = existingActivity || (floorMap.activity !== '0000' ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined));
+                      const activity = existingActivity || (floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined));
                       const fullCode = `${section} ${activity} ${costHead}`;
 
                       if (!summary[fullCode]) {
