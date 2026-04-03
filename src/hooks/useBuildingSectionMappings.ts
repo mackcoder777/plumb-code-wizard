@@ -311,7 +311,7 @@ export function resolveFloorMappingStatic(
   }
 
   // Non-standalone floor with a mapping — use it directly
-  if (fromFloor) return fromFloor;
+  if (fromFloor) return { ...fromFloor, hasExplicitMapping: true };
 
   // Zone-based building fallback for section, activity stays default
   const profile = options?.datasetProfile;
