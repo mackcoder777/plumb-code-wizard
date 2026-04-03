@@ -3002,10 +3002,18 @@ const EnhancedCostCodeManager = () => {
                         }
                       }
 
-                      // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
-                      const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
+                      // Resolve SEC and ACT based on code format mode
+                      let section: string;
+                      let activity: string;
+                      if (codeFormatMode === 'multitrade') {
+                        section = tradePrefix || 'PL';
+                        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                        activity = buildingSection !== '01' ? buildingSection : '0000';
+                      } else {
+                        section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                        const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+                        activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
+                      }
                       const fullCode = `${section} ${activity} ${costHead}`;
 
                       if (!summary[fullCode]) {
