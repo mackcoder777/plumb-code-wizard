@@ -47,6 +47,10 @@ import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
 import { useQueryClient } from '@tanstack/react-query';
 import { PatternManagement } from '@/components/PatternManagement';
 import { BudgetChat, EstimateSummary } from '@/components/BudgetChat';
+import { ProjectSettingsPanel } from '@/components/ProjectSettingsPanel';
+import { CodeHealthDashboard } from '@/components/CodeHealthDashboard';
+import { JobWideConsolidation } from '@/components/JobWideConsolidation';
+import { DuplicateScopeDetection } from '@/components/DuplicateScopeDetection';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
