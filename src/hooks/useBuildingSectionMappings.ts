@@ -323,7 +323,7 @@ export function resolveFloorMappingStatic(
   ) {
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000' };
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: '0000', hasExplicitMapping: false };
     }
   }
 
