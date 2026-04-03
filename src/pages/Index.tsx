@@ -2921,22 +2921,20 @@ const EnhancedCostCodeManager = () => {
                       if (hours === 0) return;
 
                       let costHead: string;
-                      let existingActivity: string | null = null;
 
                       if (!rawCostHead) {
                         // CRITICAL FIX: Bucket uncoded items instead of skipping
                         costHead = 'UNCD';
-                        existingActivity = '0000';
                       } else {
+                        // existingActivity is parsed here for cost-head extraction ONLY.
+                        // Never use ACT from stored item.costCode for activity resolution.
                         // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
                         const parts = rawCostHead.trim().split(/\s+/);
 
                         // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
                         if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                          existingActivity = parts[1];
                           costHead = parts.slice(4).join(' ');
                         } else if (parts.length >= 3) {
-                          existingActivity = parts[1];
                           costHead = parts.slice(2).join(' ');
                         } else {
                           costHead = rawCostHead;
@@ -2946,7 +2944,7 @@ const EnhancedCostCodeManager = () => {
                       // ALWAYS re-resolve section from mappings (section assignment panel is point of truth)
                       const section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                       const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                      const activity = existingActivity || (floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined));
+                      const activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
                       const fullCode = `${section} ${activity} ${costHead}`;
 
                       if (!summary[fullCode]) {

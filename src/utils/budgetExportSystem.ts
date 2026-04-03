@@ -218,7 +218,7 @@ export function aggregateLaborByCostCode(
     if (isStandalone && item.floor && buildingMappings.length > 0) {
       sec = getSectionFromFloor(item.floor, floorMappings, item.drawing,
         buildingMappings, dbFloorMappings, item.zone, datasetProfile);
-      act = item.laborAct || item.suggestedCode?.activity || '0000';
+      act = item.suggestedCode?.activity || '0000';
     } else {
       sec = item.laborSec || item.suggestedCode?.section;
       if (!sec && item.floor) {
@@ -226,7 +226,7 @@ export function aggregateLaborByCostCode(
           buildingMappings, dbFloorMappings, item.zone, datasetProfile);
       }
       sec = sec || '01';
-      act = item.laborAct || item.suggestedCode?.activity || '0000';
+      act = item.suggestedCode?.activity || '0000';
     }
     
     // LABOR CODE PRIORITY:
