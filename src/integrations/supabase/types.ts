@@ -305,35 +305,44 @@ export type Database = {
       }
       estimate_projects: {
         Row: {
+          code_format_mode: string
           created_at: string | null
           dataset_profile_override: string | null
+          dismissed_duplicate_flags: Json
           file_name: string | null
           id: string
           name: string
           source_files: string[] | null
           total_items: number | null
+          trade_prefix: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          code_format_mode?: string
           created_at?: string | null
           dataset_profile_override?: string | null
+          dismissed_duplicate_flags?: Json
           file_name?: string | null
           id?: string
           name: string
           source_files?: string[] | null
           total_items?: number | null
+          trade_prefix?: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          code_format_mode?: string
           created_at?: string | null
           dataset_profile_override?: string | null
+          dismissed_duplicate_flags?: Json
           file_name?: string | null
           id?: string
           name?: string
           source_files?: string[] | null
           total_items?: number | null
+          trade_prefix?: string
           updated_at?: string | null
           user_id?: string
         }
