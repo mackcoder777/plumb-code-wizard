@@ -35,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useGetMaterialSuggestions, useBatchLearnMaterialPatterns, getCodeFromDescription } from '@/hooks/useMaterialMappingPatterns';
 import { SmartAssignPreviewDialog } from '@/components/SmartAssignPreviewDialog';
 import { validateMaterialCodeAssignment } from '@/utils/materialCodeValidation';
+import { getCodeDescription, getCodeDescriptionShort } from '@/utils/codeDescriptions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1286,18 +1287,20 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       if (isFullyAssigned) {
         // Fully assigned with multiple codes - show green
         return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono">
+          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 font-mono" title={uniqueCodes.map(c => getCodeDescription(c, allMaterialCodes)).join('\n')}>
             <Check className="h-3 w-3 mr-1" />
-            {uniqueCodes.join(', ')}
+            {uniqueCodes.length <= 2
+              ? uniqueCodes.map(c => getCodeDescriptionShort(c, allMaterialCodes)).join(', ')
+              : `${uniqueCodes.slice(0, 2).join(', ')} +${uniqueCodes.length - 2}`}
           </Badge>
         );
       }
       
       // Partially assigned - show yellow
       return (
-        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30" title={uniqueCodes.map(c => getCodeDescription(c, allMaterialCodes)).join('\n')}>
           <Layers className="h-3 w-3 mr-1" />
-          Mixed ({uniqueCodes.join(', ')})
+          Mixed ({uniqueCodes.slice(0, 2).map(c => getCodeDescriptionShort(c, allMaterialCodes)).join(', ')}{uniqueCodes.length > 2 ? ` +${uniqueCodes.length - 2}` : ''})
         </Badge>
       );
     }

@@ -20,6 +20,8 @@ import { toast } from '@/components/ui/use-toast';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo } from '@/utils/budgetExportSystem';
 import { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
+import { useCostCodes } from '@/hooks/useCostCodes';
+import { getCodeDescription, getCodeDescriptionShort } from '@/utils/codeDescriptions';
 
 interface EstimatesTabProps {
   data: EstimateItem[];
@@ -47,6 +49,7 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
   });
   const [sortField, setSortField] = useState<string>('');
   const [sortAsc, setSortAsc] = useState(true);
+  const { data: costCodesData = [] } = useCostCodes();
   const [selectedItem, setSelectedItem] = useState<EstimateItem | null>(null);
   const [showCostCodeModal, setShowCostCodeModal] = useState(false);
   
@@ -226,8 +229,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       case 'materialCostCode':
         if (item.materialCostCode) {
           return (
-            <Badge variant="secondary" className="bg-blue-500/20 text-blue-600 dark:text-blue-400">
-              {item.materialCostCode}
+            <Badge variant="secondary" className="bg-blue-500/20 text-blue-600 dark:text-blue-400 max-w-[180px] truncate" title={getCodeDescription(item.materialCostCode, costCodesData)}>
+              {getCodeDescriptionShort(item.materialCostCode, costCodesData)}
             </Badge>
           );
         } else {
@@ -236,8 +239,8 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
       case 'costCode':
         if (item.costCode) {
           return (
-            <Badge variant="default" className="bg-success text-success-foreground">
-              {item.costCode}
+            <Badge variant="default" className="bg-success text-success-foreground max-w-[180px] truncate" title={getCodeDescription(item.costCode, costCodesData)}>
+              {getCodeDescriptionShort(item.costCode, costCodesData)}
             </Badge>
           );
         } else if (item.suggestedCodes.length > 0) {
@@ -247,8 +250,9 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
               size="sm"
               className="text-xs"
               onClick={() => openCostCodeModal(item)}
+              title={getCodeDescription(item.suggestedCodes[0].code, costCodesData)}
             >
-              {item.suggestedCodes[0].code}
+              {getCodeDescriptionShort(item.suggestedCodes[0].code, costCodesData)}
               <span className="ml-1 text-muted-foreground">
                 ({Math.round(item.suggestedCodes[0].confidence * 100)}%)
               </span>
@@ -353,7 +357,7 @@ export const EstimatesTab: React.FC<EstimatesTabProps> = ({
             <SelectContent>
               <SelectItem value="">All Cost Heads</SelectItem>
               {filterOptions.costHeads.map((head, index) => (
-                <SelectItem key={`head-${index}-${head}`} value={head}>{head}</SelectItem>
+                <SelectItem key={`head-${index}-${head}`} value={head}>{getCodeDescription(head, costCodesData)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Bot, Settings, TestTube, Rocket } from 'lucide-react';
+import { useCostCodes } from '@/hooks/useCostCodes';
+import { getCodeDescription, getCodeDescriptionShort } from '@/utils/codeDescriptions';
 
 interface AutomationTabProps {
   data: EstimateItem[];
@@ -12,6 +14,7 @@ interface AutomationTabProps {
 }
 
 export const AutomationTab: React.FC<AutomationTabProps> = ({ data, onDataUpdate }) => {
+  const { data: costCodesData = [] } = useCostCodes();
   const matchedItems = data.filter(item => item.suggestedCodes.length > 0).length;
   const accuracy = data.length > 0 ? Math.round((matchedItems / data.length) * 100) : 0;
 
@@ -65,8 +68,8 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ data, onDataUpdate
                       <td className="p-3 font-mono text-sm">{rule.pattern.source}</td>
                       <td className="p-3">{rule.field}</td>
                       <td className="p-3">
-                        {rule.codes.material && <Badge variant="secondary" className="mr-1">{rule.codes.material}</Badge>}
-                        {rule.codes.labor && <Badge variant="default">{rule.codes.labor}</Badge>}
+                        {rule.codes.material && <Badge variant="secondary" className="mr-1 max-w-[160px] truncate" title={getCodeDescription(rule.codes.material, costCodesData)}>{getCodeDescriptionShort(rule.codes.material, costCodesData)}</Badge>}
+                        {rule.codes.labor && <Badge variant="default" className="max-w-[160px] truncate" title={getCodeDescription(rule.codes.labor, costCodesData)}>{getCodeDescriptionShort(rule.codes.labor, costCodesData)}</Badge>}
                       </td>
                       <td className="p-3">{rule.description}</td>
                       <td className="p-3">{matchCount}</td>
