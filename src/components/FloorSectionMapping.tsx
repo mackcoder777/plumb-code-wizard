@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { toast } from '@/components/ui/use-toast';
-import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info, Shuffle } from 'lucide-react';
+import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshCw, ChevronDown, ChevronRight, Wand2, Info, Shuffle, X } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import {
   useFloorSectionMappings,
@@ -785,6 +786,30 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     setHasChanges(false);
   }, [dbMappings]);
 
+  const handleClearAllActivity = useCallback(() => {
+    setLocalActivityMappings(prev => {
+      const next: Record<string, string> = {};
+      Object.keys(prev).forEach(k => { next[k] = '0000'; });
+      Object.keys(localMappings).forEach(k => { next[k] = '0000'; });
+      return next;
+    });
+    setHasChanges(true);
+    toast({ title: "Activity codes cleared", description: "All activity codes set to 0000. Save to persist." });
+  }, [localMappings]);
+
+  const handleClearGroupActivity = useCallback((childFloors: string[]) => {
+    setLocalActivityMappings(prev => {
+      const next = { ...prev };
+      childFloors.forEach(f => { next[f] = '0000'; });
+      return next;
+    });
+    setHasChanges(true);
+    toast({
+      title: "Activity codes cleared",
+      description: `Set ${childFloors.length} floor${childFloors.length !== 1 ? 's' : ''} to 0000.`
+    });
+  }, []);
+
   const handleAutoSuggestAll = useCallback(() => {
     const newSec: Record<string, string> = {};
     const newAct: Record<string, string> = {};
@@ -858,6 +883,23 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
               <Wand2 className="h-4 w-4 mr-1" />
               Auto-Suggest
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Activity
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={handleClearAllActivity}
+                >
+                  Set All Activity to 0000
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {itemCounts.withCodes > 0 && onApplySectionCodes && (
               <Button
                 size="sm"
@@ -1009,8 +1051,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                       className="h-8"
                     />
 
-                    {/* Activity — varies per child, show dash */}
-                    <div className="text-sm text-muted-foreground pl-2">—</div>
+                    {/* Activity — varies per child, show dash + clear button */}
+                    <div className="flex items-center gap-1 pl-2">
+                      <span className="text-sm text-muted-foreground">—</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => handleClearGroupActivity(group.childFloors)}
+                      >
+                        Clear ACT
+                      </Button>
+                    </div>
 
                     {/* Total count */}
                     <div className="text-right">
