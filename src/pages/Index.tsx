@@ -896,7 +896,7 @@ const EnhancedCostCodeManager = () => {
             const persistedHead = parts.slice(2).join(' ');
             const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const activity = floorMap.activity !== '0000' ? floorMap.activity : parts[1];
+            const activity = floorMap.hasExplicitMapping ? floorMap.activity : parts[1];
 
             // Validate cost head against current mappings — respecting priority:
             // Category mapping > System mapping > keep persisted
