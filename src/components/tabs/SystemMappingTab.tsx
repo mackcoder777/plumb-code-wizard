@@ -600,7 +600,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           activityCode = getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
         }
       }
-      const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
+      const newFullCode = `${resolved.section} ${normalizeActivityCode(activityCode)} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
         itemsUpdated++;
