@@ -202,6 +202,38 @@ export type Database = {
         }
         Relationships: []
       }
+      cost_head_activity_overrides: {
+        Row: {
+          cost_head: string
+          created_at: string | null
+          id: string
+          project_id: string
+          use_level_activity: boolean
+        }
+        Insert: {
+          cost_head: string
+          created_at?: string | null
+          id?: string
+          project_id: string
+          use_level_activity?: boolean
+        }
+        Update: {
+          cost_head?: string
+          created_at?: string | null
+          id?: string
+          project_id?: string
+          use_level_activity?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_head_activity_overrides_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_items: {
         Row: {
           cost_code: string | null
