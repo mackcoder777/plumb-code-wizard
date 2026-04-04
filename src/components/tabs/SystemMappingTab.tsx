@@ -39,7 +39,7 @@ import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 
-import { CostHeadActivityOverride, shouldUseLevelActivity } from '@/hooks/useCostHeadActivityOverrides';
+import { CostHeadActivityOverride, shouldUseLevelActivity, useBatchUpsertCostHeadActivityOverrides, useDeleteCostHeadActivityOverride } from '@/hooks/useCostHeadActivityOverrides';
 
 interface SystemMappingTabProps {
   data: EstimateItem[];
