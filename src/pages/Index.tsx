@@ -34,6 +34,7 @@ import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSys
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
 import { useAuth } from '@/hooks/useAuth';
+import { useCostHeadActivityOverrides, shouldUseLevelActivity, CostHeadActivityOverride, usePruneStaleCostHeadOverrides } from '@/hooks/useCostHeadActivityOverrides';
 import { Auth } from '@/components/Auth';
 import { useCostCodes } from '@/hooks/useCostCodes';
 import { findBestMatch, findMatchesForSystems } from '@/utils/smartCodeMatcher';
@@ -616,6 +617,28 @@ const EnhancedCostCodeManager = () => {
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
   
+  // Fetch per-cost-head activity overrides
+  const { data: costHeadActivityOverrides = [] } = useCostHeadActivityOverrides(activeProjectId || null);
+  const pruneStaleCostHeadOverrides = usePruneStaleCostHeadOverrides();
+
+  // Centralized 4-step activity resolution helper
+  const resolveActivity = useCallback((
+    item: { floor?: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string },
+    costHead: string
+  ): string => {
+    // 1. Derive floor/level-based activity
+    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+    const floorActivity = floorMap.activity || '0000';
+    // 2. Explicit user mapping
+    const explicitActivity = floorMap.hasExplicitMapping ? floorMap.activity : null;
+    // 3. Check cost-head override
+    const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+    // 4. Final resolution
+    if (hasLevelOverride) return floorActivity;
+    if (explicitActivity !== null) return explicitActivity;
+    return getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+  }, [dbFloorMappings, dbBuildingMappings, datasetProfile, costHeadActivityOverrides, dbActivityMappings]);
+  
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
     const map: FloorSectionMap = {};
@@ -780,12 +803,12 @@ const EnhancedCostCodeManager = () => {
 
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
-      // ACT = building identifier from zone/drawing resolution
       const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       activity = buildingSection !== '01' ? buildingSection : '0000';
     } else {
-      // Standard mode: SEC = building, ACT = floor/level
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+      // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
+      // We'll re-resolve activity after costHead is determined
       const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
       activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
     }
@@ -828,6 +851,11 @@ const EnhancedCostCodeManager = () => {
                        ).find(c => c.code === costHead)?.description || 
                        (costHead ? 'Unknown' : 'Unassigned');
 
+    // Re-resolve activity with cost-head override knowledge (standard mode only)
+    if (codeFormatMode !== 'multitrade' && costHead) {
+      activity = resolveActivity(item, costHead);
+    }
+
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
       section: section,
@@ -838,7 +866,7 @@ const EnhancedCostCodeManager = () => {
       matchReason: matchReason,
       description: description
     };
-  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor, codeFormatMode, tradePrefix]);
+  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor, codeFormatMode, tradePrefix, resolveActivity]);
 
   // Guard ref to prevent auto-apply from running multiple times per project
   const hasAutoAppliedRef = useRef<string | null>(null);
@@ -919,8 +947,7 @@ const EnhancedCostCodeManager = () => {
           if (parts.length >= 3) {
             const persistedHead = parts.slice(2).join(' ');
             const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const activity = floorMap.hasExplicitMapping ? floorMap.activity : parts[1];
+            const activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
 
             // Validate cost head against current mappings — respecting priority:
             // Category mapping > System mapping > keep persisted
@@ -1001,8 +1028,7 @@ const EnhancedCostCodeManager = () => {
         // Build full cost code with section + activity + cost head
         if (appliedCode) {
           const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.report_cat || item.item_type || undefined);
+          const activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
@@ -1111,8 +1137,7 @@ const EnhancedCostCodeManager = () => {
       if (!head) return item;
       
       const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+      const activity = resolveActivity(item, head);
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
@@ -1542,6 +1567,34 @@ const EnhancedCostCodeManager = () => {
             setEstimateData(processedData);
             setFilteredData(processedData);
             setDatasetProfile(profileDataset(processedData));
+
+            // Prune stale cost-head activity overrides
+            if (activeProjectId && costHeadActivityOverrides.length > 0) {
+              const costHeadsInData = new Set<string>();
+              processedData.forEach(item => {
+                const code = item.costCode || '';
+                const parts = code.trim().split(/\s+/);
+                const head = parts.length >= 3 ? parts.slice(2).join(' ') : '';
+                if (head) costHeadsInData.add(head);
+              });
+              // Also add heads from system mappings
+              savedMappings.forEach(m => {
+                if (m.cost_head) {
+                  const [, laborCode] = m.cost_head.includes('|') ? m.cost_head.split('|') : ['', m.cost_head];
+                  if (laborCode) costHeadsInData.add(laborCode);
+                }
+              });
+              pruneStaleCostHeadOverrides.mutate(
+                { projectId: activeProjectId, validCostHeads: Array.from(costHeadsInData) },
+                {
+                  onSuccess: (result) => {
+                    if (result.pruned > 0) {
+                      console.log(`${result.pruned} activity override(s) removed — their cost heads are no longer in this estimate.`);
+                    }
+                  }
+                }
+              );
+            }
             
             // Helper to save items to database
             const saveItemsToDb = async (projectId: string) => {
@@ -1877,8 +1930,7 @@ const EnhancedCostCodeManager = () => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
         const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+        const activity = resolveActivity(item, laborCode || '');
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
@@ -2842,6 +2894,7 @@ const EnhancedCostCodeManager = () => {
                 }}
                 onReanalyzeProfile={() => setDatasetProfile(profileDataset(estimateData))}
                 onUnappliedChangesUpdate={setHasUnappliedMappingChanges}
+                costHeadActivityOverrides={costHeadActivityOverrides}
                 
               />
             ) : (
@@ -3011,8 +3064,7 @@ const EnhancedCostCodeManager = () => {
                         activity = buildingSection !== '01' ? buildingSection : '0000';
                       } else {
                         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
+                        activity = resolveActivity(item, costHead);
                       }
                       const fullCode = `${section} ${activity} ${costHead}`;
 

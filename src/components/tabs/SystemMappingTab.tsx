@@ -39,6 +39,8 @@ import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 
+import { CostHeadActivityOverride, shouldUseLevelActivity, useBatchUpsertCostHeadActivityOverrides, useDeleteCostHeadActivityOverride } from '@/hooks/useCostHeadActivityOverrides';
+
 interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
@@ -59,7 +61,7 @@ interface SystemMappingTabProps {
   onProfileOverride?: (override: any) => void;
   onReanalyzeProfile?: () => void;
   onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
-  
+  costHeadActivityOverrides?: CostHeadActivityOverride[];
 }
 
 type ViewMode = 'cards' | 'table';
@@ -81,7 +83,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -124,6 +126,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [floorSectionOpen, setFloorSectionOpen] = useState(false);
   const [floorMappings, setFloorMappings] = useState<Record<string, string>>({});
   
+  // Cost head activity override persistence
+  const batchUpsertOverrides = useBatchUpsertCostHeadActivityOverrides();
+  const deleteOverride = useDeleteCostHeadActivityOverride();
+  const handleCostHeadOverridesChange = useCallback(async (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => {
+    if (!projectId) return;
+    // Delete all existing, then upsert checked ones
+    // First get current overrides to find ones to remove
+    const currentHeads = costHeadActivityOverrides.map(o => o.cost_head);
+    const newHeads = new Set(overrides.map(o => o.costHead));
+    // Delete removed overrides
+    for (const h of currentHeads) {
+      if (!newHeads.has(h)) {
+        await deleteOverride.mutateAsync({ projectId, costHead: h });
+      }
+    }
+    // Upsert active overrides
+    if (overrides.length > 0) {
+      await batchUpsertOverrides.mutateAsync({ projectId, overrides });
+    }
+  }, [projectId, costHeadActivityOverrides, batchUpsertOverrides, deleteOverride]);
+
   // Ref for virtualization container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
@@ -517,11 +540,19 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Helper to build full labor code with zone-aware section resolution
   const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string }): string => {
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
-    const activity = resolved.hasExplicitMapping
-      ? resolved.activity
-      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000');
+    const floorActivity = resolved.activity || '0000';
+    const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
+    const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+    let activity: string;
+    if (hasLevelOverride) {
+      activity = floorActivity;
+    } else if (explicitActivity !== null) {
+      activity = explicitActivity;
+    } else {
+      activity = item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000';
+    }
     return `${resolved.section} ${activity} ${costHead}`;
-  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile]);
+  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides]);
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
@@ -549,16 +580,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         }
       }
       
-      // Get new section and activity from zone-aware resolver
+      // Get new section and activity from zone-aware resolver with cost-head override support
       const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
       const liveActivity = item.floor ? activityMappingsToApply[item.floor] : undefined;
-      const activityCode = liveActivity !== undefined
-        ? liveActivity
-        : resolved.hasExplicitMapping
-          ? resolved.activity
-          : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+      let activityCode: string;
+      if (liveActivity !== undefined) {
+        activityCode = liveActivity;
+      } else {
+        const floorActivity = resolved.activity || '0000';
+        const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
+        const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+        if (hasLevelOverride) {
+          activityCode = floorActivity;
+        } else if (explicitActivity !== null) {
+          activityCode = explicitActivity;
+        } else {
+          activityCode = getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+        }
+      }
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
@@ -939,6 +980,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             onReanalyze={onReanalyzeProfile}
             buildingMappings={buildingSectionMappings}
             onBuildingMappingsChanged={onBuildingMappingsChanged}
+            costHeadActivityOverrides={costHeadActivityOverrides}
+            onCostHeadOverridesChange={handleCostHeadOverridesChange}
           />
         </CollapsibleContent>
       </Collapsible>
