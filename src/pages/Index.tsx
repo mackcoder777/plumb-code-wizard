@@ -617,6 +617,27 @@ const EnhancedCostCodeManager = () => {
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
   
+  // Fetch per-cost-head activity overrides
+  const { data: costHeadActivityOverrides = [] } = useCostHeadActivityOverrides(activeProjectId || null);
+
+  // Centralized 4-step activity resolution helper
+  const resolveActivity = useCallback((
+    item: { floor?: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string },
+    costHead: string
+  ): string => {
+    // 1. Derive floor/level-based activity
+    const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+    const floorActivity = floorMap.activity || '0000';
+    // 2. Explicit user mapping
+    const explicitActivity = floorMap.hasExplicitMapping ? floorMap.activity : null;
+    // 3. Check cost-head override
+    const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+    // 4. Final resolution
+    if (hasLevelOverride) return floorActivity;
+    if (explicitActivity !== null) return explicitActivity;
+    return getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+  }, [dbFloorMappings, dbBuildingMappings, datasetProfile, costHeadActivityOverrides, dbActivityMappings]);
+  
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
     const map: FloorSectionMap = {};
