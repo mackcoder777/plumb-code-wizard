@@ -559,16 +559,26 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         }
       }
       
-      // Get new section and activity from zone-aware resolver
+      // Get new section and activity from zone-aware resolver with cost-head override support
       const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
       // Build new full code with floor activity priority over system activity
       const liveActivity = item.floor ? activityMappingsToApply[item.floor] : undefined;
-      const activityCode = liveActivity !== undefined
-        ? liveActivity
-        : resolved.hasExplicitMapping
-          ? resolved.activity
-          : getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+      let activityCode: string;
+      if (liveActivity !== undefined) {
+        activityCode = liveActivity;
+      } else {
+        const floorActivity = resolved.activity || '0000';
+        const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
+        const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+        if (hasLevelOverride) {
+          activityCode = floorActivity;
+        } else if (explicitActivity !== null) {
+          activityCode = explicitActivity;
+        } else {
+          activityCode = getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+        }
+      }
       const newFullCode = `${resolved.section} ${activityCode} ${costHead}`;
       
       if (newFullCode !== item.costCode) {
