@@ -126,6 +126,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [floorSectionOpen, setFloorSectionOpen] = useState(false);
   const [floorMappings, setFloorMappings] = useState<Record<string, string>>({});
   
+  // Cost head activity override persistence
+  const batchUpsertOverrides = useBatchUpsertCostHeadActivityOverrides();
+  const deleteOverride = useDeleteCostHeadActivityOverride();
+  const handleCostHeadOverridesChange = useCallback(async (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => {
+    if (!projectId) return;
+    // Delete all existing, then upsert checked ones
+    // First get current overrides to find ones to remove
+    const currentHeads = costHeadActivityOverrides.map(o => o.cost_head);
+    const newHeads = new Set(overrides.map(o => o.costHead));
+    // Delete removed overrides
+    for (const h of currentHeads) {
+      if (!newHeads.has(h)) {
+        await deleteOverride.mutateAsync({ projectId, costHead: h });
+      }
+    }
+    // Upsert active overrides
+    if (overrides.length > 0) {
+      await batchUpsertOverrides.mutateAsync({ projectId, overrides });
+    }
+  }, [projectId, costHeadActivityOverrides, batchUpsertOverrides, deleteOverride]);
+
   // Ref for virtualization container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
