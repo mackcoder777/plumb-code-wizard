@@ -805,7 +805,7 @@ const EnhancedCostCodeManager = () => {
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
       const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
-      activity = buildingSection !== '01' ? buildingSection : '0000';
+      activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
     } else {
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
