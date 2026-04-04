@@ -850,6 +850,11 @@ const EnhancedCostCodeManager = () => {
                        ).find(c => c.code === costHead)?.description || 
                        (costHead ? 'Unknown' : 'Unassigned');
 
+    // Re-resolve activity with cost-head override knowledge (standard mode only)
+    if (codeFormatMode !== 'multitrade' && costHead) {
+      activity = resolveActivity(item, costHead);
+    }
+
     return {
       code: costHead ? `${section} ${activity} ${costHead}` : '',
       section: section,
@@ -860,7 +865,7 @@ const EnhancedCostCodeManager = () => {
       matchReason: matchReason,
       description: description
     };
-  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor, codeFormatMode, tradePrefix]);
+  }, [customMappings, dbCostCodes, dbActivityMappings, getSectionForFloor, codeFormatMode, tradePrefix, resolveActivity]);
 
   // Guard ref to prevent auto-apply from running multiple times per project
   const hasAutoAppliedRef = useRef<string | null>(null);
