@@ -32,6 +32,8 @@ interface FloorSectionMappingPanelProps {
   onReanalyze?: () => void;
   buildingMappings?: BuildingSectionMapping[];
   onBuildingMappingsChanged?: () => void;
+  costHeadActivityOverrides?: Array<{ cost_head: string; use_level_activity: boolean }>;
+  onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => void;
 }
 
 interface BuildingGroup {
