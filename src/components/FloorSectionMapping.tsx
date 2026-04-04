@@ -536,6 +536,145 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   );
 };
 
+// ─── Per-Head Activity Override Section ───────────────────────────────────────
+interface CostHeadOverrideSectionProps {
+  estimateData: EstimateItem[];
+  costHeadActivityOverrides: Array<{ cost_head: string; use_level_activity: boolean }>;
+  onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => void;
+  onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>) => void;
+  localMappings: Record<string, string>;
+  localActivityMappings: Record<string, string>;
+}
+
+const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
+  estimateData,
+  costHeadActivityOverrides,
+  onCostHeadOverridesChange,
+  onApplySectionCodes,
+  localMappings,
+  localActivityMappings,
+}) => {
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize local state from saved overrides
+  useEffect(() => {
+    const active = new Set(
+      costHeadActivityOverrides
+        .filter(o => o.use_level_activity)
+        .map(o => o.cost_head)
+    );
+    setLocalOverrides(active);
+    setInitialized(true);
+  }, [costHeadActivityOverrides]);
+
+  // Compute unique cost heads with hours from estimate data
+  const costHeadSummary = useMemo(() => {
+    const map = new Map<string, { costHead: string; hours: number; description: string }>();
+    estimateData.forEach(item => {
+      const code = item.costCode || '';
+      const parts = code.trim().split(/\s+/);
+      const head = parts.length >= 3 ? parts.slice(2).join(' ') : '';
+      if (!head || head === 'UNCD') return;
+      const hours = item.hours || 0;
+      const existing = map.get(head);
+      if (existing) {
+        existing.hours += hours;
+      } else {
+        map.set(head, { costHead: head, hours, description: '' });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.hours - a.hours);
+  }, [estimateData]);
+
+  if (costHeadSummary.length === 0) return null;
+
+  const hasOverrideChanges = (() => {
+    const savedSet = new Set(
+      costHeadActivityOverrides
+        .filter(o => o.use_level_activity)
+        .map(o => o.cost_head)
+    );
+    if (localOverrides.size !== savedSet.size) return true;
+    for (const h of localOverrides) {
+      if (!savedSet.has(h)) return true;
+    }
+    return false;
+  })();
+
+  const handleToggle = (costHead: string) => {
+    setLocalOverrides(prev => {
+      const next = new Set(prev);
+      if (next.has(costHead)) {
+        next.delete(costHead);
+      } else {
+        next.add(costHead);
+      }
+      return next;
+    });
+  };
+
+  const handleSaveAndReapply = () => {
+    if (!onCostHeadOverridesChange) return;
+    const checked = costHeadSummary
+      .filter(h => localOverrides.has(h.costHead))
+      .map(h => ({ costHead: h.costHead, useLevelActivity: true }));
+    onCostHeadOverridesChange(checked);
+
+    // Trigger re-apply
+    if (onApplySectionCodes) {
+      onApplySectionCodes(localMappings, localActivityMappings);
+    }
+
+    toast({
+      title: 'Activity overrides saved',
+      description: `${checked.length} cost head(s) will use level-based activity codes.`,
+    });
+  };
+
+  return (
+    <div className="mt-6 border-t border-border pt-4">
+      <Collapsible open={overrideOpen} onOpenChange={setOverrideOpen}>
+        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left font-semibold text-sm hover:text-primary transition-colors">
+          {overrideOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          Per-Head Activity Overrides
+          {localOverrides.size > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs">{localOverrides.size} active</Badge>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Checked cost heads will use level-based activity codes (00L1, 00L2, 00RF, etc.) instead of the section's flat mapping.
+          </p>
+          <div className="max-h-64 overflow-y-auto space-y-1 border border-border rounded-md p-2">
+            {costHeadSummary.map(h => (
+              <label
+                key={h.costHead}
+                className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer text-sm"
+              >
+                <Checkbox
+                  checked={localOverrides.has(h.costHead)}
+                  onCheckedChange={() => handleToggle(h.costHead)}
+                />
+                <span className="font-mono font-medium w-16">{h.costHead}</span>
+                <span className="text-muted-foreground flex-1 truncate">{h.description || h.costHead}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">{h.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h</span>
+              </label>
+            ))}
+          </div>
+          {hasOverrideChanges && initialized && (
+            <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
+              <Save className="w-3.5 h-3.5 mr-1.5" />
+              Save & Re-apply
+            </Button>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> = ({
   estimateData,
