@@ -802,12 +802,12 @@ const EnhancedCostCodeManager = () => {
 
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
-      // ACT = building identifier from zone/drawing resolution
       const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       activity = buildingSection !== '01' ? buildingSection : '0000';
     } else {
-      // Standard mode: SEC = building, ACT = floor/level
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
+      // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
+      // We'll re-resolve activity after costHead is determined
       const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
       activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
     }
