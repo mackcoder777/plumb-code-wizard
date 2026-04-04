@@ -619,6 +619,7 @@ const EnhancedCostCodeManager = () => {
   
   // Fetch per-cost-head activity overrides
   const { data: costHeadActivityOverrides = [] } = useCostHeadActivityOverrides(activeProjectId || null);
+  const pruneStaleCostHeadOverrides = usePruneStaleCostHeadOverrides();
 
   // Centralized 4-step activity resolution helper
   const resolveActivity = useCallback((
