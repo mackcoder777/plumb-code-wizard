@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
+import { normalizeActivityCode } from '@/lib/utils';
 import { DatasetProfile, getBuildingFromZone, getZonePatternMatch } from '@/utils/datasetProfiler';
 
 /** Finds a building mapping with B-prefix normalization ("9" ↔ "B9") */
@@ -284,9 +285,9 @@ export function resolveFloorMappingStatic(
 ): FloorMappingResult {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
   const hasExplicitMapping = !!fromFloor;
-  const floorActivity = hasExplicitMapping
+  const floorActivity = normalizeActivityCode(hasExplicitMapping
     ? (fromFloor.activity || '0000')
-    : deriveStandaloneActivity(floor);
+    : deriveStandaloneActivity(floor));
 
   // Standalone floors: zone-based section takes priority, preserve floor's activity
   if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
@@ -303,7 +304,7 @@ export function resolveFloorMappingStatic(
       const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
       if (prefixMatch) {
         const prefix = prefixMatch[1].toUpperCase();
-        const activity = prefix.length <= 3 ? '0' + prefix : prefix;
+        const activity = normalizeActivityCode(prefix.length <= 3 ? '0' + prefix : prefix);
         return { section: canonicalSection, activity, hasExplicitMapping };
       }
       return { section: canonicalSection, activity: floorActivity, hasExplicitMapping };
@@ -311,7 +312,7 @@ export function resolveFloorMappingStatic(
   }
 
   // Non-standalone floor with a mapping — use it directly
-  if (fromFloor) return { ...fromFloor, hasExplicitMapping: true };
+  if (fromFloor) return { ...fromFloor, activity: normalizeActivityCode(fromFloor.activity), hasExplicitMapping: true };
 
   // Zone-based building fallback for section, activity stays default
   const profile = options?.datasetProfile;

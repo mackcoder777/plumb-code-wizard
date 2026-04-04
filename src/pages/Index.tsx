@@ -29,6 +29,7 @@ import {
 import { useFloorSectionMappings, getFloorMapping } from '@/hooks/useFloorSectionMappings';
 import { resolveFloorMappingStatic, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
 import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
+import { normalizeActivityCode } from '@/lib/utils';
 import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride } from '@/utils/datasetProfiler';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
@@ -804,7 +805,7 @@ const EnhancedCostCodeManager = () => {
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
       const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
-      activity = buildingSection !== '01' ? buildingSection : '0000';
+      activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
     } else {
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
@@ -3061,7 +3062,7 @@ const EnhancedCostCodeManager = () => {
                       if (codeFormatMode === 'multitrade') {
                         section = tradePrefix || 'PL';
                         const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = buildingSection !== '01' ? buildingSection : '0000';
+                        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
                       } else {
                         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                         activity = resolveActivity(item, costHead);
