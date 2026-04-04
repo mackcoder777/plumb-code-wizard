@@ -547,6 +547,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   onReanalyze,
   buildingMappings,
   onBuildingMappingsChanged,
+  costHeadActivityOverrides = [],
+  onCostHeadOverridesChange,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
