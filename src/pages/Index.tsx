@@ -3062,7 +3062,7 @@ const EnhancedCostCodeManager = () => {
                       if (codeFormatMode === 'multitrade') {
                         section = tradePrefix || 'PL';
                         const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = buildingSection !== '01' ? buildingSection : '0000';
+                        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
                       } else {
                         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
                         activity = resolveActivity(item, costHead);
