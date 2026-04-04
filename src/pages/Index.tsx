@@ -1567,6 +1567,34 @@ const EnhancedCostCodeManager = () => {
             setEstimateData(processedData);
             setFilteredData(processedData);
             setDatasetProfile(profileDataset(processedData));
+
+            // Prune stale cost-head activity overrides
+            if (activeProjectId && costHeadActivityOverrides.length > 0) {
+              const costHeadsInData = new Set<string>();
+              processedData.forEach(item => {
+                const code = item.costCode || '';
+                const parts = code.trim().split(/\s+/);
+                const head = parts.length >= 3 ? parts.slice(2).join(' ') : '';
+                if (head) costHeadsInData.add(head);
+              });
+              // Also add heads from system mappings
+              savedMappings.forEach(m => {
+                if (m.cost_head) {
+                  const [, laborCode] = m.cost_head.includes('|') ? m.cost_head.split('|') : ['', m.cost_head];
+                  if (laborCode) costHeadsInData.add(laborCode);
+                }
+              });
+              pruneStaleCostHeadOverrides.mutate(
+                { projectId: activeProjectId, validCostHeads: Array.from(costHeadsInData) },
+                {
+                  onSuccess: (result) => {
+                    if (result.pruned > 0) {
+                      toast({ title: `${result.pruned} activity override(s) removed`, description: 'Their cost heads are no longer in this estimate.' });
+                    }
+                  }
+                }
+              );
+            }
             
             // Helper to save items to database
             const saveItemsToDb = async (projectId: string) => {
