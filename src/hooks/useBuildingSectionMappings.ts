@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { FloorSectionMapping, FloorMappingResult } from '@/hooks/useFloorSectionMappings';
+import { normalizeActivityCode } from '@/lib/utils';
 import { DatasetProfile, getBuildingFromZone, getZonePatternMatch } from '@/utils/datasetProfiler';
 
 /** Finds a building mapping with B-prefix normalization ("9" ↔ "B9") */
