@@ -3034,8 +3034,7 @@ const EnhancedCostCodeManager = () => {
                         activity = buildingSection !== '01' ? buildingSection : '0000';
                       } else {
                         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        const floorMap = resolveFloorMappingStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = floorMap.activity || getActivityFromSystem(item.system, dbActivityMappings, item.reportCat || item.itemType || undefined);
+                        activity = resolveActivity(item, costHead);
                       }
                       const fullCode = `${section} ${activity} ${costHead}`;
 
