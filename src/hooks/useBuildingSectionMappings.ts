@@ -304,7 +304,7 @@ export function resolveFloorMappingStatic(
       const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
       if (prefixMatch) {
         const prefix = prefixMatch[1].toUpperCase();
-        const activity = prefix.length <= 3 ? '0' + prefix : prefix;
+        const activity = normalizeActivityCode(prefix.length <= 3 ? '0' + prefix : prefix);
         return { section: canonicalSection, activity, hasExplicitMapping };
       }
       return { section: canonicalSection, activity: floorActivity, hasExplicitMapping };
