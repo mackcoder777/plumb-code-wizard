@@ -285,9 +285,9 @@ export function resolveFloorMappingStatic(
 ): FloorMappingResult {
   const fromFloor = getFloorMappingNullable(floor, floorMappings);
   const hasExplicitMapping = !!fromFloor;
-  const floorActivity = hasExplicitMapping
+  const floorActivity = normalizeActivityCode(hasExplicitMapping
     ? (fromFloor.activity || '0000')
-    : deriveStandaloneActivity(floor);
+    : deriveStandaloneActivity(floor));
 
   // Standalone floors: zone-based section takes priority, preserve floor's activity
   if (STANDALONE_FLOORS.test((floor || '').trim()) && options?.zone) {
