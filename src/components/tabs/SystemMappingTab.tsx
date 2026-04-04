@@ -519,11 +519,19 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Helper to build full labor code with zone-aware section resolution
   const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string }): string => {
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
-    const activity = resolved.hasExplicitMapping
-      ? resolved.activity
-      : (item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000');
+    const floorActivity = resolved.activity || '0000';
+    const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
+    const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+    let activity: string;
+    if (hasLevelOverride) {
+      activity = floorActivity;
+    } else if (explicitActivity !== null) {
+      activity = explicitActivity;
+    } else {
+      activity = item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000';
+    }
     return `${resolved.section} ${activity} ${costHead}`;
-  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile]);
+  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides]);
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
