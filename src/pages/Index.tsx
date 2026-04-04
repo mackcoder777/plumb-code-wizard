@@ -2865,6 +2865,7 @@ const EnhancedCostCodeManager = () => {
                 }}
                 onReanalyzeProfile={() => setDatasetProfile(profileDataset(estimateData))}
                 onUnappliedChangesUpdate={setHasUnappliedMappingChanges}
+                costHeadActivityOverrides={costHeadActivityOverrides}
                 
               />
             ) : (

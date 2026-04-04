@@ -39,6 +39,8 @@ import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { SystemActivityMapping, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 
+import { CostHeadActivityOverride, shouldUseLevelActivity } from '@/hooks/useCostHeadActivityOverrides';
+
 interface SystemMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
@@ -59,7 +61,7 @@ interface SystemMappingTabProps {
   onProfileOverride?: (override: any) => void;
   onReanalyzeProfile?: () => void;
   onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
-  
+  costHeadActivityOverrides?: CostHeadActivityOverride[];
 }
 
 type ViewMode = 'cards' | 'table';
