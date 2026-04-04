@@ -1589,7 +1589,7 @@ const EnhancedCostCodeManager = () => {
                 {
                   onSuccess: (result) => {
                     if (result.pruned > 0) {
-                      toast({ title: `${result.pruned} activity override(s) removed`, description: 'Their cost heads are no longer in this estimate.' });
+                      console.log(`${result.pruned} activity override(s) removed — their cost heads are no longer in this estimate.`);
                     }
                   }
                 }
