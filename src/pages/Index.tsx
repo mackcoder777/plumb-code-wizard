@@ -946,8 +946,7 @@ const EnhancedCostCodeManager = () => {
           if (parts.length >= 3) {
             const persistedHead = parts.slice(2).join(' ');
             const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const activity = floorMap.hasExplicitMapping ? floorMap.activity : parts[1];
+            const activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
 
             // Validate cost head against current mappings — respecting priority:
             // Category mapping > System mapping > keep persisted
