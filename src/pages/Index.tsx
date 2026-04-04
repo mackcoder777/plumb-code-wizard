@@ -1136,8 +1136,7 @@ const EnhancedCostCodeManager = () => {
       if (!head) return item;
       
       const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      const activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+      const activity = resolveActivity(item, head);
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
