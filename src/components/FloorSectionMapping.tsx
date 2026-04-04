@@ -1133,6 +1133,16 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           </>
         )}
 
+        {/* Per-Head Activity Overrides Section */}
+        <CostHeadOverrideSection
+          estimateData={estimateData}
+          costHeadActivityOverrides={costHeadActivityOverrides}
+          onCostHeadOverridesChange={onCostHeadOverridesChange}
+          onApplySectionCodes={onApplySectionCodes}
+          localMappings={localMappings}
+          localActivityMappings={localActivityMappings}
+        />
+
         {hasChanges && (
           <div className="mt-4 p-3 bg-muted rounded-lg text-sm text-muted-foreground">
             You have unsaved changes. Click "Save All" to persist floor-to-section mappings.
