@@ -480,8 +480,8 @@ export const useSaveEstimateItems = () => {
       
       if (deleteError) throw deleteError;
 
-      // Insert in batches of 100
-      const BATCH_SIZE = 100;
+      // Insert in batches of 500
+      const BATCH_SIZE = 500;
       const totalBatches = Math.ceil(items.length / BATCH_SIZE);
       
       for (let i = 0; i < items.length; i += BATCH_SIZE) {
