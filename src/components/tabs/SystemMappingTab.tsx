@@ -478,9 +478,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Clear the single-system filter to avoid confusion
     setActiveSystemFilter(null);
     
+    const totalHours = systemMappings
+      .filter(sm => selectedSystems.has(normalizeSystemKey(sm.system)))
+      .reduce((sum, sm) => sum + (sm.totalHours || 0), 0);
     toast({
       title: "Bulk Assignment Complete",
-      description: "Selection cleared — ready for next batch.",
+      description: `Applied to ${selectedSystems.size} systems (${totalHours.toFixed(1)}h) — selection cleared.`,
     });
   }, [selectedSystems, projectId, batchSaveMappings, batchRecordMappingPatterns]);
 
@@ -531,9 +534,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       }
     }));
 
+    const hours = systemMappings.find(sm => normalizeSystemKey(sm.system) === normalizeSystemKey(system))?.totalHours || 0;
     toast({
       title: "Suggestion Applied",
-      description: `Applied smart suggestion for ${system}`,
+      description: `Applied smart suggestion for ${system} (${hours.toFixed(1)}h)`,
     });
   }, [suggestions]);
 
@@ -843,9 +847,11 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
     onDataUpdate(updatedData);
     
+    const totalHours = data.filter(item => normalizeSystemKey(item.system) === normalizeSystemKey(system))
+      .reduce((sum, item) => sum + (parseFloat(String(item.hours)) || 0), 0);
     toast({
       title: "Mapping Applied",
-      description: `Applied labor code for "${system}" to ${appliedCount} items${itemsAffected < appliedCount ? ` (${itemsAffected} changed)` : ''}`,
+      description: `Applied labor code for "${system}" to ${appliedCount} items (${totalHours.toFixed(1)}h)`,
     });
   }, [data, mappings, categoryMappings, materialDescOverrides, projectId, onDataUpdate, updateAppliedStatus, recordMappingPattern, buildFullLaborCode]);
 
@@ -868,9 +874,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       });
     }
     
+    const hours = systemMappings.find(sm => normalizeSystemKey(sm.system) === normalizeSystemKey(system))?.totalHours || 0;
     toast({
       title: "Suggestion Accepted",
-      description: `Applied suggested code "${laborCode}" to ${system}`,
+      description: `Applied suggested code "${laborCode}" to ${system} (${hours.toFixed(1)}h)`,
     });
   }, [projectId, saveMapping]);
 
