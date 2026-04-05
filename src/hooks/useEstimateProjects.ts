@@ -590,44 +590,48 @@ export const useBatchUpdateSystemCostCodes = (options?: { suppressInvalidate?: b
     }) => {
       // PRIMARY: Use row_number-based updates (works with both numeric and UUID IDs)
       if (itemUpdates && itemUpdates.length > 0) {
-        // Process in batches to avoid overwhelming Supabase
-        const BATCH_SIZE = 50;
-        const results: EstimateItem[] = [];
-        
-        for (let i = 0; i < itemUpdates.length; i += BATCH_SIZE) {
-          const batch = itemUpdates.slice(i, i + BATCH_SIZE);
-          
-          // Execute updates in parallel within each batch
-          const batchResults = await Promise.all(
-            batch.map(async (update) => {
-              const updateData: { cost_code?: string; material_cost_code?: string } = {};
-              if (update.cost_code) updateData.cost_code = update.cost_code;
-              if (update.material_cost_code) updateData.material_cost_code = update.material_cost_code;
-              
-              if (Object.keys(updateData).length === 0) return null;
-              
-              // Use composite key: project_id + row_number (always works)
-              const { data, error } = await supabase
-                .from('estimate_items')
-                .update(updateData)
-                .eq('project_id', projectId)
-                .eq('row_number', update.row_number)
-                .select()
-                .single();
-              
-              if (error) {
-                console.error(`Failed to update item row ${update.row_number}:`, error);
-                return null;
-              }
-              return data;
-            })
-          );
-          
-          results.push(...batchResults.filter(Boolean) as EstimateItem[]);
+        // Group updates by identical cost_code value so we issue one DB call per unique code
+        const byCode = new Map<string, number[]>();
+        for (const update of itemUpdates) {
+          const code = update.cost_code || '';
+          if (!code) continue;
+          if (!byCode.has(code)) byCode.set(code, []);
+          byCode.get(code)!.push(update.row_number);
         }
-        
-        console.log(`[BatchUpdate] Successfully updated ${results.length}/${itemUpdates.length} items`);
-        return results;
+
+        // Also group by material_cost_code
+        const byMaterialCode = new Map<string, number[]>();
+        for (const update of itemUpdates) {
+          const code = update.material_cost_code || '';
+          if (!code) continue;
+          if (!byMaterialCode.has(code)) byMaterialCode.set(code, []);
+          byMaterialCode.get(code)!.push(update.row_number);
+        }
+
+        // One bulk UPDATE per unique code — ~15 calls instead of 3,003
+        const promises: Promise<any>[] = [];
+        for (const [code, rowNumbers] of byCode.entries()) {
+          promises.push(
+            supabase
+              .from('estimate_items')
+              .update({ cost_code: code })
+              .eq('project_id', projectId)
+              .in('row_number', rowNumbers)
+          );
+        }
+        for (const [code, rowNumbers] of byMaterialCode.entries()) {
+          promises.push(
+            supabase
+              .from('estimate_items')
+              .update({ material_cost_code: code })
+              .eq('project_id', projectId)
+              .in('row_number', rowNumbers)
+          );
+        }
+
+        await Promise.all(promises);
+        console.log(`[BatchUpdate] Bulk-updated ${itemUpdates.length} items via ${promises.length} grouped calls`);
+        return [] as EstimateItem[];
       }
       
       // Legacy fallback: update all items with same code (for simple cases)
