@@ -396,7 +396,7 @@ export const useEstimateItems = (projectId: string | null) => {
       if (!projectId) return [];
       
       // Fetch all items using parallel pagination to overcome the 1000 row limit
-      const PAGE_SIZE = 5000;
+      const PAGE_SIZE = 1000;
       
       // Get total count first
       const { count, error: countError } = await supabase
