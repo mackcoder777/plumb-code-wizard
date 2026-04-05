@@ -903,10 +903,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       ...Object.keys(localActivityMappings).filter(p => localActivityMappings[p]?.trim()),
     ]);
 
+    const isMultitrade = codeFormatMode === 'multitrade';
     const mappingsToSave = Array.from(allPatterns).map(floorPattern => ({
       floorPattern,
-      sectionCode: localMappings[floorPattern] || '01',
-      activityCode: localActivityMappings[floorPattern] || '0000',
+      sectionCode: isMultitrade ? (tradePrefix ?? 'PL') : (localMappings[floorPattern] || '01'),
+      activityCode: isMultitrade ? (localMappings[floorPattern] || '0000') : (localActivityMappings[floorPattern] || '0000'),
       description: customDescriptions[localMappings[floorPattern]] || null,
     }));
 
