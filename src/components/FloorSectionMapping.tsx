@@ -904,6 +904,30 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
     if (!sectionCode.trim()) return;
     const code = sectionCode.trim().toUpperCase();
+
+    // 1. Remove zoneLabel from any OLD mapping that currently owns it
+    const oldMapping = buildingMappings?.find(m => {
+      if (!m.zone_pattern) return false;
+      const patterns = m.zone_pattern.split(',').map(p => p.trim().toLowerCase());
+      return patterns.includes(zoneLabel.toLowerCase());
+    });
+
+    if (oldMapping && oldMapping.section_code.toUpperCase() !== code) {
+      const remainingPatterns = (oldMapping.zone_pattern || '')
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => p.toLowerCase() !== zoneLabel.toLowerCase());
+
+      await (supabase as any)
+        .from('building_section_mappings')
+        .update({
+          zone_pattern: remainingPatterns.length > 0 ? remainingPatterns.join(', ') : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', oldMapping.id);
+    }
+
+    // 2. Find or create the target mapping
     const mapping = buildingMappings?.find(m => m.section_code.toUpperCase() === code);
 
     if (!mapping) {
@@ -932,10 +956,14 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     if (mapping.zone_pattern) {
       // Check if this zone is already included
       const existingPatterns = mapping.zone_pattern.split(',').map(p => p.trim().toLowerCase());
-      if (existingPatterns.includes(zoneLabel.toLowerCase())) return; // already saved
+      if (existingPatterns.includes(zoneLabel.toLowerCase())) {
+        // Already on correct mapping (maybe old was same as new)
+        onBuildingMappingsChanged?.();
+        return;
+      }
 
       // Append the new pattern
-      const updatedPattern = `${mapping.zone_pattern},${zoneLabel}`;
+      const updatedPattern = `${mapping.zone_pattern}, ${zoneLabel}`;
       const { error } = await (supabase as any)
         .from('building_section_mappings')
         .update({ zone_pattern: updatedPattern, updated_at: new Date().toISOString() })
@@ -945,7 +973,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
         return;
       }
-      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (appended)` });
+      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (reassigned)` });
       onBuildingMappingsChanged?.();
       return;
     }
