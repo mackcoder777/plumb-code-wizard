@@ -257,12 +257,6 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     });
   };
   
-  // Get preview items for a category (first 5)
-  const getPreviewItems = (category: string): EstimateItem[] => {
-    return data
-      .filter(item => item.reportCat === category)
-      .slice(0, 5);
-  };
   
   if (filteredCategories.length === 0) {
     return null; // Don't show panel if no categories
