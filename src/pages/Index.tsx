@@ -2017,8 +2017,16 @@ const EnhancedCostCodeManager = () => {
     const updated = estimateData.map((item, index) => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
-        const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const activity = resolveActivity(item, laborCode || '');
+        let section: string;
+        let activity: string;
+        if (codeFormatMode === 'multitrade') {
+          section = tradePrefix || 'PL';
+          const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+          activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+        } else {
+          section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+          activity = resolveActivity(item, laborCode || '');
+        }
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
