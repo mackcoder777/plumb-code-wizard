@@ -1014,8 +1014,16 @@ const EnhancedCostCodeManager = () => {
           const parts = item.cost_code.trim().split(/\s+/);
           if (parts.length >= 3) {
             const persistedHead = parts.slice(2).join(' ');
-            const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            const activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
+            let section: string;
+            let activity: string;
+            if (codeFormatMode === 'multitrade') {
+              section = tradePrefix || 'PL';
+              const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+              activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+            } else {
+              section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+              activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
+            }
 
             // Validate cost head against current mappings — respecting priority:
             // Category mapping > System mapping > keep persisted
@@ -1095,8 +1103,16 @@ const EnhancedCostCodeManager = () => {
 
         // Build full cost code with section + activity + cost head
         if (appliedCode) {
-          const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
+          let section: string;
+          let activity: string;
+          if (codeFormatMode === 'multitrade') {
+            section = tradePrefix || 'PL';
+            const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+          } else {
+            section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
+          }
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
@@ -2001,8 +2017,16 @@ const EnhancedCostCodeManager = () => {
     const updated = estimateData.map((item, index) => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
-        const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        const activity = resolveActivity(item, laborCode || '');
+        let section: string;
+        let activity: string;
+        if (codeFormatMode === 'multitrade') {
+          section = tradePrefix || 'PL';
+          const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+          activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+        } else {
+          section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+          activity = resolveActivity(item, laborCode || '');
+        }
         
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
