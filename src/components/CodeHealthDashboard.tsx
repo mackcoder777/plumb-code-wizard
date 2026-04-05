@@ -135,8 +135,9 @@ export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({ finalL
           <CollapsibleContent className="pt-3 space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className={cn('rounded-lg p-3', codeCountBg)}>
-                <div className="text-xs text-muted-foreground">Total Codes</div>
+                <div className="text-xs text-muted-foreground">Budget Lines</div>
                 <div className={cn('text-2xl font-bold font-mono', codeCountColor)}>{analysis.totalCodes}</div>
+                <div className="text-xs text-muted-foreground mt-1">Unique codes in budget output</div>
               </div>
               <div className="rounded-lg p-3 bg-muted/50">
                 <div className="text-xs text-muted-foreground">Total Hours</div>

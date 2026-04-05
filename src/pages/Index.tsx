@@ -2565,7 +2565,7 @@ const EnhancedCostCodeManager = () => {
             <>
 
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg">
                   <h3 className="text-sm text-blue-600 font-medium uppercase">Total Items</h3>
                   <div className="text-3xl font-bold text-blue-900">{stats.totalItems}</div>
@@ -2582,6 +2582,13 @@ const EnhancedCostCodeManager = () => {
                     {isNaN(stats.totalHours) ? '0' : stats.totalHours.toFixed(1)}
                   </div>
                   <p className="text-xs text-purple-600 mt-1">Labor hours</p>
+                </div>
+                <div className="bg-gradient-to-br from-teal-50 to-teal-100 p-6 rounded-lg">
+                  <h3 className="text-sm text-teal-600 font-medium uppercase">Unique Codes in Use</h3>
+                  <div className="text-3xl font-bold text-teal-900">
+                    {new Set(estimateData.filter(i => i.costCode).map(i => i.costCode)).size}
+                  </div>
+                  <p className="text-xs text-teal-600 mt-1">of {stats.totalCodes} in library</p>
                 </div>
                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-6 rounded-lg">
                   <h3 className="text-sm text-amber-600 font-medium uppercase">Ready to Auto-Assign</h3>
