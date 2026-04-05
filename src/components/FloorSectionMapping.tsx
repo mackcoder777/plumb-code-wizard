@@ -813,12 +813,16 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
         }
       });
-      // Derive building identifiers from floor keys (same logic as groupFloors)
-      Object.keys(floorCounts).forEach(floor => {
-        const bldgMatch = floor.match(/^bldg\s*(\w+)/i);
-        if (bldgMatch) {
-          const id = bldgMatch[1].toUpperCase();
-          if (!codes.has(id)) codes.set(id, `Building ${id}`);
+      // Derive building identifiers from estimate floor values
+      const seenFloors = new Set<string>();
+      estimateData.forEach(item => {
+        if (item.floor && !seenFloors.has(item.floor)) {
+          seenFloors.add(item.floor);
+          const bldgMatch = item.floor.match(/^bldg\s*(\w+)/i);
+          if (bldgMatch) {
+            const id = bldgMatch[1].toUpperCase();
+            if (!codes.has(id)) codes.set(id, `Building ${id}`);
+          }
         }
       });
     } else {
@@ -829,7 +833,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       });
     }
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [localMappings, codeFormatMode, buildingMappings, floorCounts]);
+  }, [localMappings, codeFormatMode, buildingMappings, estimateData]);
 
   // Floor counts
   const floorData = useMemo(() => {
