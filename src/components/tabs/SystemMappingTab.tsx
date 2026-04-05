@@ -340,7 +340,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Statistics
   const stats = useMemo(() => {
     const total = systemMappings.length;
-    const mapped = systemMappings.filter(sm => sm.laborCode).length;
+    const zeroHour = systemMappings.filter(sm => !sm.laborCode && (sm.totalHours || 0) === 0).length;
+    const mapped = systemMappings.filter(sm => sm.laborCode).length + zeroHour;
     const unmapped = total - mapped;
 
     return { total, mapped, partial: 0, unmapped };
