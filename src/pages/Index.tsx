@@ -2675,7 +2675,7 @@ const EnhancedCostCodeManager = () => {
                   onClick={() => setShowCostCodeBrowser(true)}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all flex items-center gap-2 font-medium"
                 >
-                  🔍 Search All {stats.totalCodes} Cost Codes
+                  🔍 Search Code Library ({stats.totalCodes})
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
