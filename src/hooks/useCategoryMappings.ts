@@ -19,6 +19,10 @@ export interface CategoryIndexEntry {
   category: string;
   itemCount: number;
   totalHours: number;
+  topSystems: Array<{ system: string; count: number; hours: number }>;
+  topMaterialDescs: Array<{ desc: string; count: number }>;
+  systemCount: number;
+  descCount: number;
 }
 
 /**
@@ -115,24 +119,58 @@ export function useDeleteCategoryMapping() {
  */
 export function useCategoryIndex(data: EstimateItem[]): CategoryIndexEntry[] {
   return useMemo(() => {
-    const categoryMap = new Map<string, { count: number; hours: number }>();
+    // Group items by category
+    const categoryItems = new Map<string, EstimateItem[]>();
     
     for (const item of data) {
       const category = item.reportCat || 'Unknown';
-      if (!categoryMap.has(category)) {
-        categoryMap.set(category, { count: 0, hours: 0 });
+      if (!categoryItems.has(category)) {
+        categoryItems.set(category, []);
       }
-      const entry = categoryMap.get(category)!;
-      entry.count++;
-      entry.hours += item.hours || 0;
+      categoryItems.get(category)!.push(item);
     }
     
-    return Array.from(categoryMap.entries())
-      .map(([category, entry]) => ({
-        category,
-        itemCount: entry.count,
-        totalHours: entry.hours,
-      }))
+    return Array.from(categoryItems.entries())
+      .map(([category, items]) => {
+        const itemCount = items.length;
+        const totalHours = items.reduce((sum, item) => sum + (item.hours || 0), 0);
+
+        // Compute system distribution
+        const systemMap = new Map<string, { count: number; hours: number }>();
+        const descMap = new Map<string, number>();
+
+        for (const item of items) {
+          const sys = item.system || 'Unknown';
+          const existing = systemMap.get(sys) ?? { count: 0, hours: 0 };
+          systemMap.set(sys, {
+            count: existing.count + 1,
+            hours: existing.hours + (item.hours || 0),
+          });
+
+          const desc = item.materialDesc || 'Unknown';
+          descMap.set(desc, (descMap.get(desc) ?? 0) + 1);
+        }
+
+        const topSystems = [...systemMap.entries()]
+          .map(([system, d]) => ({ system, ...d }))
+          .sort((a, b) => b.hours - a.hours)
+          .slice(0, 5);
+
+        const topMaterialDescs = [...descMap.entries()]
+          .map(([desc, count]) => ({ desc, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5);
+
+        return {
+          category,
+          itemCount,
+          totalHours,
+          topSystems,
+          topMaterialDescs,
+          systemCount: systemMap.size,
+          descCount: descMap.size,
+        };
+      })
       .sort((a, b) => b.itemCount - a.itemCount);
   }, [data]);
 }
