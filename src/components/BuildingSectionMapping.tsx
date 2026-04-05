@@ -23,12 +23,14 @@ interface Props {
   projectId: string;
   estimateItems: Array<{ drawing?: string }>;
   onMappingsChange?: () => void;
+  suggestedMappings?: Array<{ building_identifier: string; section_code: string }>;
 }
 
 export const BuildingSectionMappingPanel: React.FC<Props> = ({
   projectId,
   estimateItems,
   onMappingsChange,
+  suggestedMappings = [],
 }) => {
   const { mappings, loading, upsertMapping, deleteMapping, autoPopulate, updateZonePattern } =
     useBuildingSectionMappings(projectId);
