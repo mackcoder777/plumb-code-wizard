@@ -534,9 +534,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       }
     }));
 
+    const hours = systemMappings.find(sm => normalizeSystemKey(sm.system) === normalizeSystemKey(system))?.totalHours || 0;
     toast({
       title: "Suggestion Applied",
-      description: `Applied smart suggestion for ${system}`,
+      description: `Applied smart suggestion for ${system} (${hours.toFixed(1)}h)`,
     });
   }, [suggestions]);
 
