@@ -510,8 +510,15 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
             {info.breakdown.map(({ label, count: bCount, pct }) => {
               const bldgMatch = label.match(/BLDG\s*[-–]\s*([A-Z0-9]+)/i);
               const bldgId = bldgMatch ? bldgMatch[1].toUpperCase() : label;
+              const matchedMapping = buildingMappings?.find(
+                m =>
+                  m.building_identifier.toUpperCase() === bldgId.toUpperCase() ||
+                  m.building_identifier.toUpperCase() === `B${bldgId}`.toUpperCase() ||
+                  m.section_code?.toUpperCase() === bldgId.toUpperCase() ||
+                  m.section_code?.toUpperCase() === `B${bldgId}`.toUpperCase()
+              );
               const suggestedSection = bldgMatch
-                ? (isNaN(Number(bldgId)) ? `B${bldgId}` : bldgId)
+                ? (matchedMapping?.section_code || `B${bldgId}`)
                 : null;
 
               return (
