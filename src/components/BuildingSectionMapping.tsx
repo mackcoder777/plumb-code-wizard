@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Building2, Wand2, Trash2, Plus } from 'lucide-react';
+import { Building2, Wand2, Trash2, Plus, AlertTriangle, Save } from 'lucide-react';
 import {
   BuildingSectionMapping as BSM,
   DetectedBuilding,
@@ -42,10 +42,29 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
   const [newDescription, setNewDescription] = useState('');
   const [newZonePattern, setNewZonePattern] = useState('');
 
+  // Suggested mappings state — pre-filled from auto-detection, not yet in DB
+  const [isSuggested, setIsSuggested] = useState(false);
+  const [suggestedRows, setSuggestedRows] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (estimateItems.length === 0) return;
     setDetected(detectBuildingsFromDrawings(estimateItems));
   }, [estimateItems]);
+
+  // Pre-populate from suggestedMappings when no DB mappings exist
+  useEffect(() => {
+    if (mappings.length > 0) {
+      setIsSuggested(false);
+      setSuggestedRows({});
+    } else if (suggestedMappings.length > 0) {
+      const suggested: Record<string, string> = {};
+      suggestedMappings.forEach(s => {
+        suggested[s.building_identifier] = s.section_code;
+      });
+      setSuggestedRows(suggested);
+      setIsSuggested(true);
+    }
+  }, [mappings.length, suggestedMappings]);
 
   const handleAutoPopulate = async () => {
     await autoPopulate(detected);
@@ -69,6 +88,17 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
     onMappingsChange?.();
   };
 
+  const handleSaveAllSuggested = async () => {
+    const entries = Object.entries(suggestedRows);
+    if (entries.length === 0) return;
+    for (const [buildingId, sectionCode] of entries) {
+      await upsertMapping(buildingId, sectionCode, `Building ${buildingId}`);
+    }
+    setIsSuggested(false);
+    setSuggestedRows({});
+    onMappingsChange?.();
+  };
+
   const handleAddNew = async () => {
     if (!newBuildingId.trim() || !newSectionCode.trim()) return;
     await upsertMapping(
@@ -79,12 +109,16 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
     setNewBuildingId('');
     setNewSectionCode('');
     setNewDescription('');
+    setNewZonePattern('');
     onMappingsChange?.();
   };
 
   const unmappedBuildings = detected.filter(
     d => !mappings.find(m => m.building_identifier === d.building_identifier)
+      && !suggestedRows[d.building_identifier]
   );
+
+  const suggestedEntries = Object.entries(suggestedRows);
 
   return (
     <Card>
@@ -94,7 +128,10 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
               Building → Section Code
-              <Badge variant="secondary" className="ml-2">{mappings.length} mapped</Badge>
+              <Badge variant="secondary" className="ml-2">
+                {mappings.length} mapped
+                {isSuggested && suggestedEntries.length > 0 && ` · ${suggestedEntries.length} suggested`}
+              </Badge>
             </CardTitle>
             <CardDescription>
               When floor values like "Roof" or "Crawl Space" don't contain a building
@@ -102,7 +139,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
               section code.
             </CardDescription>
           </div>
-          {unmappedBuildings.length > 0 && (
+          {unmappedBuildings.length > 0 && !isSuggested && (
             <Button variant="outline" size="sm" onClick={handleAutoPopulate}>
               <Wand2 className="h-4 w-4 mr-1" />
               Auto-detect ({unmappedBuildings.length} new)
@@ -111,8 +148,27 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Auto-detected but unmapped */}
-        {unmappedBuildings.length > 0 && (
+        {/* Suggested mappings banner */}
+        {isSuggested && suggestedEntries.length > 0 && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                {suggestedEntries.length} building(s) auto-detected from drawing names
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                Review the section codes below and click Save All to apply them — cost codes will use 0000 until saved.
+              </p>
+            </div>
+            <Button size="sm" onClick={handleSaveAllSuggested}>
+              <Save className="h-4 w-4 mr-1" />
+              Save All
+            </Button>
+          </div>
+        )}
+
+        {/* Auto-detected but unmapped (only show when NOT in suggested mode) */}
+        {!isSuggested && unmappedBuildings.length > 0 && (
           <div className="p-3 bg-muted/50 rounded-lg border border-dashed">
             <p className="text-sm text-muted-foreground mb-2">
               {unmappedBuildings.length} building(s) detected from drawing names — not yet mapped:
@@ -130,7 +186,60 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Existing mappings */}
+        {/* Suggested rows table (editable, not yet saved) */}
+        {isSuggested && suggestedEntries.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Building</TableHead>
+                <TableHead>Section Code</TableHead>
+                <TableHead>Items</TableHead>
+                <TableHead className="w-[100px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {suggestedEntries.map(([buildingId, sectionCode]) => {
+                const det = detected.find(d => d.building_identifier === buildingId);
+                return (
+                  <TableRow key={buildingId} className="bg-amber-50/50 dark:bg-amber-950/10">
+                    <TableCell className="font-mono font-medium">{buildingId}</TableCell>
+                    <TableCell>
+                      <Input
+                        value={sectionCode}
+                        className="w-20 h-8 font-mono"
+                        onChange={e =>
+                          setSuggestedRows(prev => ({
+                            ...prev,
+                            [buildingId]: e.target.value.toUpperCase(),
+                          }))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>{det ? `${det.item_count}` : '—'}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setSuggestedRows(prev => {
+                            const next = { ...prev };
+                            delete next[buildingId];
+                            if (Object.keys(next).length === 0) setIsSuggested(false);
+                            return next;
+                          })
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+
+        {/* Existing DB mappings */}
         {mappings.length > 0 && (
           <Table>
             <TableHeader>
@@ -256,11 +365,8 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
               newSectionCode.trim().toUpperCase(),
               newDescription.trim()
             );
-            // Update zone pattern if provided
             if (newZonePattern.trim()) {
               const newMapping = mappings.find(m => m.building_identifier === newBuildingId.trim().toUpperCase());
-              // We need to wait for the mapping to be created, so we'll handle via a separate update
-              // For now, the user can set it after adding
             }
             setNewBuildingId('');
             setNewSectionCode('');
