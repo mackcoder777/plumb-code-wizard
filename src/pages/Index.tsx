@@ -569,6 +569,7 @@ const EnhancedCostCodeManager = () => {
   const [codeFormatMode, setCodeFormatMode] = useState<'standard' | 'multitrade'>('standard');
   const [tradePrefix, setTradePrefix] = useState('PL');
   const [dismissedDuplicateFlags, setDismissedDuplicateFlags] = useState<string[]>([]);
+  const [suggestedBuildingMappings, setSuggestedBuildingMappings] = useState<Array<{ building_identifier: string; section_code: string }>>([]);
 
   // Load project settings when project changes
   useEffect(() => {
@@ -1300,7 +1301,10 @@ const EnhancedCostCodeManager = () => {
       buildingsPopulatedRef.current = currentProject.id;
       const detected = detectBuildingsFromDrawings(estimateData);
       if (detected.length > 0) {
-        autoPopulateBuildings(detected);
+        setSuggestedBuildingMappings(detected.map(b => ({
+          building_identifier: b.building_identifier,
+          section_code: b.suggested_section,
+        })));
       }
     }
   }, [estimateData.length, dbBuildingMappings.length, currentProject?.id]);
@@ -2994,6 +2998,7 @@ const EnhancedCostCodeManager = () => {
                 systemActivityMappings={dbActivityMappings}
                 buildingSectionMappings={dbBuildingMappings}
                 onBuildingMappingsChanged={refetchBuildingMappings}
+                suggestedBuildingMappings={suggestedBuildingMappings}
                 datasetProfile={datasetProfile}
                 onProfileOverride={(override) => {
                   if (override) {
