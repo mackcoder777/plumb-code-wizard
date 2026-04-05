@@ -340,7 +340,8 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   // Statistics
   const stats = useMemo(() => {
     const total = systemMappings.length;
-    const mapped = systemMappings.filter(sm => sm.laborCode).length;
+    const zeroHour = systemMappings.filter(sm => !sm.laborCode && (sm.totalHours || 0) === 0).length;
+    const mapped = systemMappings.filter(sm => sm.laborCode).length + zeroHour;
     const unmapped = total - mapped;
 
     return { total, mapped, partial: 0, unmapped };
@@ -353,7 +354,9 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       itemCount: sm.itemCount,
       totalHours: sm.totalHours,
       laborCode: sm.laborCode,
-      status: sm.laborCode ? 'mapped' as const : 'unmapped' as const,
+      status: sm.laborCode ? 'mapped' as const
+        : (sm.totalHours || 0) === 0 ? 'mapped' as const
+        : 'unmapped' as const,
     }));
   }, [systemMappings]);
 
@@ -507,7 +510,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Simulate processing time for better UX
     setTimeout(() => {
       const systemNames = systemMappings
-        .filter(sm => !sm.laborCode) // Only suggest for unmapped systems
+        .filter(sm => !sm.laborCode && (sm.totalHours || 0) > 0) // Only suggest for unmapped systems with hours
         .map(sm => normalizeSystemKey(sm.system));
       
       const newSuggestions = generateAllSuggestions(systemNames);
