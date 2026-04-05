@@ -640,6 +640,7 @@ const EnhancedCostCodeManager = () => {
     return getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
   }, [dbFloorMappings, dbBuildingMappings, datasetProfile, costHeadActivityOverrides, dbActivityMappings]);
   
+
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
     const map: FloorSectionMap = {};
@@ -775,6 +776,72 @@ const EnhancedCostCodeManager = () => {
   };
 
   const COST_CODES = getAllCodes();
+
+  // Memoized labor summary for BudgetAdjustmentsPanel — avoids O(n) recomputation every render
+  const memoizedLaborSummary = useMemo(() => {
+    if (!estimateData || estimateData.length === 0) return {};
+    const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
+    estimateData.forEach((item: any) => {
+      const rawCostHead = item.costCode || item.laborCostCode;
+      const hours = item.hours || 0;
+      if (hours === 0) return;
+      let costHead: string;
+      if (!rawCostHead) {
+        costHead = 'UNCD';
+      } else {
+        const parts = rawCostHead.trim().split(/\s+/);
+        if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
+          costHead = parts.slice(4).join(' ');
+        } else if (parts.length >= 3) {
+          costHead = parts.slice(2).join(' ');
+        } else {
+          costHead = rawCostHead;
+        }
+      }
+      let section: string;
+      let activity: string;
+      if (codeFormatMode === 'multitrade') {
+        section = tradePrefix || 'PL';
+        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+      } else {
+        section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = resolveActivity(item, costHead);
+      }
+      const fullCode = `${section} ${activity} ${costHead}`;
+      if (!summary[fullCode]) {
+        const codeInfo = COST_CODES.find(c => c.code === costHead);
+        summary[fullCode] = {
+          code: fullCode,
+          description: costHead === 'UNCD' ? 'UNCODED ITEMS' : (codeInfo?.description || costHead),
+          fieldHours: 0,
+          rate: bidLaborRate
+        };
+      }
+      summary[fullCode].fieldHours += hours;
+    });
+    return summary;
+  }, [estimateData, codeFormatMode, tradePrefix, dbFloorMappings, dbBuildingMappings, datasetProfile, resolveActivity, bidLaborRate]);
+
+  // Memoized material summary for BudgetAdjustmentsPanel
+  const memoizedMaterialSummary = useMemo(() => {
+    if (!estimateData || estimateData.length === 0) return {};
+    const summary: Record<string, { code: string; description: string; amount: number }> = {};
+    estimateData.forEach((item: any) => {
+      const code = item.materialCostCode;
+      if (!code) return;
+      if (!summary[code]) {
+        const codeInfo = COST_CODES.find(c => c.code === code);
+        summary[code] = {
+          code,
+          description: codeInfo?.description || code,
+          amount: 0
+        };
+      }
+      summary[code].amount += item.materialDollars || 0;
+    });
+    return summary;
+  }, [estimateData]);
 
   // Helper to get section from floor - uses zone-aware resolver with building fallback
   const getSectionForFloor = useCallback((floor: string, drawing?: string, zone?: string): string => {
@@ -1064,22 +1131,26 @@ const EnhancedCostCodeManager = () => {
           hasAutoAppliedRef.current = currentProject.id;
           console.log(`[AutoApply] Persisting ${newlyApplied} labor codes to database...`);
 
-          (async () => {
-            try {
-              // Single batch call using silent version (no invalidation)
-              await batchUpdateSilent.mutateAsync({
-                projectId: currentProject.id,
-                system: '__auto_apply__',
-                itemUpdates: itemsNeedingPersist.map(u => ({
-                  row_number: u.row_number,
-                  cost_code: u.cost_code
-                }))
-              });
+          const persistInBackground = () => {
+            batchUpdateSilent.mutateAsync({
+              projectId: currentProject.id,
+              system: '__auto_apply__',
+              itemUpdates: itemsNeedingPersist.map(u => ({
+                row_number: u.row_number,
+                cost_code: u.cost_code
+              }))
+            }).then(() => {
               console.log(`[AutoApply] Successfully saved ${newlyApplied} labor codes to database`);
-            } catch (err) {
+            }).catch((err) => {
               console.error('[AutoApply] Failed to persist labor codes:', err);
-            }
-          })();
+            });
+          };
+          // Defer persistence so UI renders loaded items immediately
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(persistInBackground);
+          } else {
+            setTimeout(persistInBackground, 0);
+          }
         }
       }
     }
@@ -2322,6 +2393,14 @@ const EnhancedCostCodeManager = () => {
           )}
         </div>
 
+        {/* DB Fetch Loading Indicator */}
+        {itemsLoading && activeProjectId && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-card border border-border text-sm text-muted-foreground px-4 py-2 rounded-lg shadow-lg">
+            <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
+            Loading project items…
+          </div>
+        )}
+
         {/* Loading Overlay */}
         {loading && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -3026,79 +3105,8 @@ const EnhancedCostCodeManager = () => {
                 </div>
 
                 <BudgetAdjustmentsPanel
-                  laborSummary={(() => {
-                    const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
-                    estimateData.forEach((item: any) => {
-                      const rawCostHead = item.costCode || item.laborCostCode;
-                      const hours = item.hours || 0;
-
-                      // Skip zero-hour items
-                      if (hours === 0) return;
-
-                      let costHead: string;
-
-                      if (!rawCostHead) {
-                        // CRITICAL FIX: Bucket uncoded items instead of skipping
-                        costHead = 'UNCD';
-                      } else {
-                        // existingActivity is parsed here for cost-head extraction ONLY.
-                        // Never use ACT from stored item.costCode for activity resolution.
-                        // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
-                        const parts = rawCostHead.trim().split(/\s+/);
-
-                        // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
-                        if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                          costHead = parts.slice(4).join(' ');
-                        } else if (parts.length >= 3) {
-                          costHead = parts.slice(2).join(' ');
-                        } else {
-                          costHead = rawCostHead;
-                        }
-                      }
-
-                      // Resolve SEC and ACT based on code format mode
-                      let section: string;
-                      let activity: string;
-                      if (codeFormatMode === 'multitrade') {
-                        section = tradePrefix || 'PL';
-                        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
-                      } else {
-                        section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = resolveActivity(item, costHead);
-                      }
-                      const fullCode = `${section} ${activity} ${costHead}`;
-
-                      if (!summary[fullCode]) {
-                        const codeInfo = COST_CODES.find(c => c.code === costHead);
-                        summary[fullCode] = {
-                          code: fullCode,
-                          description: costHead === 'UNCD' ? 'UNCODED ITEMS' : (codeInfo?.description || costHead),
-                          fieldHours: 0,
-                          rate: bidLaborRate
-                        };
-                      }
-                      summary[fullCode].fieldHours += hours;
-                    });
-                    return summary;
-                  })()}
-                  materialSummary={(() => {
-                    const summary: Record<string, { code: string; description: string; amount: number }> = {};
-                    estimateData.forEach((item: any) => {
-                      const code = item.materialCostCode;
-                      if (!code) return;
-                      if (!summary[code]) {
-                        const codeInfo = COST_CODES.find(c => c.code === code);
-                        summary[code] = {
-                          code,
-                          description: codeInfo?.description || code,
-                          amount: 0
-                        };
-                      }
-                      summary[code].amount += item.materialDollars || 0;
-                    });
-                    return summary;
-                  })()}
+                  laborSummary={memoizedLaborSummary}
+                  materialSummary={memoizedMaterialSummary}
                   bidLaborRate={bidLaborRate}
                   projectId={activeProjectId || 'default'}
                   onAdjustmentsChange={setBudgetAdjustments}
