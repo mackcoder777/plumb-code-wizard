@@ -395,31 +395,39 @@ export const useEstimateItems = (projectId: string | null) => {
     queryFn: async () => {
       if (!projectId) return [];
       
-      // Fetch all items using pagination to overcome the 1000 row limit
-      const allItems: EstimateItem[] = [];
-      const pageSize = 1000;
-      let from = 0;
-      let hasMore = true;
+      // Fetch all items using parallel pagination to overcome the 1000 row limit
+      const PAGE_SIZE = 5000;
       
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('estimate_items')
-          .select('*')
-          .eq('project_id', projectId)
-          .order('row_number', { ascending: true })
-          .range(from, from + pageSize - 1);
-
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allItems.push(...(data as EstimateItem[]));
-          from += pageSize;
-          hasMore = data.length === pageSize;
-        } else {
-          hasMore = false;
-        }
+      // Get total count first
+      const { count, error: countError } = await supabase
+        .from('estimate_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId);
+      
+      if (countError) throw countError;
+      if (!count || count === 0) return [];
+      
+      const totalPages = Math.ceil(count / PAGE_SIZE);
+      const pageNumbers = Array.from({ length: totalPages }, (_, i) => i);
+      
+      // Fetch all pages in parallel
+      const pages = await Promise.all(
+        pageNumbers.map(page =>
+          supabase
+            .from('estimate_items')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('row_number', { ascending: true })
+            .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+        )
+      );
+      
+      // Check for errors in any page
+      for (const page of pages) {
+        if (page.error) throw page.error;
       }
       
+      const allItems = pages.flatMap(p => (p.data || []) as EstimateItem[]);
       return allItems;
     },
     enabled: !!projectId,
