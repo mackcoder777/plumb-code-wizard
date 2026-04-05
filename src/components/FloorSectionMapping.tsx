@@ -354,26 +354,39 @@ interface StandaloneFloorRowProps {
 const ZoneAssignInput: React.FC<{
   sectionSuggestions?: Array<{ code: string; description: string }>;
   onAssign: (sectionCode: string) => void;
-}> = ({ sectionSuggestions, onAssign }) => {
-  const [value, setValue] = useState('');
+  initialValue?: string;
+  onCancel?: () => void;
+}> = ({ sectionSuggestions, onAssign, initialValue = '', onCancel }) => {
+  const [value, setValue] = useState(initialValue);
   const listId = useRef(`zone-dl-${Math.random().toString(36).slice(2, 8)}`).current;
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialValue) inputRef.current?.focus();
+  }, [initialValue]);
 
   const handleConfirm = () => {
     const trimmed = value.trim().toUpperCase();
     if (trimmed) {
       onAssign(trimmed);
       setValue('');
+    } else if (onCancel) {
+      onCancel();
     }
   };
 
   return (
     <span className="inline-flex items-center gap-0.5">
       <input
+        ref={inputRef}
         type="text"
         list={listId}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); }
+          if (e.key === 'Escape' && onCancel) { e.preventDefault(); onCancel(); }
+        }}
         onBlur={handleConfirm}
         placeholder="?"
         className="w-16 text-xs border rounded px-1 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground"
@@ -407,6 +420,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   tradePrefix,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [editingZone, setEditingZone] = useState<string | null>(null);
   const info = classifyStandaloneFloor(floor, zoneBreakdown);
 
   return (

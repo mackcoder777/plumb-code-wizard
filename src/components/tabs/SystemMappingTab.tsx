@@ -1003,15 +1003,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Building to Section Mapping - Shown in multitrade when no saved mappings exist but suggestions available */}
-      {codeFormatMode === 'multitrade' && projectId && buildingSectionMappings.length === 0 && suggestedBuildingMappings.length > 0 && (
+      {/* Building to Section Mapping - Always visible in multitrade mode */}
+      {codeFormatMode === 'multitrade' && projectId && (
         <div className="space-y-2">
-          <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
-              Buildings were auto-detected from your drawing names. Review the section codes below and click Save — cost codes will show 0000 until you save.
-            </AlertDescription>
-          </Alert>
+          {buildingSectionMappings.length === 0 && suggestedBuildingMappings.length > 0 && (
+            <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
+                Buildings were auto-detected from your drawing names. Review the section codes below and click Save — cost codes will show 0000 until you save.
+              </AlertDescription>
+            </Alert>
+          )}
           <BuildingSectionMappingPanel
             projectId={projectId}
             estimateItems={data}
