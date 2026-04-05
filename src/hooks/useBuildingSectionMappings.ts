@@ -209,8 +209,8 @@ function getCanonicalSectionForBuilding(
   // Fall back to building mapping record
   const bm = findBuildingMapping(buildingId, buildingMappings);
   if (bm) return bm.section_code;
-  // Last resort: derive from ID
-  return suggestSectionForBuilding(buildingId);
+  // No saved mapping yet — return empty so ACT stays 0000 until user saves sections
+  return '';
 }
 
 export function resolveSectionStatic(
@@ -437,7 +437,7 @@ export function useBuildingSectionMappings(projectId: string | null) {
       if (buildingId) {
         const mapping = findBuildingMapping(buildingId, mappings);
         if (mapping) return mapping.section_code;
-        return suggestSectionForBuilding(buildingId);
+        return '';
       }
 
       return '01';
