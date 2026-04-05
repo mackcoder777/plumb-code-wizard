@@ -848,7 +848,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     onDataUpdate(updatedData);
     
     const totalHours = data.filter(item => normalizeSystemKey(item.system) === normalizeSystemKey(system))
-      .reduce((sum, item) => sum + (parseFloat(String(item.fieldHours)) || 0), 0);
+      .reduce((sum, item) => sum + (parseFloat(String(item.hours)) || 0), 0);
     toast({
       title: "Mapping Applied",
       description: `Applied labor code for "${system}" to ${appliedCount} items (${totalHours.toFixed(1)}h)`,
