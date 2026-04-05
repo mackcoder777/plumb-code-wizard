@@ -478,9 +478,12 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Clear the single-system filter to avoid confusion
     setActiveSystemFilter(null);
     
+    const totalHours = systemMappings
+      .filter(sm => selectedSystems.has(normalizeSystemKey(sm.system)))
+      .reduce((sum, sm) => sum + (sm.totalHours || 0), 0);
     toast({
       title: "Bulk Assignment Complete",
-      description: "Selection cleared — ready for next batch.",
+      description: `Applied to ${selectedSystems.size} systems (${totalHours.toFixed(1)}h) — selection cleared.`,
     });
   }, [selectedSystems, projectId, batchSaveMappings, batchRecordMappingPatterns]);
 
