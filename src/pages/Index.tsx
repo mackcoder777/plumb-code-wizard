@@ -2393,6 +2393,14 @@ const EnhancedCostCodeManager = () => {
           )}
         </div>
 
+        {/* DB Fetch Loading Indicator */}
+        {itemsLoading && activeProjectId && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-card border border-border text-sm text-muted-foreground px-4 py-2 rounded-lg shadow-lg">
+            <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
+            Loading project items…
+          </div>
+        )}
+
         {/* Loading Overlay */}
         {loading && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
