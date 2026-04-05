@@ -346,6 +346,8 @@ interface StandaloneFloorRowProps {
   buildingMappings?: BuildingSectionMapping[];
   sectionSuggestions?: Array<{ code: string; description: string }>;
   onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
+  codeFormatMode?: 'standard' | 'multitrade';
+  tradePrefix?: string;
 }
 
 // ─── Inline zone assignment input with datalist ──────────────────────────────
@@ -401,6 +403,8 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   buildingMappings,
   sectionSuggestions,
   onZonePatternSave,
+  codeFormatMode,
+  tradePrefix,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const info = classifyStandaloneFloor(floor, zoneBreakdown);
@@ -447,27 +451,45 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
           )}
         </div>
 
-        {/* Section code — fallback */}
+        {/* Section code */}
         <div className="flex items-center gap-1.5">
-          <SectionCodeInput
-            value={sectionCode}
-            onChange={(val) => onSectionChange([floor], val)}
-            onAddCustomCode={onAddCustomCode}
-            customCodes={customCodes}
-            className="h-8"
-          />
+          {codeFormatMode === 'multitrade' ? (
+            <Badge variant="secondary" className="font-mono text-sm px-3 py-1">
+              {tradePrefix || 'PL'}
+            </Badge>
+          ) : (
+            <SectionCodeInput
+              value={sectionCode}
+              onChange={(val) => onSectionChange([floor], val)}
+              onAddCustomCode={onAddCustomCode}
+              customCodes={customCodes}
+              className="h-8"
+            />
+          )}
         </div>
 
         {/* Activity */}
         <div className="flex items-center gap-1">
-        <span className="text-xs text-muted-foreground font-medium">ACT</span>
-        <Input
-          value={activityCode}
-          onChange={(e) => onActivityChange(floor, e.target.value.toUpperCase().slice(0, 8))}
-          className="h-7 font-mono text-sm w-24"
-          placeholder="0000"
-          maxLength={8}
-        />
+          {codeFormatMode === 'multitrade' ? (
+            <SectionCodeInput
+              value={sectionCode}
+              onChange={(val) => onSectionChange([floor], val)}
+              onAddCustomCode={onAddCustomCode}
+              customCodes={customCodes}
+              className="h-8"
+            />
+          ) : (
+            <>
+              <span className="text-xs text-muted-foreground font-medium">ACT</span>
+              <Input
+                value={activityCode}
+                onChange={(e) => onActivityChange(floor, e.target.value.toUpperCase().slice(0, 8))}
+                className="h-7 font-mono text-sm w-24"
+                placeholder="0000"
+                maxLength={8}
+              />
+            </>
+          )}
         </div>
 
         {/* Count */}
@@ -1337,6 +1359,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 buildingMappings={buildingMappings}
                 sectionSuggestions={allSectionSuggestions}
                 onZonePatternSave={handleZonePatternSave}
+                codeFormatMode={codeFormatMode}
+                tradePrefix={tradePrefix}
               />
             ))}
           </>
