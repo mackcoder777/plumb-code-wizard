@@ -63,6 +63,7 @@ interface SystemMappingTabProps {
   onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
   costHeadActivityOverrides?: CostHeadActivityOverride[];
   suggestedBuildingMappings?: Array<{ building_identifier: string; section_code: string }>;
+  codeFormatMode?: 'standard' | 'multitrade';
 }
 
 type ViewMode = 'cards' | 'table';
