@@ -3158,79 +3158,8 @@ const EnhancedCostCodeManager = () => {
                 </div>
 
                 <BudgetAdjustmentsPanel
-                  laborSummary={(() => {
-                    const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
-                    estimateData.forEach((item: any) => {
-                      const rawCostHead = item.costCode || item.laborCostCode;
-                      const hours = item.hours || 0;
-
-                      // Skip zero-hour items
-                      if (hours === 0) return;
-
-                      let costHead: string;
-
-                      if (!rawCostHead) {
-                        // CRITICAL FIX: Bucket uncoded items instead of skipping
-                        costHead = 'UNCD';
-                      } else {
-                        // existingActivity is parsed here for cost-head extraction ONLY.
-                        // Never use ACT from stored item.costCode for activity resolution.
-                        // Parse and clean up the cost code, handling doubled codes like "BG 0000 BG 0000 BGGW"
-                        const parts = rawCostHead.trim().split(/\s+/);
-
-                        // Detect doubled codes: "BG 0000 BG 0000 BGGW" (parts[0] === parts[2] && parts[1] === parts[3])
-                        if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
-                          costHead = parts.slice(4).join(' ');
-                        } else if (parts.length >= 3) {
-                          costHead = parts.slice(2).join(' ');
-                        } else {
-                          costHead = rawCostHead;
-                        }
-                      }
-
-                      // Resolve SEC and ACT based on code format mode
-                      let section: string;
-                      let activity: string;
-                      if (codeFormatMode === 'multitrade') {
-                        section = tradePrefix || 'PL';
-                        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
-                      } else {
-                        section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-                        activity = resolveActivity(item, costHead);
-                      }
-                      const fullCode = `${section} ${activity} ${costHead}`;
-
-                      if (!summary[fullCode]) {
-                        const codeInfo = COST_CODES.find(c => c.code === costHead);
-                        summary[fullCode] = {
-                          code: fullCode,
-                          description: costHead === 'UNCD' ? 'UNCODED ITEMS' : (codeInfo?.description || costHead),
-                          fieldHours: 0,
-                          rate: bidLaborRate
-                        };
-                      }
-                      summary[fullCode].fieldHours += hours;
-                    });
-                    return summary;
-                  })()}
-                  materialSummary={(() => {
-                    const summary: Record<string, { code: string; description: string; amount: number }> = {};
-                    estimateData.forEach((item: any) => {
-                      const code = item.materialCostCode;
-                      if (!code) return;
-                      if (!summary[code]) {
-                        const codeInfo = COST_CODES.find(c => c.code === code);
-                        summary[code] = {
-                          code,
-                          description: codeInfo?.description || code,
-                          amount: 0
-                        };
-                      }
-                      summary[code].amount += item.materialDollars || 0;
-                    });
-                    return summary;
-                  })()}
+                  laborSummary={memoizedLaborSummary}
+                  materialSummary={memoizedMaterialSummary}
                   bidLaborRate={bidLaborRate}
                   projectId={activeProjectId || 'default'}
                   onAdjustmentsChange={setBudgetAdjustments}
