@@ -874,9 +874,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       });
     }
     
+    const hours = systemMappings.find(sm => normalizeSystemKey(sm.system) === normalizeSystemKey(system))?.totalHours || 0;
     toast({
       title: "Suggestion Accepted",
-      description: `Applied suggested code "${laborCode}" to ${system}`,
+      description: `Applied suggested code "${laborCode}" to ${system} (${hours.toFixed(1)}h)`,
     });
   }, [projectId, saveMapping]);
 
