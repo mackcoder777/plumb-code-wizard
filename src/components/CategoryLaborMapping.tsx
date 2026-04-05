@@ -465,43 +465,52 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                         {/* Expanded Preview Section */}
                         {isExpanded && (
                           <div className="border-t px-3 pb-3 pt-2 bg-muted/20">
-                            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              Preview Items ({Math.min(5, cat.itemCount)} of {cat.itemCount})
-                            </div>
-                            <div className="rounded border overflow-hidden">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="bg-muted/50">
-                                    <TableHead className="h-8 text-xs">Drawing</TableHead>
-                                    <TableHead className="h-8 text-xs">System</TableHead>
-                                    <TableHead className="h-8 text-xs">Material Desc</TableHead>
-                                    <TableHead className="h-8 text-xs text-right">Qty</TableHead>
-                                    <TableHead className="h-8 text-xs text-right">Hours</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {previewItems.map((item, idx) => (
-                                    <TableRow key={`${item.id}-${idx}`} className="text-xs">
-                                      <TableCell className="py-1.5">{item.drawing || '-'}</TableCell>
-                                      <TableCell className="py-1.5">{item.system || '-'}</TableCell>
-                                      <TableCell className="py-1.5 max-w-[200px] truncate">{item.materialDesc || '-'}</TableCell>
-                                      <TableCell className="py-1.5 text-right">{item.quantity?.toLocaleString() || 0}</TableCell>
-                                      <TableCell className="py-1.5 text-right">{item.hours?.toFixed(1) || '0.0'}</TableCell>
-                                    </TableRow>
+                            {/* Category Composition Summary */}
+                            <div className="grid grid-cols-2 gap-4 text-xs mb-3">
+                              {/* Systems */}
+                              <div>
+                                <p className="text-muted-foreground font-medium mb-1.5">Systems in this category</p>
+                                <div className="space-y-1">
+                                  {cat.topSystems.map(s => (
+                                    <div key={s.system} className="flex items-center justify-between gap-2">
+                                      <span className="truncate text-foreground">{s.system}</span>
+                                      <div className="flex items-center gap-1.5 shrink-0 text-muted-foreground">
+                                        <span className="bg-muted px-1.5 py-0.5 rounded">{s.count}</span>
+                                        <span>{s.hours.toFixed(1)}h</span>
+                                      </div>
+                                    </div>
                                   ))}
-                                </TableBody>
-                              </Table>
+                                  {cat.systemCount > 5 && (
+                                    <p className="text-muted-foreground">+{cat.systemCount - 5} more</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Material Families */}
+                              <div>
+                                <p className="text-muted-foreground font-medium mb-1.5">Material families</p>
+                                <div className="space-y-1">
+                                  {cat.topMaterialDescs.map(m => (
+                                    <div key={m.desc} className="flex items-center justify-between gap-2">
+                                      <span className="truncate text-foreground">{m.desc}</span>
+                                      <span className="bg-muted px-1.5 py-0.5 rounded shrink-0 text-muted-foreground">{m.count}</span>
+                                    </div>
+                                  ))}
+                                  {cat.descCount > 5 && (
+                                    <p className="text-muted-foreground">+{cat.descCount - 5} more</p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            {onViewCategoryItems && cat.itemCount > 5 && (
+                            {onViewCategoryItems && (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="mt-2 text-xs h-7"
+                                className="text-xs h-7"
                                 onClick={() => onViewCategoryItems(cat.category)}
                               >
                                 <ExternalLink className="h-3 w-3 mr-1" />
-                                View All {cat.itemCount} Items in Estimates
+                                View All {cat.itemCount.toLocaleString()} Items in Estimates
                               </Button>
                             )}
                             
