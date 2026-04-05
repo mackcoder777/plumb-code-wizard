@@ -2087,7 +2087,7 @@ const EnhancedCostCodeManager = () => {
       // Update cost codes on estimate items with FULL assembled codes per item
       if (itemUpdates.length > 0) {
         console.log(`[Apply] Saving ${itemUpdates.length} items with full codes to database`);
-        batchUpdateSystemCostCodes.mutate({
+        batchUpdateSilent.mutate({
           projectId: currentProject.id,
           system: system,
           itemUpdates: itemUpdates // Pass per-item updates with full assembled codes
