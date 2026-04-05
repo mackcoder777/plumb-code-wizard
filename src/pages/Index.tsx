@@ -1131,22 +1131,26 @@ const EnhancedCostCodeManager = () => {
           hasAutoAppliedRef.current = currentProject.id;
           console.log(`[AutoApply] Persisting ${newlyApplied} labor codes to database...`);
 
-          (async () => {
-            try {
-              // Single batch call using silent version (no invalidation)
-              await batchUpdateSilent.mutateAsync({
-                projectId: currentProject.id,
-                system: '__auto_apply__',
-                itemUpdates: itemsNeedingPersist.map(u => ({
-                  row_number: u.row_number,
-                  cost_code: u.cost_code
-                }))
-              });
+          const persistInBackground = () => {
+            batchUpdateSilent.mutateAsync({
+              projectId: currentProject.id,
+              system: '__auto_apply__',
+              itemUpdates: itemsNeedingPersist.map(u => ({
+                row_number: u.row_number,
+                cost_code: u.cost_code
+              }))
+            }).then(() => {
               console.log(`[AutoApply] Successfully saved ${newlyApplied} labor codes to database`);
-            } catch (err) {
+            }).catch((err) => {
               console.error('[AutoApply] Failed to persist labor codes:', err);
-            }
-          })();
+            });
+          };
+          // Defer persistence so UI renders loaded items immediately
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(persistInBackground);
+          } else {
+            setTimeout(persistInBackground, 0);
+          }
         }
       }
     }
