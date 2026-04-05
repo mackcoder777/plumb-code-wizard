@@ -804,7 +804,7 @@ const EnhancedCostCodeManager = () => {
       if (codeFormatMode === 'multitrade') {
         section = tradePrefix || 'PL';
         const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+        activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
       } else {
         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         activity = resolveActivity(item, costHead);
@@ -873,7 +873,7 @@ const EnhancedCostCodeManager = () => {
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
       const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
-      activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+      activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
     } else {
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
@@ -1020,7 +1020,7 @@ const EnhancedCostCodeManager = () => {
             if (codeFormatMode === 'multitrade') {
               section = tradePrefix || 'PL';
               const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-              activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+              activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
             } else {
               section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
               activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
@@ -1109,7 +1109,7 @@ const EnhancedCostCodeManager = () => {
           if (codeFormatMode === 'multitrade') {
             section = tradePrefix || 'PL';
             const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+            activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
           } else {
             section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
@@ -2026,7 +2026,7 @@ const EnhancedCostCodeManager = () => {
         if (codeFormatMode === 'multitrade') {
           section = tradePrefix || 'PL';
           const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+          activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
         } else {
           section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
           activity = resolveActivity(item, laborCode || '');
