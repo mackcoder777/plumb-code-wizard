@@ -189,6 +189,22 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, on
                   </Button>
                 </div>
               </CommandEmpty>
+              {inputValue.trim().length > 0 && !exactValueMatch && (
+                <CommandGroup>
+                  <CommandItem
+                    onSelect={() => {
+                      const code = inputValue.trim().toUpperCase();
+                      setCustomCode(code);
+                      setIsAddingCustom(true);
+                    }}
+                    className="text-primary font-medium"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    + Add "{inputValue.trim().toUpperCase()}" as new code
+                  </CommandItem>
+                </CommandGroup>
+              )}
+              <CommandSeparator />
               <CommandGroup heading="Common Codes">
                 {filteredCodes.map((code) => (
                   <CommandItem
