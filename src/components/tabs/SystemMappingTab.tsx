@@ -85,7 +85,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [], codeFormatMode = 'standard' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -995,6 +995,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             onBuildingMappingsChanged={onBuildingMappingsChanged}
             costHeadActivityOverrides={costHeadActivityOverrides}
             onCostHeadOverridesChange={handleCostHeadOverridesChange}
+            codeFormatMode={codeFormatMode}
           />
         </CollapsibleContent>
       </Collapsible>
