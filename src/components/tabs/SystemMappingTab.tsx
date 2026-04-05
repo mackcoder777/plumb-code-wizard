@@ -1014,6 +1014,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             <BuildingSectionMappingPanel
               projectId={projectId}
               estimateItems={data}
+              suggestedMappings={suggestedBuildingMappings}
             />
           </CollapsibleContent>
         </Collapsible>
