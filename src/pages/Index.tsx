@@ -3012,6 +3012,7 @@ const EnhancedCostCodeManager = () => {
                 onUnappliedChangesUpdate={setHasUnappliedMappingChanges}
                 costHeadActivityOverrides={costHeadActivityOverrides}
                 codeFormatMode={codeFormatMode}
+                tradePrefix={tradePrefix}
               />
             ) : (
               <div className="bg-card border border-border rounded-lg p-12 text-center">

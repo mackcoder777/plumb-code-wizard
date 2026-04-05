@@ -65,6 +65,7 @@ interface SystemMappingTabProps {
   costHeadActivityOverrides?: CostHeadActivityOverride[];
   suggestedBuildingMappings?: Array<{ building_identifier: string; section_code: string }>;
   codeFormatMode?: 'standard' | 'multitrade';
+  tradePrefix?: string;
 }
 
 type ViewMode = 'cards' | 'table';
@@ -86,7 +87,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [], codeFormatMode = 'standard' }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [], codeFormatMode = 'standard', tradePrefix }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -997,6 +998,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             costHeadActivityOverrides={costHeadActivityOverrides}
             onCostHeadOverridesChange={handleCostHeadOverridesChange}
             codeFormatMode={codeFormatMode}
+            tradePrefix={tradePrefix}
           />
         </CollapsibleContent>
       </Collapsible>

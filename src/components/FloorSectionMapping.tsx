@@ -12,7 +12,7 @@ import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshC
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
-import { cn } from '@/lib/utils';
+import { cn, normalizeActivityCode } from '@/lib/utils';
 import {
   useFloorSectionMappings,
   useBatchSaveFloorSectionMappings,
@@ -37,6 +37,7 @@ interface FloorSectionMappingPanelProps {
   costHeadActivityOverrides?: Array<{ cost_head: string; use_level_activity: boolean }>;
   onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => void;
   codeFormatMode?: 'standard' | 'multitrade';
+  tradePrefix?: string;
 }
 
 interface BuildingGroup {
@@ -692,6 +693,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   costHeadActivityOverrides = [],
   onCostHeadOverridesChange,
   codeFormatMode = 'standard',
+  tradePrefix,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
@@ -901,10 +903,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       ...Object.keys(localActivityMappings).filter(p => localActivityMappings[p]?.trim()),
     ]);
 
+    const isMultitrade = codeFormatMode === 'multitrade';
     const mappingsToSave = Array.from(allPatterns).map(floorPattern => ({
       floorPattern,
-      sectionCode: localMappings[floorPattern] || '01',
-      activityCode: localActivityMappings[floorPattern] || '0000',
+      sectionCode: isMultitrade ? (tradePrefix ?? 'PL') : (localMappings[floorPattern] || '01'),
+      activityCode: isMultitrade ? (localMappings[floorPattern] || '0000') : (localActivityMappings[floorPattern] || '0000'),
       description: customDescriptions[localMappings[floorPattern]] || null,
     }));
 
@@ -1196,8 +1199,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
             {/* Column headers */}
             <div className={cn(gridCols, "px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide border-b")}>
               <div>Floor Value</div>
-              <div>Section Code</div>
-              <div>Activity Code</div>
+              <div>{codeFormatMode === 'multitrade' ? 'SEC (fixed)' : 'Section Code'}</div>
+              <div>{codeFormatMode === 'multitrade' ? 'ACT Code (building)' : 'Activity Code'}</div>
               <div className="text-right">Item Count</div>
             </div>
 
@@ -1224,20 +1227,30 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                       </span>
                     </div>
 
-                    {/* Section — applies to all children */}
-                    <SectionCodeInput
-                      value={buildingSection}
-                      onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
-                      onAddCustomCode={handleAddCustomCode}
-                      customCodes={customCodes}
-                      className="h-8"
-                    />
-
-                    {/* Activity — varies per child, show dash + clear button */}
+                    {/* Section column */}
                     {codeFormatMode === 'multitrade' ? (
-                      <div className="flex items-center gap-1 pl-2">
-                        <span className="text-xs text-muted-foreground italic">ACT from section code</span>
+                      <div className="flex items-center pl-2">
+                        <Badge variant="secondary" className="font-mono text-sm">{tradePrefix || 'PL'}</Badge>
                       </div>
+                    ) : (
+                      <SectionCodeInput
+                        value={buildingSection}
+                        onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
+                        onAddCustomCode={handleAddCustomCode}
+                        customCodes={customCodes}
+                        className="h-8"
+                      />
+                    )}
+
+                    {/* Activity column */}
+                    {codeFormatMode === 'multitrade' ? (
+                      <SectionCodeInput
+                        value={buildingSection}
+                        onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
+                        onAddCustomCode={handleAddCustomCode}
+                        customCodes={customCodes}
+                        className="h-8"
+                      />
                     ) : (
                       <div className="flex items-center gap-1 pl-2">
                         <span className="text-sm text-muted-foreground">—</span>
@@ -1270,14 +1283,22 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                           <span className="text-sm">{floorLabel || floor}</span>
                         </div>
 
-                        {/* Section — inherited, read-only */}
-                        <div className="text-sm font-mono text-muted-foreground pl-2">
-                          {localMappings[floor] || '—'}
-                        </div>
-
-                        {/* Activity — per-floor input */}
+                        {/* Section — inherited */}
                         {codeFormatMode === 'multitrade' ? (
-                          <div className="text-sm font-mono text-muted-foreground pl-2">—</div>
+                          <div className="text-sm font-mono text-muted-foreground pl-2">
+                            {tradePrefix || 'PL'}
+                          </div>
+                        ) : (
+                          <div className="text-sm font-mono text-muted-foreground pl-2">
+                            {localMappings[floor] || '—'}
+                          </div>
+                        )}
+
+                        {/* Activity — per-floor */}
+                        {codeFormatMode === 'multitrade' ? (
+                          <div className="text-sm font-mono text-muted-foreground pl-2">
+                            {localMappings[floor] ? normalizeActivityCode(localMappings[floor]) : '—'}
+                          </div>
                         ) : (
                           <Input
                             value={localActivityMappings[floor] || '0000'}
