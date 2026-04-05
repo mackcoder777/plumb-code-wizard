@@ -311,6 +311,13 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                         ⏱ {system.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })}h
                       </span>
                       
+                      {system.laborCode && (
+                        <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200 gap-1">
+                          {system.laborCode}
+                          <Check className="w-3 h-3" />
+                        </Badge>
+                      )}
+                      
                       {/* Show suggestion badge for unmapped systems */}
                       {hasSuggestion && onAcceptSuggestion && (
                         <Tooltip>
