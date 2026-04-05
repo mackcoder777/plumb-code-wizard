@@ -471,16 +471,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       }))
     );
 
-    // Keep selection visible after assignment so user can see all mapped systems
-    // Just close the popover, don't clear selection
+    // Close popover and clear selection so user can immediately start next batch
     setBulkAssignOpen(false);
+    setSelectedSystems(new Set());
     
-    // Clear the single-system filter to avoid confusion (multi-select takes priority)
+    // Clear the single-system filter to avoid confusion
     setActiveSystemFilter(null);
     
     toast({
       title: "Bulk Assignment Complete",
-      description: `Assigned labor code to ${systemCount} systems. Selection maintained to show all mapped systems.`,
+      description: "Selection cleared — ready for next batch.",
     });
   }, [selectedSystems, projectId, batchSaveMappings, batchRecordMappingPatterns]);
 
