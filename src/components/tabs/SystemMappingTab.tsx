@@ -9,6 +9,7 @@ import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatte
 import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping } from '@/hooks/useCategoryMappings';
 import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +21,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn, normalizeActivityCode } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity } from 'lucide-react';
+import { Search, Check, X, AlertCircle, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -63,6 +64,7 @@ interface SystemMappingTabProps {
   onUnappliedChangesUpdate?: (hasChanges: boolean) => void;
   costHeadActivityOverrides?: CostHeadActivityOverride[];
   suggestedBuildingMappings?: Array<{ building_identifier: string; section_code: string }>;
+  codeFormatMode?: 'standard' | 'multitrade';
 }
 
 type ViewMode = 'cards' | 'table';
@@ -84,7 +86,7 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
 
 const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
-export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [] }) => {
+export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [], codeFormatMode = 'standard' }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
   const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { laborCode?: string }>>>({});
@@ -994,30 +996,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             onBuildingMappingsChanged={onBuildingMappingsChanged}
             costHeadActivityOverrides={costHeadActivityOverrides}
             onCostHeadOverridesChange={handleCostHeadOverridesChange}
+            codeFormatMode={codeFormatMode}
           />
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Building to Section Mapping - Hidden (functionality covered by Section Mapping panel) */}
-      {false && projectId && (
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" className="w-full justify-between">
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4" />
-                Building → Section Code (Drawing-based)
-              </div>
-              <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-4">
-            <BuildingSectionMappingPanel
-              projectId={projectId}
-              estimateItems={data}
-              suggestedMappings={suggestedBuildingMappings}
-            />
-          </CollapsibleContent>
-        </Collapsible>
+      {/* Building to Section Mapping - Shown in multitrade when no saved mappings exist but suggestions available */}
+      {codeFormatMode === 'multitrade' && projectId && buildingSectionMappings.length === 0 && suggestedBuildingMappings.length > 0 && (
+        <div className="space-y-2">
+          <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
+              Buildings were auto-detected from your drawing names. Review the section codes below and click Save — cost codes will show 0000 until you save.
+            </AlertDescription>
+          </Alert>
+          <BuildingSectionMappingPanel
+            projectId={projectId}
+            estimateItems={data}
+            onMappingsChange={onBuildingMappingsChanged}
+            suggestedMappings={suggestedBuildingMappings}
+          />
+        </div>
       )}
 
       {/* System to Activity Mapping - Collapsible (closed by default) */}

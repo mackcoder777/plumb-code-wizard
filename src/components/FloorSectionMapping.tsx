@@ -36,6 +36,7 @@ interface FloorSectionMappingPanelProps {
   onBuildingMappingsChanged?: () => void;
   costHeadActivityOverrides?: Array<{ cost_head: string; use_level_activity: boolean }>;
   onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => void;
+  codeFormatMode?: 'standard' | 'multitrade';
 }
 
 interface BuildingGroup {
@@ -690,6 +691,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   onBuildingMappingsChanged,
   costHeadActivityOverrides = [],
   onCostHeadOverridesChange,
+  codeFormatMode = 'standard',
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
@@ -870,12 +872,25 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       toast({ title: "No Project Selected", description: "Please select a project to save floor mappings.", variant: "destructive" });
       return;
     }
-    const mappingsToSave = Object.entries(localMappings).map(([floorPattern, sectionCode]) => ({
+
+    // Union of all floor patterns that have either a section OR an activity edit
+    const allPatterns = new Set([
+      ...Object.keys(localMappings).filter(p => localMappings[p]?.trim()),
+      ...Object.keys(localActivityMappings).filter(p => localActivityMappings[p]?.trim()),
+    ]);
+
+    const mappingsToSave = Array.from(allPatterns).map(floorPattern => ({
       floorPattern,
-      sectionCode,
+      sectionCode: localMappings[floorPattern] || '01',
       activityCode: localActivityMappings[floorPattern] || '0000',
-      description: customDescriptions[sectionCode] || null,
+      description: customDescriptions[localMappings[floorPattern]] || null,
     }));
+
+    if (mappingsToSave.length === 0) {
+      toast({ title: "Nothing to save", description: "No section or activity assignments found.", variant: "destructive" });
+      return;
+    }
+
     try {
       await batchSave.mutateAsync({ projectId, mappings: mappingsToSave });
       setHasChanges(false);
@@ -902,7 +917,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         onBuildingMappingsChanged?.();
       }
 
-      toast({ title: "Mappings Saved", description: `Saved ${mappingsToSave.length} floor-to-section mappings.` });
+      toast({ title: "Mappings Saved", description: `Saved ${mappingsToSave.length} floor mapping${mappingsToSave.length !== 1 ? 's' : ''}.` });
     } catch {
       toast({ title: "Save Failed", description: "Failed to save floor mappings. Please try again.", variant: "destructive" });
     }
@@ -1197,17 +1212,23 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                     />
 
                     {/* Activity — varies per child, show dash + clear button */}
-                    <div className="flex items-center gap-1 pl-2">
-                      <span className="text-sm text-muted-foreground">—</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => handleClearGroupActivity(group.childFloors)}
-                      >
-                        Clear ACT
-                      </Button>
-                    </div>
+                    {codeFormatMode === 'multitrade' ? (
+                      <div className="flex items-center gap-1 pl-2">
+                        <span className="text-xs text-muted-foreground italic">ACT from section code</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 pl-2">
+                        <span className="text-sm text-muted-foreground">—</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => handleClearGroupActivity(group.childFloors)}
+                        >
+                          Clear ACT
+                        </Button>
+                      </div>
+                    )}
 
                     {/* Total count */}
                     <div className="text-right">
@@ -1233,13 +1254,17 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                         </div>
 
                         {/* Activity — per-floor input */}
-                        <Input
-                          value={localActivityMappings[floor] || '0000'}
-                          onChange={(e) => handleActivityChangeForFloor(floor, e.target.value.toUpperCase().slice(0, 8))}
-                          className="h-7 font-mono text-sm w-24"
-                          placeholder="0000"
-                          maxLength={8}
-                        />
+                        {codeFormatMode === 'multitrade' ? (
+                          <div className="text-sm font-mono text-muted-foreground pl-2">—</div>
+                        ) : (
+                          <Input
+                            value={localActivityMappings[floor] || '0000'}
+                            onChange={(e) => handleActivityChangeForFloor(floor, e.target.value.toUpperCase().slice(0, 8))}
+                            className="h-7 font-mono text-sm w-24"
+                            placeholder="0000"
+                            maxLength={8}
+                          />
+                        )}
 
                         {/* Per-floor count */}
                         <div className="text-right">
