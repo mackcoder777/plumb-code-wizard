@@ -24,7 +24,7 @@ interface FilterCardsProps {
   };
   activeStatusFilter: 'all' | 'mapped' | 'partial' | 'unmapped' | null;
   onStatusFilterChange: (filter: 'all' | 'mapped' | 'partial' | 'unmapped' | null) => void;
-  topSystems: Array<{ system: string; itemCount: number; totalHours: number; status: 'mapped' | 'partial' | 'unmapped' }>;
+  topSystems: Array<{ system: string; itemCount: number; totalHours: number; laborCode?: string; status: 'mapped' | 'partial' | 'unmapped' }>;
   activeSystemFilter: string | null;
   onSystemFilterChange: (system: string | null) => void;
   showAllSystems: boolean;
@@ -310,6 +310,13 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                       <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5">
                         ⏱ {system.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })}h
                       </span>
+                      
+                      {system.laborCode && (
+                        <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200 gap-1">
+                          {system.laborCode}
+                          <Check className="w-3 h-3" />
+                        </Badge>
+                      )}
                       
                       {/* Show suggestion badge for unmapped systems */}
                       {hasSuggestion && onAcceptSuggestion && (
