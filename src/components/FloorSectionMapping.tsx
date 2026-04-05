@@ -547,17 +547,47 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                   <span className="w-8 text-right font-mono text-muted-foreground">{pct}%</span>
                   <span className="truncate">{label}</span>
                   <span className="text-muted-foreground">→</span>
-                  {suggestedSection !== null ? (
-                    <span className="font-mono font-medium">{suggestedSection}</span>
-                  ) : (() => {
-                    const patternMatch = buildingMappings?.find(
-                      m => m.zone_pattern && m.zone_pattern.split(',').some(
-                        p => label.toLowerCase().includes(p.trim().toLowerCase())
-                      )
-                    );
-                    if (patternMatch) {
-                      return <span className="font-mono font-medium">{patternMatch.section_code}</span>;
+                  {(() => {
+                    // Determine current assignment: from BLDG match or zone_pattern match
+                    let currentCode: string | null = suggestedSection;
+                    if (!currentCode) {
+                      const patternMatch = buildingMappings?.find(
+                        m => m.zone_pattern && m.zone_pattern.split(',').some(
+                          p => label.toLowerCase().includes(p.trim().toLowerCase())
+                        )
+                      );
+                      if (patternMatch) currentCode = patternMatch.section_code;
                     }
+
+                    // If editing this zone, show input
+                    if (editingZone === label) {
+                      return (
+                        <ZoneAssignInput
+                          sectionSuggestions={sectionSuggestions}
+                          initialValue={currentCode || ''}
+                          onAssign={(sectionCode) => {
+                            onZonePatternSave?.(label, sectionCode);
+                            setEditingZone(null);
+                          }}
+                          onCancel={() => setEditingZone(null)}
+                        />
+                      );
+                    }
+
+                    // If assigned, show clickable chip
+                    if (currentCode) {
+                      return (
+                        <button
+                          onClick={() => setEditingZone(label)}
+                          className="font-mono font-medium px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/20 cursor-pointer transition-colors"
+                          title="Click to edit zone assignment"
+                        >
+                          {currentCode}
+                        </button>
+                      );
+                    }
+
+                    // Unassigned — show input
                     return (
                       <ZoneAssignInput
                         sectionSuggestions={sectionSuggestions}
