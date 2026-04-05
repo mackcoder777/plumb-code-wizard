@@ -1103,8 +1103,16 @@ const EnhancedCostCodeManager = () => {
 
         // Build full cost code with section + activity + cost head
         if (appliedCode) {
-          const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          const activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
+          let section: string;
+          let activity: string;
+          if (codeFormatMode === 'multitrade') {
+            section = tradePrefix || 'PL';
+            const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+          } else {
+            section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
+          }
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
           // Track for batch persistence
