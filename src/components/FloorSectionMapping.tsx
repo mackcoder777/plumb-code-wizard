@@ -36,6 +36,7 @@ interface FloorSectionMappingPanelProps {
   onBuildingMappingsChanged?: () => void;
   costHeadActivityOverrides?: Array<{ cost_head: string; use_level_activity: boolean }>;
   onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; useLevelActivity: boolean }>) => void;
+  codeFormatMode?: 'standard' | 'multitrade';
 }
 
 interface BuildingGroup {
@@ -870,12 +871,25 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       toast({ title: "No Project Selected", description: "Please select a project to save floor mappings.", variant: "destructive" });
       return;
     }
-    const mappingsToSave = Object.entries(localMappings).map(([floorPattern, sectionCode]) => ({
+
+    // Union of all floor patterns that have either a section OR an activity edit
+    const allPatterns = new Set([
+      ...Object.keys(localMappings).filter(p => localMappings[p]?.trim()),
+      ...Object.keys(localActivityMappings).filter(p => localActivityMappings[p]?.trim()),
+    ]);
+
+    const mappingsToSave = Array.from(allPatterns).map(floorPattern => ({
       floorPattern,
-      sectionCode,
+      sectionCode: localMappings[floorPattern] || '01',
       activityCode: localActivityMappings[floorPattern] || '0000',
-      description: customDescriptions[sectionCode] || null,
+      description: customDescriptions[localMappings[floorPattern]] || null,
     }));
+
+    if (mappingsToSave.length === 0) {
+      toast({ title: "Nothing to save", description: "No section or activity assignments found.", variant: "destructive" });
+      return;
+    }
+
     try {
       await batchSave.mutateAsync({ projectId, mappings: mappingsToSave });
       setHasChanges(false);
@@ -902,7 +916,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         onBuildingMappingsChanged?.();
       }
 
-      toast({ title: "Mappings Saved", description: `Saved ${mappingsToSave.length} floor-to-section mappings.` });
+      toast({ title: "Mappings Saved", description: `Saved ${mappingsToSave.length} floor mapping${mappingsToSave.length !== 1 ? 's' : ''}.` });
     } catch {
       toast({ title: "Save Failed", description: "Failed to save floor mappings. Please try again.", variant: "destructive" });
     }
