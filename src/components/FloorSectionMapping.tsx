@@ -803,13 +803,32 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   // Only show section codes actively assigned in this project's floor mappings
   const allSectionSuggestions = useMemo(() => {
     const codes = new Map<string, string>();
-    Object.values(localMappings).forEach(code => {
-      if (code && !codes.has(code) && !STANDALONE_SECTION_CODES.has(code.toUpperCase())) {
-        codes.set(code, '');
-      }
-    });
+    if (codeFormatMode === 'multitrade') {
+      // Show ACT/building identifiers, not section codes
+      Object.values(localMappings).forEach(code => {
+        if (code && !codes.has(code)) codes.set(code, '');
+      });
+      buildingMappings?.forEach(bm => {
+        if (bm.building_identifier && !codes.has(bm.building_identifier)) {
+          codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
+        }
+      });
+      groups.forEach(({ buildingKey }) => {
+        const bldgMatch = buildingKey.match(/^bldg\s*(\w+)/i);
+        if (bldgMatch) {
+          const id = bldgMatch[1].toUpperCase();
+          if (!codes.has(id)) codes.set(id, `Building ${id}`);
+        }
+      });
+    } else {
+      Object.values(localMappings).forEach(code => {
+        if (code && !codes.has(code) && !STANDALONE_SECTION_CODES.has(code.toUpperCase())) {
+          codes.set(code, '');
+        }
+      });
+    }
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [localMappings]);
+  }, [localMappings, codeFormatMode, buildingMappings, groups]);
 
   // Floor counts
   const floorData = useMemo(() => {
@@ -863,7 +882,12 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     // 3. Codes from existing buildingMappings prop (already-saved DB records)
     if (buildingMappings) {
       buildingMappings.forEach(bm => {
-        if (bm.section_code) addCode(bm.section_code, bm.description || `Building ${bm.building_identifier}`);
+        if (codeFormatMode === 'multitrade') {
+          // ACT picker shows building identifiers (BB, SITE, 14…), not section codes
+          if (bm.building_identifier) addCode(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
+        } else {
+          if (bm.section_code) addCode(bm.section_code, bm.description || `Building ${bm.building_identifier}`);
+        }
       });
     }
 
@@ -938,7 +962,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       return patterns.includes(zoneLabel.toLowerCase());
     });
 
-    if (oldMapping && oldMapping.section_code.toUpperCase() !== code) {
+    const oldMappingCode = codeFormatMode === 'multitrade'
+      ? oldMapping?.building_identifier?.toUpperCase()
+      : oldMapping?.section_code?.toUpperCase();
+    if (oldMapping && oldMappingCode !== code) {
       const remainingPatterns = (oldMapping.zone_pattern || '')
         .split(',')
         .map(p => p.trim())
@@ -954,7 +981,11 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     }
 
     // 2. Find or create the target mapping
-    const mapping = buildingMappings?.find(m => m.section_code.toUpperCase() === code);
+    const mapping = buildingMappings?.find(m =>
+      codeFormatMode === 'multitrade'
+        ? m.building_identifier.toUpperCase() === code
+        : m.section_code.toUpperCase() === code
+    );
 
     if (!mapping) {
       // Auto-create a new building mapping row with the zone pattern
@@ -964,7 +995,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         .upsert({
           project_id: projectId,
           building_identifier: code,
-          section_code: code,
+          // In multitrade, section_code is always the trade prefix; ACT lives in building_identifier
+          section_code: codeFormatMode === 'multitrade' ? (tradePrefix || 'PL') : code,
           description: `Building ${code}`,
           zone_pattern: zoneLabel,
           updated_at: new Date().toISOString(),
