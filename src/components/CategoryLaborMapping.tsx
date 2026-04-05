@@ -336,7 +336,6 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                     const isMapped = !!currentCode && !isUsingSystemMapping(currentCode);
                     const usesSystem = isUsingSystemMapping(currentCode);
                     const isExpanded = expandedCategories.has(cat.category);
-                    const previewItems = isExpanded ? getPreviewItems(cat.category) : [];
                     
                     return (
                       <div
