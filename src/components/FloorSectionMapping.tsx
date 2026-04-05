@@ -741,17 +741,39 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const { groups, standalones } = useMemo(() => groupFloors(floorCounts), [floorCounts]);
 
-  // Custom codes from current mappings
+  // Custom codes from current mappings + detected buildings + saved building mappings
   const customCodes = useMemo(() => {
     const commonValues = new Set(COMMON_SECTION_CODES.map(c => c.value));
+    const seen = new Set<string>();
     const custom: Array<{ value: string; label: string }> = [];
+
+    const addCode = (code: string, label: string) => {
+      const upper = code.toUpperCase().trim();
+      if (!upper || commonValues.has(upper) || seen.has(upper)) return;
+      seen.add(upper);
+      custom.push({ value: upper, label });
+    };
+
+    // 1. Codes already assigned in localMappings
     Object.values(localMappings).forEach(code => {
-      if (code && !commonValues.has(code) && !custom.find(c => c.value === code)) {
-        custom.push({ value: code, label: customDescriptions[code] || 'Custom' });
-      }
+      if (code) addCode(code, customDescriptions[code] || 'Custom');
     });
-    return custom;
-  }, [localMappings, customDescriptions]);
+
+    // 2. Suggested section codes from every detected building group
+    groups.forEach(({ buildingKey }) => {
+      const suggested = suggestSection(buildingKey);
+      if (suggested) addCode(suggested, `Building ${buildingKey.replace(/^bldg\s*/i, '')}`);
+    });
+
+    // 3. Codes from existing buildingMappings prop (already-saved DB records)
+    if (buildingMappings) {
+      buildingMappings.forEach(bm => {
+        if (bm.section_code) addCode(bm.section_code, bm.description || `Building ${bm.building_identifier}`);
+      });
+    }
+
+    return custom.sort((a, b) => a.value.localeCompare(b.value));
+  }, [localMappings, customDescriptions, groups, buildingMappings]);
 
   // Init from DB
   useEffect(() => {
