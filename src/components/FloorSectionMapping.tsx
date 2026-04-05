@@ -1100,7 +1100,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     setLocalMappings(sec);
     setLocalActivityMappings(act);
     setHasChanges(false);
-  }, [dbMappings]);
+  }, [dbMappings, codeFormatMode]);
 
   const handleClearAllActivity = useCallback(() => {
     setLocalActivityMappings(prev => {
