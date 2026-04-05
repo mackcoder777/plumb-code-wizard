@@ -813,8 +813,9 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
         }
       });
-      groups.forEach(({ buildingKey }) => {
-        const bldgMatch = buildingKey.match(/^bldg\s*(\w+)/i);
+      // Derive building identifiers from floor keys (same logic as groupFloors)
+      Object.keys(floorCounts).forEach(floor => {
+        const bldgMatch = floor.match(/^bldg\s*(\w+)/i);
         if (bldgMatch) {
           const id = bldgMatch[1].toUpperCase();
           if (!codes.has(id)) codes.set(id, `Building ${id}`);
