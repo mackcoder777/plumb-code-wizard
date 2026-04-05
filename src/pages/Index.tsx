@@ -640,6 +640,72 @@ const EnhancedCostCodeManager = () => {
     return getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
   }, [dbFloorMappings, dbBuildingMappings, datasetProfile, costHeadActivityOverrides, dbActivityMappings]);
   
+  // Memoized labor summary for BudgetAdjustmentsPanel — avoids O(n) recomputation every render
+  const memoizedLaborSummary = useMemo(() => {
+    if (!estimateData || estimateData.length === 0) return {};
+    const summary: Record<string, { code: string; description: string; fieldHours: number; rate: number }> = {};
+    estimateData.forEach((item: any) => {
+      const rawCostHead = item.costCode || item.laborCostCode;
+      const hours = item.hours || 0;
+      if (hours === 0) return;
+      let costHead: string;
+      if (!rawCostHead) {
+        costHead = 'UNCD';
+      } else {
+        const parts = rawCostHead.trim().split(/\s+/);
+        if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
+          costHead = parts.slice(4).join(' ');
+        } else if (parts.length >= 3) {
+          costHead = parts.slice(2).join(' ');
+        } else {
+          costHead = rawCostHead;
+        }
+      }
+      let section: string;
+      let activity: string;
+      if (codeFormatMode === 'multitrade') {
+        section = tradePrefix || 'PL';
+        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = normalizeActivityCode(buildingSection !== '01' ? buildingSection : '0000');
+      } else {
+        section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = resolveActivity(item, costHead);
+      }
+      const fullCode = `${section} ${activity} ${costHead}`;
+      if (!summary[fullCode]) {
+        const codeInfo = COST_CODES.find((c: any) => c.code === costHead);
+        summary[fullCode] = {
+          code: fullCode,
+          description: costHead === 'UNCD' ? 'UNCODED ITEMS' : (codeInfo?.description || costHead),
+          fieldHours: 0,
+          rate: bidLaborRate
+        };
+      }
+      summary[fullCode].fieldHours += hours;
+    });
+    return summary;
+  }, [estimateData, codeFormatMode, tradePrefix, dbFloorMappings, dbBuildingMappings, datasetProfile, resolveActivity, bidLaborRate, COST_CODES]);
+
+  // Memoized material summary for BudgetAdjustmentsPanel
+  const memoizedMaterialSummary = useMemo(() => {
+    if (!estimateData || estimateData.length === 0) return {};
+    const summary: Record<string, { code: string; description: string; amount: number }> = {};
+    estimateData.forEach((item: any) => {
+      const code = item.materialCostCode;
+      if (!code) return;
+      if (!summary[code]) {
+        const codeInfo = COST_CODES.find((c: any) => c.code === code);
+        summary[code] = {
+          code,
+          description: codeInfo?.description || code,
+          amount: 0
+        };
+      }
+      summary[code].amount += item.materialDollars || 0;
+    });
+    return summary;
+  }, [estimateData, COST_CODES]);
+
   // Convert DB floor mappings to a simple key-value map for easy lookup
   const floorSectionMap = useMemo<FloorSectionMap>(() => {
     const map: FloorSectionMap = {};
