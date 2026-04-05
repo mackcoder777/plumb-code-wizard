@@ -609,7 +609,7 @@ export const useBatchUpdateSystemCostCodes = (options?: { suppressInvalidate?: b
         }
 
         // One bulk UPDATE per unique code — ~15 calls instead of 3,003
-        const promises: Promise<any>[] = [];
+        const promises: PromiseLike<any>[] = [];
         for (const [code, rowNumbers] of byCode.entries()) {
           promises.push(
             supabase
