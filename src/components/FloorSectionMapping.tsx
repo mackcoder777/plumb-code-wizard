@@ -12,7 +12,7 @@ import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshC
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
-import { cn } from '@/lib/utils';
+import { cn, normalizeActivityCode } from '@/lib/utils';
 import {
   useFloorSectionMappings,
   useBatchSaveFloorSectionMappings,
