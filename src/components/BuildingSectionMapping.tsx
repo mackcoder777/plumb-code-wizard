@@ -30,6 +30,7 @@ export const BuildingSectionMappingPanel: React.FC<Props> = ({
   projectId,
   estimateItems,
   onMappingsChange,
+  suggestedMappings = [],
 }) => {
   const { mappings, loading, upsertMapping, deleteMapping, autoPopulate, updateZonePattern } =
     useBuildingSectionMappings(projectId);
