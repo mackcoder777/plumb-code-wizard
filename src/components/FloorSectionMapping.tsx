@@ -693,6 +693,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   costHeadActivityOverrides = [],
   onCostHeadOverridesChange,
   codeFormatMode = 'standard',
+  tradePrefix,
 }) => {
   const [localMappings, setLocalMappings] = useState<Record<string, string>>({});
   const [localActivityMappings, setLocalActivityMappings] = useState<Record<string, string>>({});
@@ -1248,7 +1249,6 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                         onAddCustomCode={handleAddCustomCode}
                         customCodes={customCodes}
                         className="h-8"
-                        placeholder="Select building code..."
                       />
                     ) : (
                       <div className="flex items-center gap-1 pl-2">
