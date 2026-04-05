@@ -527,9 +527,8 @@ export const useSaveEstimateItems = () => {
 
       return { success: true, count: items.length };
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
-    },
+    // No onSuccess invalidation — caller already has data in memory,
+    // re-fetching what was just written causes a double-load cycle
   });
 };
 
