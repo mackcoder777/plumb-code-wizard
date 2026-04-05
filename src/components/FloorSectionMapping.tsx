@@ -877,7 +877,13 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       const act: Record<string, string> = {};
       const descriptions: Record<string, string> = {};
       dbMappings.forEach(m => {
-        sec[m.floor_pattern] = m.section_code;
+        if (codeFormatMode === 'multitrade') {
+          // In multitrade: localMappings holds the building identifier,
+          // which is stored in activity_code (section_code is always the trade prefix)
+          sec[m.floor_pattern] = m.activity_code ?? '0000';
+        } else {
+          sec[m.floor_pattern] = m.section_code;
+        }
         const storedAct = m.activity_code ?? '0000';
         act[m.floor_pattern] = storedAct;
         if (m.description && m.description !== 'Custom') {
@@ -889,7 +895,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       setCustomDescriptions(prev => ({ ...prev, ...descriptions }));
       setHasChanges(false);
     }
-  }, [dbMappings]);
+  }, [dbMappings, codeFormatMode]);
 
   useEffect(() => {
     onMappingsChange?.(localMappings);
@@ -1083,14 +1089,18 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const sec: Record<string, string> = {};
     const act: Record<string, string> = {};
     dbMappings.forEach(m => {
-      sec[m.floor_pattern] = m.section_code;
+      if (codeFormatMode === 'multitrade') {
+        sec[m.floor_pattern] = m.activity_code ?? '0000';
+      } else {
+        sec[m.floor_pattern] = m.section_code;
+      }
       const storedAct = m.activity_code ?? '0000';
       act[m.floor_pattern] = storedAct;
     });
     setLocalMappings(sec);
     setLocalActivityMappings(act);
     setHasChanges(false);
-  }, [dbMappings]);
+  }, [dbMappings, codeFormatMode]);
 
   const handleClearAllActivity = useCallback(() => {
     setLocalActivityMappings(prev => {
