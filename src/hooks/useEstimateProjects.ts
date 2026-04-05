@@ -617,6 +617,7 @@ export const useBatchUpdateSystemCostCodes = (options?: { suppressInvalidate?: b
               .update({ cost_code: code })
               .eq('project_id', projectId)
               .in('row_number', rowNumbers)
+              .then()
           );
         }
         for (const [code, rowNumbers] of byMaterialCode.entries()) {
@@ -626,6 +627,7 @@ export const useBatchUpdateSystemCostCodes = (options?: { suppressInvalidate?: b
               .update({ material_cost_code: code })
               .eq('project_id', projectId)
               .in('row_number', rowNumbers)
+              .then()
           );
         }
 
