@@ -510,7 +510,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     // Simulate processing time for better UX
     setTimeout(() => {
       const systemNames = systemMappings
-        .filter(sm => !sm.laborCode) // Only suggest for unmapped systems
+        .filter(sm => !sm.laborCode && (sm.totalHours || 0) > 0) // Only suggest for unmapped systems with hours
         .map(sm => normalizeSystemKey(sm.system));
       
       const newSuggestions = generateAllSuggestions(systemNames);

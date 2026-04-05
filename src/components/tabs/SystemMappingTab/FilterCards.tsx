@@ -311,6 +311,12 @@ export const FilterCards: React.FC<FilterCardsProps> = ({
                         ⏱ {system.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })}h
                       </span>
                       
+                      {(system.totalHours || 0) === 0 && !system.laborCode && (
+                        <Badge className="text-xs bg-muted text-muted-foreground">
+                          0h — N/A
+                        </Badge>
+                      )}
+                      
                       {system.laborCode && (
                         <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200 gap-1">
                           {system.laborCode}
