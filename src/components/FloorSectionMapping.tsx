@@ -117,6 +117,10 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, on
     code.label.toLowerCase().includes(inputValue.toLowerCase())
   );
 
+  const exactValueMatch =
+    inputValue.trim().length > 0 &&
+    allCodes.some(c => c.value.toUpperCase() === inputValue.trim().toUpperCase());
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
