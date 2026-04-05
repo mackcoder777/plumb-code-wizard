@@ -101,7 +101,7 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, on
   };
 
   const handleAddCustom = () => {
-    if (customCode.trim().length >= 1 && customCode.trim().length <= 3) {
+    if (customCode.trim().length >= 1 && customCode.trim().length <= 4) {
       const code = customCode.trim().toUpperCase();
       onAddCustomCode?.(code, customLabel.trim() || 'Custom');
       onChange(code);
@@ -140,14 +140,14 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, on
             <div className="text-sm font-medium">Add Custom Section Code</div>
             <div className="space-y-2">
               <div>
-                <label className="text-xs text-muted-foreground">Code (1-3 chars)</label>
+                <label className="text-xs text-muted-foreground">Code (1-4 chars)</label>
                 <Input
                   ref={codeInputRef}
                   value={customCode}
-                  onChange={(e) => setCustomCode(e.target.value.toUpperCase().slice(0, 3))}
-                  placeholder="e.g., CL, UG, 01"
+                  onChange={(e) => setCustomCode(e.target.value.toUpperCase().slice(0, 4))}
+                  placeholder="e.g., CL, UG, SITE"
                   className="h-8 font-mono"
-                  maxLength={3}
+                  maxLength={4}
                 />
               </div>
               <div>
