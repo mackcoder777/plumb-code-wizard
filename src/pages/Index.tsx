@@ -2382,7 +2382,7 @@ const EnhancedCostCodeManager = () => {
           <h1 className="text-3xl font-bold flex items-center gap-3">
             🔧 Plumbing Estimate Cost Code Manager
           </h1>
-          <p className="mt-2 opacity-90">SEC-ACT-COST HEAD Automation System | {stats.totalCodes} Total Codes Available</p>
+          <p className="mt-2 opacity-90">SEC-ACT-COST HEAD Automation System | {stats.totalCodes} Codes in Library</p>
           {fileName && (
             <div className="mt-4 bg-white/20 px-4 py-2 rounded-lg inline-block">
               <span className="text-sm opacity-90">Project: </span>
