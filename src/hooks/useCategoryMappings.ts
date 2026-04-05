@@ -19,6 +19,10 @@ export interface CategoryIndexEntry {
   category: string;
   itemCount: number;
   totalHours: number;
+  topSystems: Array<{ system: string; count: number; hours: number }>;
+  topMaterialDescs: Array<{ desc: string; count: number }>;
+  systemCount: number;
+  descCount: number;
 }
 
 /**
