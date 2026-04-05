@@ -829,7 +829,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       });
     }
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [localMappings, codeFormatMode, buildingMappings, groups]);
+  }, [localMappings, codeFormatMode, buildingMappings, floorCounts]);
 
   // Floor counts
   const floorData = useMemo(() => {
