@@ -1000,26 +1000,22 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Building to Section Mapping - Hidden (functionality covered by Section Mapping panel) */}
-      {false && projectId && (
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" className="w-full justify-between">
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4" />
-                Building → Section Code (Drawing-based)
-              </div>
-              <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-4">
-            <BuildingSectionMappingPanel
-              projectId={projectId}
-              estimateItems={data}
-              suggestedMappings={suggestedBuildingMappings}
-            />
-          </CollapsibleContent>
-        </Collapsible>
+      {/* Building to Section Mapping - Shown in multitrade when no saved mappings exist but suggestions available */}
+      {codeFormatMode === 'multitrade' && projectId && buildingSectionMappings.length === 0 && suggestedBuildingMappings.length > 0 && (
+        <div className="space-y-2">
+          <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
+              Buildings were auto-detected from your drawing names. Review the section codes below and click Save — cost codes will show 0000 until you save.
+            </AlertDescription>
+          </Alert>
+          <BuildingSectionMappingPanel
+            projectId={projectId}
+            estimateItems={data}
+            onMappingsChange={onBuildingMappingsChanged}
+            suggestedMappings={suggestedBuildingMappings}
+          />
+        </div>
       )}
 
       {/* System to Activity Mapping - Collapsible (closed by default) */}
