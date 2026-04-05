@@ -354,26 +354,39 @@ interface StandaloneFloorRowProps {
 const ZoneAssignInput: React.FC<{
   sectionSuggestions?: Array<{ code: string; description: string }>;
   onAssign: (sectionCode: string) => void;
-}> = ({ sectionSuggestions, onAssign }) => {
-  const [value, setValue] = useState('');
+  initialValue?: string;
+  onCancel?: () => void;
+}> = ({ sectionSuggestions, onAssign, initialValue = '', onCancel }) => {
+  const [value, setValue] = useState(initialValue);
   const listId = useRef(`zone-dl-${Math.random().toString(36).slice(2, 8)}`).current;
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialValue) inputRef.current?.focus();
+  }, [initialValue]);
 
   const handleConfirm = () => {
     const trimmed = value.trim().toUpperCase();
     if (trimmed) {
       onAssign(trimmed);
       setValue('');
+    } else if (onCancel) {
+      onCancel();
     }
   };
 
   return (
     <span className="inline-flex items-center gap-0.5">
       <input
+        ref={inputRef}
         type="text"
         list={listId}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); }
+          if (e.key === 'Escape' && onCancel) { e.preventDefault(); onCancel(); }
+        }}
         onBlur={handleConfirm}
         placeholder="?"
         className="w-16 text-xs border rounded px-1 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground"
@@ -407,6 +420,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   tradePrefix,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [editingZone, setEditingZone] = useState<string | null>(null);
   const info = classifyStandaloneFloor(floor, zoneBreakdown);
 
   return (
@@ -533,17 +547,47 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                   <span className="w-8 text-right font-mono text-muted-foreground">{pct}%</span>
                   <span className="truncate">{label}</span>
                   <span className="text-muted-foreground">→</span>
-                  {suggestedSection !== null ? (
-                    <span className="font-mono font-medium">{suggestedSection}</span>
-                  ) : (() => {
-                    const patternMatch = buildingMappings?.find(
-                      m => m.zone_pattern && m.zone_pattern.split(',').some(
-                        p => label.toLowerCase().includes(p.trim().toLowerCase())
-                      )
-                    );
-                    if (patternMatch) {
-                      return <span className="font-mono font-medium">{patternMatch.section_code}</span>;
+                  {(() => {
+                    // Determine current assignment: from BLDG match or zone_pattern match
+                    let currentCode: string | null = suggestedSection;
+                    if (!currentCode) {
+                      const patternMatch = buildingMappings?.find(
+                        m => m.zone_pattern && m.zone_pattern.split(',').some(
+                          p => label.toLowerCase().includes(p.trim().toLowerCase())
+                        )
+                      );
+                      if (patternMatch) currentCode = patternMatch.section_code;
                     }
+
+                    // If editing this zone, show input
+                    if (editingZone === label) {
+                      return (
+                        <ZoneAssignInput
+                          sectionSuggestions={sectionSuggestions}
+                          initialValue={currentCode || ''}
+                          onAssign={(sectionCode) => {
+                            onZonePatternSave?.(label, sectionCode);
+                            setEditingZone(null);
+                          }}
+                          onCancel={() => setEditingZone(null)}
+                        />
+                      );
+                    }
+
+                    // If assigned, show clickable chip
+                    if (currentCode) {
+                      return (
+                        <button
+                          onClick={() => setEditingZone(label)}
+                          className="font-mono font-medium px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/20 cursor-pointer transition-colors"
+                          title="Click to edit zone assignment"
+                        >
+                          {currentCode}
+                        </button>
+                      );
+                    }
+
+                    // Unassigned — show input
                     return (
                       <ZoneAssignInput
                         sectionSuggestions={sectionSuggestions}
@@ -860,6 +904,30 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
     if (!sectionCode.trim()) return;
     const code = sectionCode.trim().toUpperCase();
+
+    // 1. Remove zoneLabel from any OLD mapping that currently owns it
+    const oldMapping = buildingMappings?.find(m => {
+      if (!m.zone_pattern) return false;
+      const patterns = m.zone_pattern.split(',').map(p => p.trim().toLowerCase());
+      return patterns.includes(zoneLabel.toLowerCase());
+    });
+
+    if (oldMapping && oldMapping.section_code.toUpperCase() !== code) {
+      const remainingPatterns = (oldMapping.zone_pattern || '')
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => p.toLowerCase() !== zoneLabel.toLowerCase());
+
+      await (supabase as any)
+        .from('building_section_mappings')
+        .update({
+          zone_pattern: remainingPatterns.length > 0 ? remainingPatterns.join(', ') : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', oldMapping.id);
+    }
+
+    // 2. Find or create the target mapping
     const mapping = buildingMappings?.find(m => m.section_code.toUpperCase() === code);
 
     if (!mapping) {
@@ -888,10 +956,14 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     if (mapping.zone_pattern) {
       // Check if this zone is already included
       const existingPatterns = mapping.zone_pattern.split(',').map(p => p.trim().toLowerCase());
-      if (existingPatterns.includes(zoneLabel.toLowerCase())) return; // already saved
+      if (existingPatterns.includes(zoneLabel.toLowerCase())) {
+        // Already on correct mapping (maybe old was same as new)
+        onBuildingMappingsChanged?.();
+        return;
+      }
 
       // Append the new pattern
-      const updatedPattern = `${mapping.zone_pattern},${zoneLabel}`;
+      const updatedPattern = `${mapping.zone_pattern}, ${zoneLabel}`;
       const { error } = await (supabase as any)
         .from('building_section_mappings')
         .update({ zone_pattern: updatedPattern, updated_at: new Date().toISOString() })
@@ -901,7 +973,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
         return;
       }
-      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (appended)` });
+      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (reassigned)` });
       onBuildingMappingsChanged?.();
       return;
     }
