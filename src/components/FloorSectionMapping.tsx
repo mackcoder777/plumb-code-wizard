@@ -552,7 +552,9 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                   m.section_code?.toUpperCase() === `B${bldgId}`.toUpperCase()
               );
               const suggestedSection = bldgMatch
-                ? (matchedMapping?.section_code || `B${bldgId}`)
+                ? (codeFormatMode === 'multitrade'
+                    ? (matchedMapping?.building_identifier || bldgId)
+                    : (matchedMapping?.section_code || `B${bldgId}`))
                 : null;
 
               return (
@@ -576,7 +578,9 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                           p => label.toLowerCase().includes(p.trim().toLowerCase())
                         )
                       );
-                      if (patternMatch) currentCode = patternMatch.section_code;
+                      if (patternMatch) currentCode = codeFormatMode === 'multitrade'
+                        ? patternMatch.building_identifier
+                        : patternMatch.section_code;
                     }
 
                     // If editing this zone, show input
@@ -800,41 +804,6 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   // Standalone floor codes that are fallback values, not real building sections
   const STANDALONE_SECTION_CODES = new Set(['RF', 'UG', 'CS', 'ST']);
 
-  // Only show section codes actively assigned in this project's floor mappings
-  const allSectionSuggestions = useMemo(() => {
-    const codes = new Map<string, string>();
-    if (codeFormatMode === 'multitrade') {
-      // Show ACT/building identifiers, not section codes
-      Object.values(localMappings).forEach(code => {
-        if (code && !codes.has(code)) codes.set(code, '');
-      });
-      buildingMappings?.forEach(bm => {
-        if (bm.building_identifier && !codes.has(bm.building_identifier)) {
-          codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
-        }
-      });
-      // Derive building identifiers from estimate floor values
-      const seenFloors = new Set<string>();
-      estimateData.forEach(item => {
-        if (item.floor && !seenFloors.has(item.floor)) {
-          seenFloors.add(item.floor);
-          const bldgMatch = item.floor.match(/^bldg\s*(\w+)/i);
-          if (bldgMatch) {
-            const id = bldgMatch[1].toUpperCase();
-            if (!codes.has(id)) codes.set(id, `Building ${id}`);
-          }
-        }
-      });
-    } else {
-      Object.values(localMappings).forEach(code => {
-        if (code && !codes.has(code) && !STANDALONE_SECTION_CODES.has(code.toUpperCase())) {
-          codes.set(code, '');
-        }
-      });
-    }
-    return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [localMappings, codeFormatMode, buildingMappings, estimateData]);
-
   // Floor counts
   const floorData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -859,6 +828,48 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const floorZoneBreakdown = floorData.zoneBreakdown;
 
   const { groups, standalones } = useMemo(() => groupFloors(floorCounts), [floorCounts]);
+
+  const allSectionSuggestions = useMemo(() => {
+    const codes = new Map<string, string>();
+    if (codeFormatMode === 'multitrade') {
+      const prefix = (tradePrefix || 'PL').toUpperCase();
+
+      Object.values(localMappings).forEach(code => {
+        if (code && code.toUpperCase() !== prefix && !codes.has(code)) codes.set(code, '');
+      });
+
+      buildingMappings?.forEach(bm => {
+        if (bm.building_identifier && !codes.has(bm.building_identifier)) {
+          codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
+        }
+      });
+
+      groups.forEach(({ buildingKey }) => {
+        const m = buildingKey.match(/^bldg\s*(\w+)/i);
+        if (m) {
+          const id = m[1].toUpperCase();
+          if (!codes.has(id)) codes.set(id, `Building ${id}`);
+        }
+      });
+
+      Object.values(floorZoneBreakdown).forEach(zoneMap => {
+        Object.keys(zoneMap).forEach(zoneLabel => {
+          const m = zoneLabel.match(/BLDG\s*[-–]\s*([A-Z0-9]+)/i);
+          if (m) {
+            const id = m[1].toUpperCase();
+            if (!codes.has(id)) codes.set(id, `Building ${id}`);
+          }
+        });
+      });
+    } else {
+      Object.values(localMappings).forEach(code => {
+        if (code && !codes.has(code) && !STANDALONE_SECTION_CODES.has(code.toUpperCase())) {
+          codes.set(code, '');
+        }
+      });
+    }
+    return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
+  }, [localMappings, codeFormatMode, tradePrefix, buildingMappings, groups, floorZoneBreakdown]);
 
   // Custom codes from current mappings + detected buildings + saved building mappings
   const customCodes = useMemo(() => {
@@ -897,7 +908,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     }
 
     return custom.sort((a, b) => a.value.localeCompare(b.value));
-  }, [localMappings, customDescriptions, groups, buildingMappings]);
+  }, [localMappings, customDescriptions, groups, buildingMappings, codeFormatMode]);
 
   // Init from DB
   useEffect(() => {
@@ -995,13 +1006,13 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     if (!mapping) {
       // Auto-create a new building mapping row with the zone pattern
       if (!projectId) return;
+      const canonicalSection = codeFormatMode === 'multitrade' ? (tradePrefix || 'PL') : code;
       const { error } = await (supabase as any)
         .from('building_section_mappings')
         .upsert({
           project_id: projectId,
           building_identifier: code,
-          // In multitrade, section_code is always the trade prefix; ACT lives in building_identifier
-          section_code: codeFormatMode === 'multitrade' ? (tradePrefix || 'PL') : code,
+          section_code: canonicalSection,
           description: `Building ${code}`,
           zone_pattern: zoneLabel,
           updated_at: new Date().toISOString(),
@@ -1053,7 +1064,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
     toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code}` });
     onBuildingMappingsChanged?.();
-  }, [buildingMappings, projectId, onBuildingMappingsChanged]);
+  }, [buildingMappings, codeFormatMode, projectId, tradePrefix, onBuildingMappingsChanged]);
 
   const handleSaveAll = useCallback(async () => {
     if (!projectId) {
