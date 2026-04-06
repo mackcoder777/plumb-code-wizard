@@ -803,8 +803,8 @@ const EnhancedCostCodeManager = () => {
       let activity: string;
       if (codeFormatMode === 'multitrade') {
         section = tradePrefix || 'PL';
-        const buildingSection = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
+        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = floorMap.activity || '0000';
       } else {
         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         activity = resolveActivity(item, costHead);
@@ -872,8 +872,8 @@ const EnhancedCostCodeManager = () => {
 
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
-      const buildingSection = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
-      activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
+      const floorMap2 = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+      activity = floorMap2.activity || '0000';
     } else {
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
@@ -1019,8 +1019,8 @@ const EnhancedCostCodeManager = () => {
             let activity: string;
             if (codeFormatMode === 'multitrade') {
               section = tradePrefix || 'PL';
-              const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-              activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
+              const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+              activity = floorMap.activity || '0000';
             } else {
               section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
               activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
@@ -1108,8 +1108,8 @@ const EnhancedCostCodeManager = () => {
           let activity: string;
           if (codeFormatMode === 'multitrade') {
             section = tradePrefix || 'PL';
-            const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
+            const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+            activity = floorMap.activity || '0000';
           } else {
             section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
             activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
@@ -1225,8 +1225,16 @@ const EnhancedCostCodeManager = () => {
       
       if (!head) return item;
       
-      const section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      const activity = resolveActivity(item, head);
+      let section: string;
+      let activity: string;
+      if (codeFormatMode === 'multitrade') {
+        section = tradePrefix || 'PL';
+        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = floorMap.activity || '0000';
+      } else {
+        section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = resolveActivity(item, head);
+      }
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
@@ -2025,8 +2033,8 @@ const EnhancedCostCodeManager = () => {
         let activity: string;
         if (codeFormatMode === 'multitrade') {
           section = tradePrefix || 'PL';
-          const buildingSection = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          activity = buildingSection ? normalizeActivityCode(buildingSection) : '0000';
+          const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+          activity = floorMap.activity || '0000';
         } else {
           section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
           activity = resolveActivity(item, laborCode || '');
