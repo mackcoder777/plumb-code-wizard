@@ -47,6 +47,11 @@ interface BuildingGroup {
   totalCount: number;
 }
 
+interface MultitradeActOption {
+  value: string;
+  display: string;
+}
+
 // ─── Common section codes ─────────────────────────────────────────────────────
 const COMMON_SECTION_CODES = [
   { value: '01', label: 'Section 1' },
@@ -63,6 +68,23 @@ const COMMON_SECTION_CODES = [
   { value: 'P1', label: 'Parking 1' },
   { value: 'P2', label: 'Parking 2' },
 ];
+
+const sanitizeCode = (code: string) => code.trim().toUpperCase();
+
+const formatMultitradeAct = (code: string) => {
+  const sanitized = sanitizeCode(code);
+  return sanitized ? normalizeActivityCode(sanitized) : '';
+};
+
+const normalizeBuildingLookupKey = (value: string) => {
+  const sanitized = sanitizeCode(value);
+  return /^B\d+$/.test(sanitized) ? sanitized.slice(1) : sanitized;
+};
+
+const getBuildingIdFromGroupKey = (buildingKey: string) => {
+  const match = buildingKey.match(/^bldg\s+([A-Z0-9]+)\b/i);
+  return match ? normalizeBuildingLookupKey(match[1]) : null;
+};
 
 // ─── Section Code Input (combobox with custom entry) ──────────────────────────
 interface SectionCodeInputProps {
@@ -233,6 +255,76 @@ const SectionCodeInput: React.FC<SectionCodeInputProps> = ({ value, onChange, on
   );
 };
 
+const MultitradeActInput: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  options: MultitradeActOption[];
+  className?: string;
+  placeholder?: string;
+}> = ({ value, onChange, options, className, placeholder = 'Select ACT...' }) => {
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+
+  const filteredOptions = useMemo(() => {
+    const query = inputValue.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter(option =>
+      option.value.toLowerCase().includes(query) ||
+      option.display.toLowerCase().includes(query)
+    );
+  }, [inputValue, options]);
+
+  const displayValue = value ? formatMultitradeAct(value) : placeholder;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            'w-[200px] justify-between font-normal font-mono',
+            !value && 'text-muted-foreground',
+            className
+          )}
+        >
+          <span className="truncate">{displayValue}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[220px] p-0 bg-popover" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Search ACT..."
+            value={inputValue}
+            onValueChange={setInputValue}
+          />
+          <CommandList>
+            <CommandEmpty>No active ACT codes above.</CommandEmpty>
+            <CommandGroup heading="Active ACT Codes">
+              {filteredOptions.map(option => (
+                <CommandItem
+                  key={option.value}
+                  value={`${option.display} ${option.value}`}
+                  onSelect={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                    setInputValue('');
+                  }}
+                >
+                  <Check className={cn('mr-2 h-4 w-4', value === option.value ? 'opacity-100' : 'opacity-0')} />
+                  <span className="font-mono">{option.display}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 // ─── Auto-suggest helpers ─────────────────────────────────────────────────────
 function suggestSection(displayName: string): string {
   const bldgMatch = displayName.match(/^bldg\s*(\w+)/i);
@@ -365,6 +457,8 @@ interface StandaloneFloorRowProps {
   customCodes: Array<{ value: string; label: string }>;
   buildingMappings?: BuildingSectionMapping[];
   sectionSuggestions?: Array<{ code: string; description: string }>;
+  multitradeActOptions?: MultitradeActOption[];
+  getActiveActForZone?: (zoneLabel: string) => string | null;
   onZonePatternSave?: (zoneLabel: string, sectionCode: string) => void;
   codeFormatMode?: 'standard' | 'multitrade';
   tradePrefix?: string;
@@ -435,6 +529,8 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
   customCodes,
   buildingMappings,
   sectionSuggestions,
+  multitradeActOptions = [],
+  getActiveActForZone,
   onZonePatternSave,
   codeFormatMode,
   tradePrefix,
@@ -505,12 +601,11 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
         {/* Activity */}
         <div className="flex items-center gap-1">
           {codeFormatMode === 'multitrade' ? (
-            <SectionCodeInput
+            <MultitradeActInput
               value={sectionCode}
               onChange={(val) => onSectionChange([floor], val)}
-              onAddCustomCode={onAddCustomCode}
-              customCodes={customCodes}
-              className="h-8"
+              options={multitradeActOptions}
+              className="h-8 w-[200px]"
             />
           ) : (
             <>
@@ -553,7 +648,7 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
               );
               const suggestedSection = bldgMatch
                 ? (codeFormatMode === 'multitrade'
-                    ? (matchedMapping?.building_identifier || bldgId)
+                    ? (getActiveActForZone?.(label) || null)
                     : (matchedMapping?.section_code || `B${bldgId}`))
                 : null;
 
@@ -578,13 +673,33 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                           p => label.toLowerCase().includes(p.trim().toLowerCase())
                         )
                       );
-                      if (patternMatch) currentCode = codeFormatMode === 'multitrade'
-                        ? patternMatch.building_identifier
-                        : patternMatch.section_code;
+                      if (patternMatch) {
+                        if (codeFormatMode === 'multitrade') {
+                          const activePatternCode = getActiveActForZone?.(label) || null;
+                          if (activePatternCode) currentCode = activePatternCode;
+                        } else {
+                          currentCode = patternMatch.section_code;
+                        }
+                      }
                     }
 
                     // If editing this zone, show input
                     if (editingZone === label) {
+                      if (codeFormatMode === 'multitrade') {
+                        return (
+                          <MultitradeActInput
+                            value={currentCode || ''}
+                            options={multitradeActOptions}
+                            onChange={(selectedAct) => {
+                              onZonePatternSave?.(label, selectedAct);
+                              setEditingZone(null);
+                            }}
+                            className="h-7 w-[112px] px-2"
+                            placeholder="Select ACT..."
+                          />
+                        );
+                      }
+
                       return (
                         <ZoneAssignInput
                           sectionSuggestions={sectionSuggestions}
@@ -606,12 +721,24 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
                           className="font-mono font-medium px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/20 cursor-pointer transition-colors"
                           title="Click to edit zone assignment"
                         >
-                          {currentCode}
+                          {codeFormatMode === 'multitrade' ? formatMultitradeAct(currentCode) : currentCode}
                         </button>
                       );
                     }
 
                     // Unassigned — show input
+                    if (codeFormatMode === 'multitrade') {
+                      return (
+                        <MultitradeActInput
+                          value=""
+                          options={multitradeActOptions}
+                          onChange={(selectedAct) => onZonePatternSave?.(label, selectedAct)}
+                          className="h-7 w-[112px] px-2"
+                          placeholder="Select ACT..."
+                        />
+                      );
+                    }
+
                     return (
                       <ZoneAssignInput
                         sectionSuggestions={sectionSuggestions}
@@ -829,25 +956,74 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const { groups, standalones } = useMemo(() => groupFloors(floorCounts), [floorCounts]);
 
+  const activeMultitradeActOptions = useMemo<MultitradeActOption[]>(() => {
+    if (codeFormatMode !== 'multitrade') return [];
+
+    const prefix = sanitizeCode(tradePrefix || 'PL');
+    const codes = new Map<string, string>();
+
+    groups.forEach(({ childFloors }) => {
+      for (const floor of childFloors) {
+        const code = sanitizeCode(localMappings[floor] || '');
+        if (!code || code === prefix || code === '0000' || codes.has(code)) continue;
+        codes.set(code, formatMultitradeAct(code));
+        break;
+      }
+    });
+
+    return Array.from(codes.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([value, display]) => ({ value, display }));
+  }, [codeFormatMode, groups, localMappings, tradePrefix]);
+
+  const activeMultitradeActSet = useMemo(
+    () => new Set(activeMultitradeActOptions.map(option => option.value)),
+    [activeMultitradeActOptions]
+  );
+
+  const activeActByBuildingId = useMemo(() => {
+    const map = new Map<string, string>();
+    if (codeFormatMode !== 'multitrade') return map;
+
+    const prefix = sanitizeCode(tradePrefix || 'PL');
+    groups.forEach(({ buildingKey, childFloors }) => {
+      const buildingId = getBuildingIdFromGroupKey(buildingKey);
+      if (!buildingId) return;
+
+      for (const floor of childFloors) {
+        const code = sanitizeCode(localMappings[floor] || '');
+        if (!code || code === prefix || code === '0000') continue;
+        map.set(buildingId, code);
+        break;
+      }
+    });
+
+    return map;
+  }, [codeFormatMode, groups, localMappings, tradePrefix]);
+
+  const getActiveActForZone = useCallback((zoneLabel: string) => {
+    if (codeFormatMode !== 'multitrade') return null;
+
+    const buildingMatch = zoneLabel.match(/BLDG\s*[-–]\s*([A-Z0-9]+)/i);
+    if (buildingMatch) {
+      const buildingKey = normalizeBuildingLookupKey(buildingMatch[1]);
+      return activeActByBuildingId.get(buildingKey) || null;
+    }
+
+    const patternMatch = buildingMappings?.find(
+      mapping => mapping.zone_pattern && mapping.zone_pattern.split(',').some(
+        pattern => zoneLabel.toLowerCase().includes(pattern.trim().toLowerCase())
+      )
+    );
+    const patternAct = sanitizeCode(patternMatch?.building_identifier || '');
+    return patternAct && activeMultitradeActSet.has(patternAct) ? patternAct : null;
+  }, [codeFormatMode, activeActByBuildingId, buildingMappings, activeMultitradeActSet]);
+
   const allSectionSuggestions = useMemo(() => {
     const codes = new Map<string, string>();
     if (codeFormatMode === 'multitrade') {
-      const prefix = (tradePrefix || 'PL').toUpperCase();
-      // Only ACT codes explicitly assigned to building groups by the user
-      groups.forEach(({ childFloors }) => {
-        for (const floor of childFloors) {
-          const code = localMappings[floor];
-          if (code && code.toUpperCase() !== prefix && code !== '0000' && !codes.has(code)) {
-            codes.set(code, '');
-            break; // all floors in a group share the same building ACT
-          }
-        }
-      });
-      // Confirmed saved building mapping identifiers from DB
-      buildingMappings?.forEach(bm => {
-        if (bm.building_identifier && !codes.has(bm.building_identifier)) {
-          codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
-        }
+      activeMultitradeActOptions.forEach(({ value, display }) => {
+        codes.set(value, display);
       });
     } else {
       Object.values(localMappings).forEach(code => {
@@ -857,7 +1033,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       });
     }
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [localMappings, codeFormatMode, tradePrefix, buildingMappings, groups]);
+  }, [activeMultitradeActOptions, localMappings, codeFormatMode]);
 
   // Custom codes from current mappings + detected buildings + saved building mappings
   const customCodes = useMemo(() => {
@@ -957,7 +1133,16 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
   const handleZonePatternSave = useCallback(async (zoneLabel: string, sectionCode: string) => {
     if (!sectionCode.trim()) return;
-    const code = sectionCode.trim().toUpperCase();
+    const code = sanitizeCode(sectionCode);
+    if (codeFormatMode === 'multitrade' && !activeMultitradeActSet.has(code)) {
+      toast({
+        title: 'Invalid ACT code',
+        description: 'Choose one of the active ACT codes assigned in the building rows above.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const displayCode = codeFormatMode === 'multitrade' ? formatMultitradeAct(code) : code;
 
     // 1. Remove zoneLabel from any OLD mapping that currently owns it
     const oldMapping = buildingMappings?.find(m => {
@@ -1010,7 +1195,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
         return;
       }
-      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (created)` });
+      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${displayCode} (created)` });
       onBuildingMappingsChanged?.();
       return;
     }
@@ -1035,7 +1220,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         toast({ title: 'Error saving zone pattern', description: error.message, variant: 'destructive' });
         return;
       }
-      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code} (reassigned)` });
+      toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${displayCode} (reassigned)` });
       onBuildingMappingsChanged?.();
       return;
     }
@@ -1050,9 +1235,9 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       return;
     }
 
-    toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${code}` });
+    toast({ title: 'Zone pattern saved', description: `"${zoneLabel}" → ${displayCode}` });
     onBuildingMappingsChanged?.();
-  }, [buildingMappings, codeFormatMode, projectId, tradePrefix, onBuildingMappingsChanged]);
+  }, [buildingMappings, codeFormatMode, projectId, tradePrefix, onBuildingMappingsChanged, activeMultitradeActSet]);
 
   const handleSaveAll = useCallback(async () => {
     if (!projectId) {
@@ -1411,11 +1596,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
                     {/* Activity column */}
                     {codeFormatMode === 'multitrade' ? (
-                      <SectionCodeInput
+                      <MultitradeActInput
                         value={buildingSection}
                         onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
-                        onAddCustomCode={handleAddCustomCode}
-                        customCodes={customCodes}
+                        options={activeMultitradeActOptions}
                         className="h-8"
                       />
                     ) : (
@@ -1503,6 +1687,8 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
                 customCodes={customCodes}
                 buildingMappings={buildingMappings}
                 sectionSuggestions={allSectionSuggestions}
+                multitradeActOptions={activeMultitradeActOptions}
+                getActiveActForZone={getActiveActForZone}
                 onZonePatternSave={handleZonePatternSave}
                 codeFormatMode={codeFormatMode}
                 tradePrefix={tradePrefix}
