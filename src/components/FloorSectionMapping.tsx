@@ -833,33 +833,21 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
     const codes = new Map<string, string>();
     if (codeFormatMode === 'multitrade') {
       const prefix = (tradePrefix || 'PL').toUpperCase();
-
-      Object.values(localMappings).forEach(code => {
-        if (code && code.toUpperCase() !== prefix && !codes.has(code)) codes.set(code, '');
+      // Only ACT codes explicitly assigned to building groups by the user
+      groups.forEach(({ childFloors }) => {
+        for (const floor of childFloors) {
+          const code = localMappings[floor];
+          if (code && code.toUpperCase() !== prefix && code !== '0000' && !codes.has(code)) {
+            codes.set(code, '');
+            break; // all floors in a group share the same building ACT
+          }
+        }
       });
-
+      // Confirmed saved building mapping identifiers from DB
       buildingMappings?.forEach(bm => {
         if (bm.building_identifier && !codes.has(bm.building_identifier)) {
           codes.set(bm.building_identifier, bm.description || `Building ${bm.building_identifier}`);
         }
-      });
-
-      groups.forEach(({ buildingKey }) => {
-        const m = buildingKey.match(/^bldg\s*(\w+)/i);
-        if (m) {
-          const id = m[1].toUpperCase();
-          if (!codes.has(id)) codes.set(id, `Building ${id}`);
-        }
-      });
-
-      Object.values(floorZoneBreakdown).forEach(zoneMap => {
-        Object.keys(zoneMap).forEach(zoneLabel => {
-          const m = zoneLabel.match(/BLDG\s*[-–]\s*([A-Z0-9]+)/i);
-          if (m) {
-            const id = m[1].toUpperCase();
-            if (!codes.has(id)) codes.set(id, `Building ${id}`);
-          }
-        });
       });
     } else {
       Object.values(localMappings).forEach(code => {
@@ -869,7 +857,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
       });
     }
     return Array.from(codes.entries()).map(([code, description]) => ({ code, description }));
-  }, [localMappings, codeFormatMode, tradePrefix, buildingMappings, groups, floorZoneBreakdown]);
+  }, [localMappings, codeFormatMode, tradePrefix, buildingMappings, groups]);
 
   // Custom codes from current mappings + detected buildings + saved building mappings
   const customCodes = useMemo(() => {
