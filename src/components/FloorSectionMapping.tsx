@@ -1596,11 +1596,10 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
 
                     {/* Activity column */}
                     {codeFormatMode === 'multitrade' ? (
-                      <SectionCodeInput
+                      <MultitradeActInput
                         value={buildingSection}
                         onChange={(val) => handleSectionChangeForFloors(group.childFloors, val)}
-                        onAddCustomCode={handleAddCustomCode}
-                        customCodes={customCodes}
+                        options={activeMultitradeActOptions}
                         className="h-8"
                       />
                     ) : (
