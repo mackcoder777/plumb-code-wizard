@@ -300,14 +300,15 @@ export function resolveFloorMappingStatic(
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
     if (zonePatternMatch) {
       const canonicalSection = getCanonicalSectionForBuilding(zonePatternMatch.building_identifier, floorMappings, buildingMappings);
-      // Try to extract activity code from zone prefix (e.g. "PC1 - MODULAR" → "0PC1", "PC10 - ..." → "PC10")
-      const prefixMatch = options.zone.match(/^([A-Z0-9]{2,4})\s*[-–]/i);
-      if (prefixMatch) {
-        const prefix = prefixMatch[1].toUpperCase();
-        const activity = normalizeActivityCode(prefix.length <= 3 ? '0' + prefix : prefix);
-        return { section: canonicalSection, activity, hasExplicitMapping };
-      }
-      return { section: canonicalSection, activity: floorActivity, hasExplicitMapping };
+      // Pull activity from floor mapping for this building (e.g., "Bldg MOD - ..." entry has activity_code = "0MOD")
+      const buildingFloorMatch = floorMappings.find(fm => {
+        const m = (fm.floor_pattern || '').match(/^bldg\s+([A-Z0-9]+)\s*-/i);
+        return m && m[1].toUpperCase() === zonePatternMatch.building_identifier.toUpperCase();
+      });
+      const activity = buildingFloorMatch?.activity_code
+        ? normalizeActivityCode(buildingFloorMatch.activity_code)
+        : floorActivity;
+      return { section: canonicalSection, activity, hasExplicitMapping };
     }
   }
 
