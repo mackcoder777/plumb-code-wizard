@@ -627,9 +627,10 @@ const EnhancedCostCodeManager = () => {
   const resolveActivity = useCallback((
     item: { floor?: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string },
     costHead: string
-  ): string => {
+  ): string | null => {
     // 1. Derive floor/level-based activity
     const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+    if (floorMap.activity === null) return null; // Zone resolution failed — uncoded
     const floorActivity = floorMap.activity || '0000';
     // 2. Explicit user mapping
     const explicitActivity = floorMap.hasExplicitMapping ? floorMap.activity : null;
@@ -804,11 +805,17 @@ const EnhancedCostCodeManager = () => {
       if (codeFormatMode === 'multitrade') {
         section = tradePrefix || 'PL';
         const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        activity = (floorMap.buildingActivity ?? floorMap.activity) || '0000';
+        const resolvedActivity = floorMap.buildingActivity ?? floorMap.activity;
+        if (resolvedActivity === null) {
+          activity = '';
+        } else {
+          activity = resolvedActivity || '0000';
+        }
       } else {
         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        activity = resolveActivity(item, costHead);
+        activity = resolveActivity(item, costHead) || '';
       }
+      if (!activity) return; // Uncoded item — skip from summary
       const fullCode = `${section} ${activity} ${costHead}`;
       if (!summary[fullCode]) {
         const codeInfo = COST_CODES.find(c => c.code === costHead);
@@ -873,13 +880,21 @@ const EnhancedCostCodeManager = () => {
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
       const floorMap2 = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      activity = (floorMap2.buildingActivity ?? floorMap2.activity) || '0000';
+      const resolvedActivity = floorMap2.buildingActivity ?? floorMap2.activity;
+      if (resolvedActivity === null) {
+        activity = '';
+      } else {
+        activity = resolvedActivity || '0000';
+      }
     } else {
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
-      // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
       // We'll re-resolve activity after costHead is determined
       const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      activity = floorMap.hasExplicitMapping ? floorMap.activity : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+      if (floorMap.activity === null) {
+        activity = '';
+      } else {
+        activity = floorMap.hasExplicitMapping ? (floorMap.activity || '0000') : getActivityFromSystem(item.system || '', dbActivityMappings, item.reportCat || item.itemType || undefined);
+      }
     }
 
     const systemLower = (item.system || '').toLowerCase().trim();
@@ -922,7 +937,21 @@ const EnhancedCostCodeManager = () => {
 
     // Re-resolve activity with cost-head override knowledge (standard mode only)
     if (codeFormatMode !== 'multitrade' && costHead) {
-      activity = resolveActivity(item, costHead);
+      activity = resolveActivity(item, costHead) || '';
+    }
+
+    // If activity is null/empty (uncoded), return empty cost code
+    if (!activity) {
+      return {
+        code: '',
+        section: section,
+        activity: '',
+        costHead: costHead,
+        confidence: confidence,
+        source: source,
+        matchReason: matchReason,
+        description: description
+      };
     }
 
     return {
@@ -1020,10 +1049,15 @@ const EnhancedCostCodeManager = () => {
             if (codeFormatMode === 'multitrade') {
               section = tradePrefix || 'PL';
               const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-              activity = (floorMap.buildingActivity ?? floorMap.activity) || '0000';
+              const resolvedActivity = floorMap.buildingActivity ?? floorMap.activity;
+              if (resolvedActivity === null) {
+                activity = '';
+              } else {
+                activity = resolvedActivity || '0000';
+              }
             } else {
               section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-              activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead);
+              activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, persistedHead) || '';
             }
 
             // Validate cost head against current mappings — respecting priority:
@@ -1109,10 +1143,19 @@ const EnhancedCostCodeManager = () => {
           if (codeFormatMode === 'multitrade') {
             section = tradePrefix || 'PL';
             const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            activity = (floorMap.buildingActivity ?? floorMap.activity) || '0000';
+            const resolvedActivity = floorMap.buildingActivity ?? floorMap.activity;
+            if (resolvedActivity === null) {
+              activity = '';
+            } else {
+              activity = resolvedActivity || '0000';
+            }
           } else {
             section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-            activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode);
+            activity = resolveActivity({ floor: item.floor, drawing: item.drawing, zone: item.zone, system: item.system, reportCat: item.report_cat, itemType: item.item_type }, appliedCode) || '';
+          }
+          if (!activity) {
+            // Zone resolution failed — leave item uncoded
+            return baseItem;
           }
           baseItem.costCode = `${section} ${activity} ${appliedCode}`;
 
@@ -1230,11 +1273,17 @@ const EnhancedCostCodeManager = () => {
       if (codeFormatMode === 'multitrade') {
         section = tradePrefix || 'PL';
         const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        activity = (floorMap.buildingActivity ?? floorMap.activity) || '0000';
+        const resolvedActivity = floorMap.buildingActivity ?? floorMap.activity;
+        if (resolvedActivity === null) {
+          activity = '';
+        } else {
+          activity = resolvedActivity || '0000';
+        }
       } else {
         section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-        activity = resolveActivity(item, head);
+        activity = resolveActivity(item, head) || '';
       }
+      if (!activity) return item; // Uncoded — skip
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
@@ -2034,14 +2083,19 @@ const EnhancedCostCodeManager = () => {
         if (codeFormatMode === 'multitrade') {
           section = tradePrefix || 'PL';
           const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          activity = (floorMap.buildingActivity ?? floorMap.activity) || '0000';
+          const resolvedActivity = floorMap.buildingActivity ?? floorMap.activity;
+          if (resolvedActivity === null) {
+            activity = '';
+          } else {
+            activity = resolvedActivity || '0000';
+          }
         } else {
           section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-          activity = resolveActivity(item, laborCode || '');
+          activity = resolveActivity(item, laborCode || '') || '';
         }
         
         // Build the FULL assembled labor code with section and activity
-        const fullLaborCode = laborCode ? `${section} ${activity} ${laborCode}` : item.costCode;
+        const fullLaborCode = (laborCode && activity) ? `${section} ${activity} ${laborCode}` : item.costCode;
         
         // Track this item for database update using row_number (ALWAYS available)
         // row_number is set during upload and stored in DB - it's the stable identifier
