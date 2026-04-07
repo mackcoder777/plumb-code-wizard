@@ -1,55 +1,83 @@
 
-Goal: fix `standaloneAutoSuggestions` so Rule 2b (same cost head consolidation) is evaluated inside the `ABOVE_GRADE_SYSTEM_CODES` branches before their early `return`, in both passes, using the combined-hours threshold condition.
 
-Implementation plan
+# Three Data Integrity Safeguards
 
-1) Update Pass 1 (`standalone.forEach(entry => { ... })`)
-- In the existing block:
-  - `if (ABOVE_GRADE_SYSTEM_CODES.has(head)) { ... return; }`
-- Insert Rule 2b at the top of that block, before current peer-merge logic:
-  - Scan `Object.entries(finalLaborSummary ?? {})`
-  - Match same section + same head
-  - Exclude self using full key: `k !== entry.lines[0].code`
-  - Require `(kHours + entry.combinedHours) >= minHoursThreshold`
-  - Sort by target hours desc
-  - If found, set:
-    - `targetHead: head`
-    - `targetKey: sameHeadMatch[0][0]`
-    - `reason: \`${head} → ${head} (same cost head, consolidated activity)\``
-  - `return` immediately
-- Keep existing “largest in section” peer-merge logic exactly as-is for the no-match path, then keep existing `return`.
+## What We Are Building
 
-2) Update Pass 2 (`Object.entries(finalLaborSummary).forEach(([flKey, flEntry]) => { ... })`)
-- In the existing block:
-  - `if (ABOVE_GRADE_SYSTEM_CODES.has(head)) { ... return; }`
-- Insert same Rule 2b-first pattern at top of block:
-  - Scan `Object.entries(finalLaborSummary ?? {})`
-  - Match same section + same head
-  - Exclude self using full key: `k !== flKey`
-  - Require `(kHours + hrs) >= minHoursThreshold` (`hrs` is the source row hours already computed in pass 2)
-  - Sort by target hours desc
-  - If found, assign suggestion on `pKey` with same reason format and return
-- If no same-head match, fall through to the existing peer-merge largest-in-section logic unchanged, then return.
+Three safeguards to prevent silent hour loss in budget exports:
 
-3) Keep all other logic untouched
-- Do not change rule ordering outside these two `ABOVE_GRADE_SYSTEM_CODES` branches.
-- Do not change Rule C/Rule D behavior.
-- Do not alter suggestion keying (`entry.key` in pass 1, `pKey` in pass 2) or existing reason text outside the new Rule 2b insertions.
+1. **Export Reconciliation Gate** — blocks export if hours don't reconcile
+2. **Corrupt Code Detector** — scans system mappings on load for invalid characters
+3. **Hour Allocation Dashboard** — always-visible bar showing estimate vs coded vs export hours
 
-Technical details
-- Why this works: current early return in `ABOVE_GRADE_SYSTEM_CODES` prevents downstream Rule 2b from ever running; moving a Rule 2b check into that branch preserves architecture while respecting current control flow.
-- Threshold rule applied exactly as requested: only suggest same-head when source+target meets/exceeds `minHoursThreshold`.
-- Self-exclusion uses full code keys in both passes (`entry.lines[0].code` and `flKey`) to prevent self-targeting.
+---
 
-Validation plan (post-change)
-1. Reproduce failing case (`12 00L2 SEQP`) and confirm suggestion becomes:
-   - `SEQP → SEQP (same cost head, consolidated activity)` when combined hours meet threshold.
-2. Confirm fallback behavior:
-   - If no qualifying same-head target exists, above-grade peer-merge largest-in-section still appears.
-3. Regression checks:
-   - BG chain (Rule 1/Rule A) still takes precedence.
-   - Non-above-grade paths still use existing Rule 2b/Rule C/Rule D flow unchanged.
-4. QC spot checks from project checklist relevant to this change:
-   - Auto-suggestions do not emit sentinel values.
-   - Targets remain real cost heads.
-   - In Export rows remain aligned with `finalLaborSummary`.
+## Technical Plan
+
+### Safeguard 1: Export Reconciliation Gate
+
+**File: `src/components/ExportDropdown.tsx`**
+
+Before calling `exportBudgetPacket` or `exportAuditReport`, run a reconciliation check:
+
+- Compute `rawTotalHours = sum(items.hours)` from the full estimate items array
+- Compute `exportTotalHours` from `budgetAdjustments.adjustedLaborSummary` (the finalLaborSummary data that export actually reads)
+- Account for known adjustments: fab strip hours are legitimately removed from field labor and moved to fab codes, so the comparison is `rawTotalHours` vs `exportLaborHours + fabStrippedHours`
+- If delta > 0.1h: **block the export**, show a destructive toast with the exact delta and a breakdown of where hours were lost
+- If delta <= 0.1h: proceed normally
+
+Add a new `reconcileBeforeExport()` function in ExportDropdown that returns `{ pass: boolean; rawHours: number; exportHours: number; delta: number; details: string }`.
+
+The ExportDropdown will need access to `budgetAdjustments.adjustedLaborSummary` — it already receives `budgetAdjustments` as a prop, so this data is available.
+
+### Safeguard 2: Corrupt Code Detector
+
+**New component: `src/components/CorruptCodeBanner.tsx`**
+
+A red alert banner rendered at the top of the page (in `Index.tsx`) when corruption is detected.
+
+On project load, scan all system mappings for:
+- Cost heads containing `|` (pipe prefix from dual-code storage bug)
+- Cost heads with leading/trailing whitespace
+- Cost heads containing non-alphanumeric characters (excluding legitimate ones)
+- Cost heads not found in the `cost_codes` library table
+
+Display: red banner with count of corrupt mappings, list of affected systems, and a "Fix All" button that strips invalid characters and re-saves.
+
+**File: `src/pages/Index.tsx`** — render `<CorruptCodeBanner>` above the tab content when the project has corrupt mappings.
+
+**Data source**: The system mappings are already loaded via `useSystemMappings(projectId)`. The component receives the mappings array and the cost codes library, then runs validation.
+
+### Safeguard 3: Hour Allocation Dashboard
+
+**New component: `src/components/HourReconciliationBar.tsx`**
+
+A compact, always-visible bar shown below the `EstimateHeader` (or integrated into it) with three numbers:
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| Estimate Hours | `sum(estimateData.hours)` | Raw total from uploaded file |
+| Coded Hours | `sum(items with costCode != '').hours` | Hours on items that have a labor code |
+| Export Hours | `sum(budgetAdjustments.adjustedLaborSummary.hours)` | What will actually appear in the budget packet |
+
+Visual treatment:
+- Green when all three match within 0.1h
+- Yellow when coded < estimate (uncoded items exist)
+- Red when export != coded (hours lost in pipeline)
+- Show the delta prominently when mismatched
+
+**File: `src/pages/Index.tsx`** — render `<HourReconciliationBar>` in the header area, always visible regardless of active tab. Pass `estimateData`, `budgetAdjustments`.
+
+---
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `src/components/CorruptCodeBanner.tsx` | New — corrupt mapping detector + red banner |
+| `src/components/HourReconciliationBar.tsx` | New — three-number reconciliation bar |
+| `src/components/ExportDropdown.tsx` | Add reconciliation gate before export |
+| `src/pages/Index.tsx` | Render CorruptCodeBanner and HourReconciliationBar |
+
+No database changes required. No changes to BudgetAdjustmentsPanel or budgetExportSystem.
+
