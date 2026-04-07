@@ -294,7 +294,14 @@ export function resolveFloorMappingStatic(
     // Priority 1: Standard BLDG/Building/BLK regex
     const zoneBuilding = getBuildingFromZone(options.zone);
     if (zoneBuilding) {
-      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity, hasExplicitMapping };
+      const buildingFloorMatch = floorMappings.find(fm => {
+        const m = (fm.floor_pattern || '').match(/^bldg\s+([A-Z0-9]+)\s*-/i);
+        return m && m[1].toUpperCase() === zoneBuilding.toUpperCase();
+      });
+      const buildingActivity = buildingFloorMatch?.activity_code
+        ? normalizeActivityCode(buildingFloorMatch.activity_code)
+        : undefined;
+      return { section: getCanonicalSectionForBuilding(zoneBuilding, floorMappings, buildingMappings), activity: floorActivity, buildingActivity, hasExplicitMapping };
     }
     // Priority 2: User-configured zone patterns with activity extraction from zone prefix
     const zonePatternMatch = getZonePatternMatch(options.zone, buildingMappings);
