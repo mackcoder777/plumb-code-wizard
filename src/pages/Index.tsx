@@ -53,6 +53,8 @@ import { ProjectSettingsPanel } from '@/components/ProjectSettingsPanel';
 import { CodeHealthDashboard } from '@/components/CodeHealthDashboard';
 import { JobWideConsolidation } from '@/components/JobWideConsolidation';
 import { DuplicateScopeDetection } from '@/components/DuplicateScopeDetection';
+import { CorruptCodeBanner } from '@/components/CorruptCodeBanner';
+import { HourReconciliationBar } from '@/components/HourReconciliationBar';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
