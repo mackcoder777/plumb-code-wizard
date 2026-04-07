@@ -2485,6 +2485,16 @@ const EnhancedCostCodeManager = () => {
           )}
         </div>
 
+        {/* Data Integrity Safeguards */}
+        <CorruptCodeBanner
+          systemMappings={savedMappings as any}
+          projectId={activeProjectId}
+        />
+        <HourReconciliationBar
+          estimateData={estimateData}
+          budgetAdjustments={budgetAdjustments}
+        />
+
         {/* DB Fetch Loading Indicator */}
         {itemsLoading && activeProjectId && (
           <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-card border border-border text-sm text-muted-foreground px-4 py-2 rounded-lg shadow-lg">
