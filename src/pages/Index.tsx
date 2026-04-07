@@ -873,7 +873,7 @@ const EnhancedCostCodeManager = () => {
     if (codeFormatMode === 'multitrade') {
       section = tradePrefix || 'PL';
       const floorMap2 = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
-      activity = floorMap2.activity || '0000';
+      activity = (floorMap2.buildingActivity ?? floorMap2.activity) || '0000';
     } else {
       section = getSectionForFloor(item.floor || '', item.drawing || '', item.zone || '');
       // Note: costHead not known yet, pass empty — generateCostCode determines costHead below
