@@ -30,7 +30,7 @@ function findBuildingMapping<T extends { building_identifier: string }>(
 const STANDALONE_FLOORS = /^(roof|ug|crawl\s*space|site|site\s+above\s+grade|attic|penthouse)$/i;
 
 /** Derives a sensible default activity code for standalone floors */
-export function deriveStandaloneActivity(floor: string): string {
+export function deriveStandaloneActivity(floor: string): string | null {
   const clean = floor.toLowerCase().trim();
   if (/^roof$/i.test(clean)) return '00RF';
   if (/^ug$/i.test(clean)) return '00UG';
@@ -317,6 +317,15 @@ export function resolveFloorMappingStatic(
         : floorActivity;
       return { section: canonicalSection, activity, hasExplicitMapping };
     }
+
+    // Priority 3: Zone resolution failed for standalone floor — return uncoded
+    // Do NOT fall through to fromFloor path which would assign a fallback activity
+    return {
+      section: fromFloor?.section || '',
+      activity: null,
+      buildingActivity: undefined,
+      hasExplicitMapping: false
+    };
   }
 
   // Non-standalone floor with a mapping — use it directly
