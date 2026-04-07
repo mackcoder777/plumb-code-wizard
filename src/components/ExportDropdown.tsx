@@ -68,7 +68,51 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   const fabTotalHours = budgetAdjustments?.fabricationSummary?.reduce((sum, strip) => sum + strip.strippedHours, 0) || 0;
   const fabTotalDollars = fabTotalHours * laborRate;
 
+  // Reconciliation gate: compare raw item hours vs export pipeline hours
+  const reconcileBeforeExport = (): { pass: boolean; rawHours: number; exportHours: number; delta: number; details: string } => {
+    const rawHours = items.reduce((sum, item) => sum + (parseFloat(String(item.hours)) || 0), 0);
+
+    if (!budgetAdjustments?.adjustedLaborSummary || Object.keys(budgetAdjustments.adjustedLaborSummary).length === 0) {
+      return { pass: true, rawHours, exportHours: 0, delta: 0, details: 'No pipeline data — skipping reconciliation' };
+    }
+
+    let exportFieldHours = 0;
+    let exportFabHours = 0;
+    Object.values(budgetAdjustments.adjustedLaborSummary).forEach(entry => {
+      if (entry.type === 'fab') {
+        exportFabHours += entry.hours || 0;
+      } else if (entry.type === 'field') {
+        exportFieldHours += entry.hours || 0;
+      }
+    });
+    const exportHours = exportFieldHours + exportFabHours;
+    const delta = Math.abs(rawHours - exportHours);
+
+    if (delta > 0.1) {
+      const details = [
+        `Raw estimate: ${rawHours.toFixed(1)}h`,
+        `Export field: ${exportFieldHours.toFixed(1)}h`,
+        `Export fab: ${exportFabHours.toFixed(1)}h`,
+        `Missing: ${(rawHours - exportHours).toFixed(1)}h`,
+      ].join(' | ');
+      return { pass: false, rawHours, exportHours, delta, details };
+    }
+
+    return { pass: true, rawHours, exportHours, delta, details: 'Hours reconciled' };
+  };
+
   const handleExportBudgetPacket = () => {
+    const recon = reconcileBeforeExport();
+    if (!recon.pass) {
+      toast({
+        title: "⛔ Export Blocked — Hour Reconciliation Failed",
+        description: `${recon.delta.toFixed(1)} hours missing from export pipeline. ${recon.details}`,
+        variant: "destructive",
+        duration: 15000,
+      });
+      return;
+    }
+
     try {
       const adjustmentsToUse = includeAdjustments && hasAdjustments ? budgetAdjustments : null;
       const result = exportBudgetPacket(items, projectInfo, laborRate, adjustmentsToUse, floorMappings, categoryMappings, buildingMappings, dbFloorMappings);
@@ -89,6 +133,17 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
   };
 
   const handleExportAuditReport = () => {
+    const recon = reconcileBeforeExport();
+    if (!recon.pass) {
+      toast({
+        title: "⛔ Export Blocked — Hour Reconciliation Failed",
+        description: `${recon.delta.toFixed(1)} hours missing from export pipeline. ${recon.details}`,
+        variant: "destructive",
+        duration: 15000,
+      });
+      return;
+    }
+
     try {
       const adjustmentsToUse = includeAdjustments && budgetAdjustments ? budgetAdjustments : null;
       const result = exportAuditReport(items, projectInfo, floorMappings, buildingMappings, dbFloorMappings, adjustmentsToUse);
