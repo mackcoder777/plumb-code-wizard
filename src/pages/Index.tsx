@@ -815,7 +815,7 @@ const EnhancedCostCodeManager = () => {
         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         activity = resolveActivity(item, costHead) || '';
       }
-      if (!activity) continue; // Uncoded item — skip from summary
+      if (!activity) return; // Uncoded item — skip from summary
       const fullCode = `${section} ${activity} ${costHead}`;
       if (!summary[fullCode]) {
         const codeInfo = COST_CODES.find(c => c.code === costHead);
