@@ -15,6 +15,7 @@ export interface FloorSectionMapping {
 export interface FloorMappingResult {
   section: string;
   activity: string;
+  buildingActivity?: string;
   hasExplicitMapping?: boolean;
 }
 
