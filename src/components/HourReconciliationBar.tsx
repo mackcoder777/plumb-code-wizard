@@ -142,7 +142,7 @@ export const HourReconciliationBar: React.FC<HourReconciliationBarProps> = ({
             <tbody>
               <BreakdownRow label="Estimate total" value={metrics.estimateHours} />
               {metrics.foremanHours > 0 && (
-                <BreakdownRow label={`− Foreman strip (${budgetAdjustments?.foremanBonusPct ?? 1}%)`} value={-metrics.foremanHours} />
+                <BreakdownRow label={`− Foreman strip (${budgetAdjustments?.foremanBonusPercent ?? 1}%)`} value={-metrics.foremanHours} />
               )}
               {metrics.fabHours > 0 && (
                 <BreakdownRow label="− Fab strip" value={-metrics.fabHours} />
