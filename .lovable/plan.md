@@ -1,83 +1,76 @@
 
 
-# Three Data Integrity Safeguards
+# Fix: Missing Hours in Reconciliation Bar
 
-## What We Are Building
+## Root Cause
 
-Three safeguards to prevent silent hour loss in budget exports:
+Three sources of the 743.9h gap:
 
-1. **Export Reconciliation Gate** — blocks export if hours don't reconcile
-2. **Corrupt Code Detector** — scans system mappings on load for invalid characters
-3. **Hour Allocation Dashboard** — always-visible bar showing estimate vs coded vs export hours
+1. **Line 820 in Index.tsx** (`if (!activity) return;`): Items with null/empty activity are silently dropped from `laborSummary`. After our recent change making standalone floors return `activity: null`, those items never enter the budget pipeline at all. Their hours vanish.
 
----
+2. **Foreman bonus (~280h)**: The reconciliation bar compares `estimateHours` vs `fieldHours + fabHours`, but foreman bonus hours are stripped and become a material line (FCNT). They're legitimately removed from labor but never added back in the reconciliation math.
 
-## Technical Plan
+3. **Compound effect**: Items with valid cost heads but failed zone resolution (the ~26 BG orphans + any other null-activity items) lose both their hours AND any foreman/fab adjustments that would have applied.
 
-### Safeguard 1: Export Reconciliation Gate
+## Plan
 
-**File: `src/components/ExportDropdown.tsx`**
+### Change 1 — `src/pages/Index.tsx` (memoizedLaborSummary)
 
-Before calling `exportBudgetPacket` or `exportAuditReport`, run a reconciliation check:
+**Line 820**: Instead of `return` (skip), route null-activity items into the summary with a placeholder activity `0000`. These items have a cost head — they just lack a resolved activity. Skipping them entirely drops hours from the financial pipeline.
 
-- Compute `rawTotalHours = sum(items.hours)` from the full estimate items array
-- Compute `exportTotalHours` from `budgetAdjustments.adjustedLaborSummary` (the finalLaborSummary data that export actually reads)
-- Account for known adjustments: fab strip hours are legitimately removed from field labor and moved to fab codes, so the comparison is `rawTotalHours` vs `exportLaborHours + fabStrippedHours`
-- If delta > 0.1h: **block the export**, show a destructive toast with the exact delta and a breakdown of where hours were lost
-- If delta <= 0.1h: proceed normally
+```
+// BEFORE (line 820):
+if (!activity) return; // Uncoded item — skip from summary
 
-Add a new `reconcileBeforeExport()` function in ExportDropdown that returns `{ pass: boolean; rawHours: number; exportHours: number; delta: number; details: string }`.
+// AFTER:
+if (!activity) {
+  activity = '0000'; // No resolved activity — use default so hours enter pipeline
+}
+```
 
-The ExportDropdown will need access to `budgetAdjustments.adjustedLaborSummary` — it already receives `budgetAdjustments` as a prop, so this data is available.
+This ensures every item with hours enters `laborSummary` regardless of activity resolution. The PM can still see and fix these in Small Code Review.
 
-### Safeguard 2: Corrupt Code Detector
+### Change 2 — `src/components/HourReconciliationBar.tsx`
 
-**New component: `src/components/CorruptCodeBanner.tsx`**
+Add foreman bonus hours to the reconciliation math. The bar currently compares:
+- `estimateHours` vs `exportHours(field) + fabHours`
 
-A red alert banner rendered at the top of the page (in `Index.tsx`) when corruption is detected.
+It should compare:
+- `estimateHours` vs `exportHours(field) + fabHours + foremanBonusHours`
 
-On project load, scan all system mappings for:
-- Cost heads containing `|` (pipe prefix from dual-code storage bug)
-- Cost heads with leading/trailing whitespace
-- Cost heads containing non-alphanumeric characters (excluding legitimate ones)
-- Cost heads not found in the `cost_codes` library table
+Add `foremanBonusHours` from `budgetAdjustments.foremanBonusHours` to the total. Display it as a suffix like the fab hours.
 
-Display: red banner with count of corrupt mappings, list of affected systems, and a "Fix All" button that strips invalid characters and re-saves.
+```
+const foremanHours = budgetAdjustments?.foremanBonusHours || 0;
+const exportPlusFabPlusForeman = exportHours + fabHours + foremanHours;
+```
 
-**File: `src/pages/Index.tsx`** — render `<CorruptCodeBanner>` above the tab content when the project has corrupt mappings.
+Update the display to show the full breakdown: `Export: 23,310.0 (+4032 fab, +281 foreman)`
 
-**Data source**: The system mappings are already loaded via `useSystemMappings(projectId)`. The component receives the mappings array and the cost codes library, then runs validation.
+### Change 3 — `src/components/HourReconciliationBar.tsx`
 
-### Safeguard 3: Hour Allocation Dashboard
+Add a clickable "Show breakdown" that expands to show WHERE hours went:
 
-**New component: `src/components/HourReconciliationBar.tsx`**
+| Stage | Hours | 
+|-------|-------|
+| Estimate total | 28,085.7 |
+| − Foreman strip (1%) | −280.9 |
+| − Fab strip | −4,032.0 |
+| = Field labor | 23,772.8 |
+| Actual export field | 23,310.0 |
+| **Unaccounted** | **462.8** |
 
-A compact, always-visible bar shown below the `EstimateHeader` (or integrated into it) with three numbers:
+This gives the PM a clear diagnostic to trace any remaining gap.
 
-| Metric | Source | Description |
-|--------|--------|-------------|
-| Estimate Hours | `sum(estimateData.hours)` | Raw total from uploaded file |
-| Coded Hours | `sum(items with costCode != '').hours` | Hours on items that have a labor code |
-| Export Hours | `sum(budgetAdjustments.adjustedLaborSummary.hours)` | What will actually appear in the budget packet |
+### Change 4 — `src/components/ExportDropdown.tsx`
 
-Visual treatment:
-- Green when all three match within 0.1h
-- Yellow when coded < estimate (uncoded items exist)
-- Red when export != coded (hours lost in pipeline)
-- Show the delta prominently when mismatched
-
-**File: `src/pages/Index.tsx`** — render `<HourReconciliationBar>` in the header area, always visible regardless of active tab. Pass `estimateData`, `budgetAdjustments`.
-
----
+Update `reconcileBeforeExport` to also account for foreman hours in the comparison, matching the bar's logic. Currently it only checks field + fab vs raw.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/CorruptCodeBanner.tsx` | New — corrupt mapping detector + red banner |
-| `src/components/HourReconciliationBar.tsx` | New — three-number reconciliation bar |
-| `src/components/ExportDropdown.tsx` | Add reconciliation gate before export |
-| `src/pages/Index.tsx` | Render CorruptCodeBanner and HourReconciliationBar |
-
-No database changes required. No changes to BudgetAdjustmentsPanel or budgetExportSystem.
+| `src/pages/Index.tsx` | Line 820: route null-activity items with `0000` instead of dropping |
+| `src/components/HourReconciliationBar.tsx` | Add foreman hours to reconciliation math + expandable breakdown |
+| `src/components/ExportDropdown.tsx` | Add foreman hours to reconcile gate |
 
