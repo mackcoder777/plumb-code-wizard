@@ -85,7 +85,8 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
         exportFieldHours += entry.hours || 0;
       }
     });
-    const exportHours = exportFieldHours + exportFabHours;
+    const foremanHours = budgetAdjustments?.foremanBonusHours || 0;
+    const exportHours = exportFieldHours + exportFabHours + foremanHours;
     const delta = Math.abs(rawHours - exportHours);
 
     if (delta > 0.1) {
