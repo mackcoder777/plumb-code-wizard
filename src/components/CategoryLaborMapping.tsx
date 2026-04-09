@@ -179,8 +179,22 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     },
     [deleteOverride]
   );
+
+  // Stable callbacks for item name overrides
+  const handleSaveItemOverride = useCallback(
+    async (categoryName: string, materialDescription: string, itemName: string, laborCode: string) => {
+      await saveItemOverride.mutateAsync({ categoryName, materialDescription, itemName, laborCode });
+    },
+    [saveItemOverride]
+  );
+
+  const handleDeleteItemOverride = useCallback(
+    async (categoryName: string, materialDescription: string, itemName: string) => {
+      await deleteItemOverride.mutateAsync({ categoryName, materialDescription, itemName });
+    },
+    [deleteItemOverride]
+  );
   
-  // Build mappings lookup
   const mappingsLookup = useMemo(() => {
     const lookup: Record<string, string> = {};
     dbMappings.forEach(m => {
