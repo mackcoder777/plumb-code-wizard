@@ -135,6 +135,10 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   const { data: materialDescPatterns = [] } = useMaterialDescLaborPatterns();
   const recordPattern = useRecordMaterialDescLaborPattern();
 
+  // Category-level learning patterns
+  const { data: categoryPatterns = [] } = useCategoryLaborPatterns();
+  const recordCategoryPattern = useRecordCategoryLaborPattern();
+
   // Stable callbacks for material desc overrides
   const handleSaveOverride = useCallback(
     async (categoryName: string, materialDescription: string, laborCode: string) => {
