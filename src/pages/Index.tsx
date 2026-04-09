@@ -980,6 +980,7 @@ const EnhancedCostCodeManager = () => {
   itemNameOverridesRef.current = dbItemNameOverrides;
   const autoApplyRunKeyRef = useRef('');
   const prevMaterialDescOverridesRef = useRef<string>('');
+  const prevItemNameOverridesRef = useRef<string>('');
 
   // Reset auto-apply guard when project changes
   useEffect(() => {
@@ -1336,6 +1337,105 @@ const EnhancedCostCodeManager = () => {
       })();
     }
   }, [dbMaterialDescOverrides, currentProject?.id]);
+
+  // Targeted item-name override recalculation — mirrors material desc recalc above
+  useEffect(() => {
+    if (!currentProject?.id || estimateData.length === 0 || dbItemNameOverrides.length === 0) return;
+    
+    const serialized = JSON.stringify(dbItemNameOverrides);
+    if (serialized === prevItemNameOverridesRef.current) return;
+    
+    const prevOverrides = prevItemNameOverridesRef.current ? JSON.parse(prevItemNameOverridesRef.current) : [];
+    const changedTriples = new Set<string>();
+    
+    (dbItemNameOverrides ?? []).forEach((o: any) => {
+      const prev = prevOverrides.find((p: any) => p.category_name === o.category_name && p.material_description === o.material_description && p.item_name === o.item_name);
+      if (!prev || prev.labor_code !== o.labor_code) {
+        changedTriples.add(`${o.category_name}|||${o.material_description}|||${o.item_name}`);
+      }
+    });
+    // Detect deletions
+    prevOverrides.forEach((p: any) => {
+      const cur = (dbItemNameOverrides ?? []).find((o: any) => o.category_name === p.category_name && o.material_description === p.material_description && o.item_name === p.item_name);
+      if (!cur) {
+        changedTriples.add(`${p.category_name}|||${p.material_description}|||${p.item_name}`);
+      }
+    });
+    
+    prevItemNameOverridesRef.current = serialized;
+    
+    if (changedTriples.size === 0) return;
+    
+    console.log(`[OverrideRecalc] ${changedTriples.size} item-name triples changed, recalculating affected items...`);
+    
+    const itemsToUpdate: Array<{ row_number: number; cost_code: string }> = [];
+    const updatedEstimate = estimateData.map((item: any) => {
+      const tripleKey = `${item.reportCat}|||${item.materialDesc}|||${item.itemName}`;
+      if (!changedTriples.has(tripleKey)) return item;
+      
+      // Recalculate: item name override > material desc override > category > system
+      const itemNameHead = getLaborCodeFromItemName(item.reportCat, item.materialDesc, item.itemName, dbItemNameOverrides);
+      const materialDescHead = !itemNameHead ? getLaborCodeFromMaterialDesc(item.reportCat, item.materialDesc, dbMaterialDescOverrides) : null;
+      let head = itemNameHead || materialDescHead;
+      if (!head && dbCategoryMappings.length > 0 && item.reportCat) {
+        head = getLaborCodeFromCategory(item.reportCat, dbCategoryMappings);
+      }
+      if (!head && item.system && savedMappings.length > 0) {
+        const sysMapping = savedMappings.find(m => m.system_name.toLowerCase().trim() === (item.system || '').toLowerCase().trim());
+        if (sysMapping?.cost_head) {
+          const [, laborCode] = sysMapping.cost_head.includes('|') ? sysMapping.cost_head.split('|') : ['', sysMapping.cost_head];
+          head = laborCode || null;
+        }
+      }
+      
+      if (!head) return item;
+      
+      let section: string;
+      let activity: string;
+      if (codeFormatMode === 'multitrade') {
+        section = tradePrefix || 'PL';
+        const floorMap = resolveFloorMappingStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        const resolvedActivity = floorMap.buildingActivity ?? floorMap.activity;
+        if (resolvedActivity === null) {
+          activity = '';
+        } else {
+          activity = resolvedActivity || '0000';
+        }
+      } else {
+        section = resolveSectionStatic(item.floor || '', item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
+        activity = resolveActivity(item, head) || '';
+      }
+      if (!activity) return item;
+      const newCode = `${section} ${activity} ${head}`;
+      
+      if (newCode !== item.costCode) {
+        const rowNum = item.row_number ?? item.id;
+        if (typeof rowNum === 'number') {
+          itemsToUpdate.push({ row_number: rowNum, cost_code: newCode });
+        }
+        return { ...item, costCode: newCode };
+      }
+      return item;
+    });
+    
+    if (itemsToUpdate.length > 0) {
+      setEstimateData(updatedEstimate);
+      setFilteredData(updatedEstimate);
+      
+      (async () => {
+        try {
+          await batchUpdateSilent.mutateAsync({
+            projectId: currentProject.id,
+            system: '__override_recalc__',
+            itemUpdates: itemsToUpdate.map(u => ({ row_number: u.row_number, cost_code: u.cost_code }))
+          });
+          console.log(`[OverrideRecalc] Persisted ${itemsToUpdate.length} item-name override items`);
+        } catch (err) {
+          console.error('[OverrideRecalc] Failed:', err);
+        }
+      })();
+    }
+  }, [dbItemNameOverrides, currentProject?.id]);
 
   // One-shot effect: set datasetProfile when estimateData first populates for a project
   const datasetProfileSetRef = useRef<string | null>(null);
