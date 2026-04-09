@@ -171,6 +171,7 @@ export function useCategoryIndex(data: EstimateItem[]): CategoryIndexEntry[] {
           descCount: descMap.size,
         };
       })
+      .filter(entry => entry.totalHours > 0)
       .sort((a, b) => b.itemCount - a.itemCount);
   }, [data]);
 }

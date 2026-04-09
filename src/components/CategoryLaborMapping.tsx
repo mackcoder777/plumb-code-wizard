@@ -75,6 +75,7 @@ const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
       }
     });
     return Object.entries(groups)
+      .filter(([, d]) => d.hours > 0)
       .sort((a, b) => b[1].hours - a[1].hours)
       .map(([desc, d]) => ({ desc, ...d }));
   }, [estimateData, categoryName]);
