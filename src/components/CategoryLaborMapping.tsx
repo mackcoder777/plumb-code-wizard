@@ -346,6 +346,9 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                     const isMapped = !!currentCode && !isUsingSystemMapping(currentCode);
                     const usesSystem = isUsingSystemMapping(currentCode);
                     const isExpanded = expandedCategories.has(cat.category);
+                    const suggestion = (!currentCode || currentCode === 'none')
+                      ? getSuggestionForCategory(cat.category, categoryPatterns)
+                      : null;
                     
                     return (
                       <div
@@ -394,7 +397,19 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                             </div>
                           </div>
                           
-                          <div className="flex-shrink-0 w-64">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {suggestion && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                                title={`Suggested: ${suggestion.laborCode} (used ${suggestion.usageCount}× across projects, confidence ${(suggestion.confidence * 100).toFixed(0)}%)`}
+                                onClick={() => handleMappingChange(cat.category, suggestion.laborCode)}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                {suggestion.laborCode}
+                              </Button>
+                            )}
                             <Popover
                               open={comboOpenMap[cat.category] || false}
                               onOpenChange={(open) => setComboOpenMap(prev => ({ ...prev, [cat.category]: open }))}
