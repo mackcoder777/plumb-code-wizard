@@ -1,76 +1,36 @@
 
 
-# Fix: Missing Hours in Reconciliation Bar
+# Hide Zero-Hour Items in Category Labor Mapping
 
-## Root Cause
+## Problem
+The Material Description Routing section shows entries with 0.0 hours (e.g., "Polyethylene - Identification 167 items · 0.0 hrs", "Carbon Steel - Access Doors/Panels 94 items · 0.0 hrs"). These clutter the UI and distract from entries that actually carry labor hours.
 
-Three sources of the 743.9h gap:
+## Changes
 
-1. **Line 820 in Index.tsx** (`if (!activity) return;`): Items with null/empty activity are silently dropped from `laborSummary`. After our recent change making standalone floors return `activity: null`, those items never enter the budget pipeline at all. Their hours vanish.
+### File: `src/components/CategoryLaborMapping.tsx` (~line 77)
 
-2. **Foreman bonus (~280h)**: The reconciliation bar compares `estimateHours` vs `fieldHours + fabHours`, but foreman bonus hours are stripped and become a material line (FCNT). They're legitimately removed from labor but never added back in the reconciliation math.
+Filter out zero-hour material description groups before sorting:
 
-3. **Compound effect**: Items with valid cost heads but failed zone resolution (the ~26 BG orphans + any other null-activity items) lose both their hours AND any foreman/fab adjustments that would have applied.
-
-## Plan
-
-### Change 1 — `src/pages/Index.tsx` (memoizedLaborSummary)
-
-**Line 820**: Instead of `return` (skip), route null-activity items into the summary with a placeholder activity `0000`. These items have a cost head — they just lack a resolved activity. Skipping them entirely drops hours from the financial pipeline.
-
-```
-// BEFORE (line 820):
-if (!activity) return; // Uncoded item — skip from summary
+```typescript
+// BEFORE:
+return Object.entries(groups)
+  .sort((a, b) => b[1].hours - a[1].hours)
+  .map(([desc, d]) => ({ desc, ...d }));
 
 // AFTER:
-if (!activity) {
-  activity = '0000'; // No resolved activity — use default so hours enter pipeline
-}
+return Object.entries(groups)
+  .filter(([, d]) => d.hours > 0)
+  .sort((a, b) => b[1].hours - a[1].hours)
+  .map(([desc, d]) => ({ desc, ...d }));
 ```
 
-This ensures every item with hours enters `laborSummary` regardless of activity resolution. The PM can still see and fix these in Small Code Review.
+This filters at the data source so zero-hour entries never reach the `MaterialDescSection` component. Items with 0 hours but existing overrides will also be hidden — this is correct because there's no labor to route.
 
-### Change 2 — `src/components/HourReconciliationBar.tsx`
+### File: `src/hooks/useCategoryMappings.ts` (useCategoryIndex)
 
-Add foreman bonus hours to the reconciliation math. The bar currently compares:
-- `estimateHours` vs `exportHours(field) + fabHours`
+Also filter zero-hour categories from the category index so top-level entries like "Pipe 0 items · 0 hrs" don't appear:
 
-It should compare:
-- `estimateHours` vs `exportHours(field) + fabHours + foremanBonusHours`
+The `useCategoryIndex` function already sorts by `itemCount`. Add a filter to exclude categories where `totalHours === 0`.
 
-Add `foremanBonusHours` from `budgetAdjustments.foremanBonusHours` to the total. Display it as a suffix like the fab hours.
-
-```
-const foremanHours = budgetAdjustments?.foremanBonusHours || 0;
-const exportPlusFabPlusForeman = exportHours + fabHours + foremanHours;
-```
-
-Update the display to show the full breakdown: `Export: 23,310.0 (+4032 fab, +281 foreman)`
-
-### Change 3 — `src/components/HourReconciliationBar.tsx`
-
-Add a clickable "Show breakdown" that expands to show WHERE hours went:
-
-| Stage | Hours | 
-|-------|-------|
-| Estimate total | 28,085.7 |
-| − Foreman strip (1%) | −280.9 |
-| − Fab strip | −4,032.0 |
-| = Field labor | 23,772.8 |
-| Actual export field | 23,310.0 |
-| **Unaccounted** | **462.8** |
-
-This gives the PM a clear diagnostic to trace any remaining gap.
-
-### Change 4 — `src/components/ExportDropdown.tsx`
-
-Update `reconcileBeforeExport` to also account for foreman hours in the comparison, matching the bar's logic. Currently it only checks field + fab vs raw.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `src/pages/Index.tsx` | Line 820: route null-activity items with `0000` instead of dropping |
-| `src/components/HourReconciliationBar.tsx` | Add foreman hours to reconciliation math + expandable breakdown |
-| `src/components/ExportDropdown.tsx` | Add foreman hours to reconcile gate |
+## No other files changed.
 
