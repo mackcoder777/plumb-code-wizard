@@ -281,37 +281,118 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
       </div>
 
       {/* Expanded item preview */}
-      {expanded && (
-        <div className="border-t border-border mx-3 mb-2">
-          <table className="w-full mt-2 text-xs">
-            <thead>
-              <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
-                <th className="text-left pb-1 font-medium">Item</th>
-                <th className="text-left pb-1 font-medium">System</th>
-                <th className="text-left pb-1 font-medium">Size</th>
-                <th className="text-right pb-1 font-medium">Qty</th>
-                <th className="text-right pb-1 font-medium">Hrs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...rawItems].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 15).map((item, i) => (
-                <tr key={i} className="border-t border-border/50">
-                  <td className="py-1 pr-3 text-foreground max-w-[200px] truncate">{item.itemName || '—'}</td>
-                  <td className="py-1 pr-3 text-muted-foreground max-w-[120px] truncate">{item.system || '—'}</td>
-                  <td className="py-1 pr-3 text-muted-foreground">{item.size || '—'}</td>
-                  <td className="py-1 text-right text-foreground tabular-nums">{item.qty ?? '—'}</td>
-                  <td className="py-1 text-right text-foreground tabular-nums">{item.hours?.toFixed(1) ?? '—'}</td>
+      {expanded && (() => {
+        const sortedItems = [...rawItems].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 30);
+        const itemOverrideMap = new Map<string, string>();
+        itemNameOverrides
+          .filter(o => o.category_name === categoryName && o.material_description === desc)
+          .forEach(o => itemOverrideMap.set(o.item_name, o.labor_code));
+        const itemOverrideCount = itemOverrideMap.size;
+
+        const handleItemSelect = (itemName: string, checked: boolean) => {
+          setSelectedItems(prev => {
+            const next = new Set(prev);
+            checked ? next.add(itemName) : next.delete(itemName);
+            return next;
+          });
+        };
+
+        const handleItemBulkAssign = async (code: string) => {
+          const items = Array.from(selectedItems);
+          for (const itemName of items) {
+            if (code === '__CATEGORY__') {
+              if (itemOverrideMap.has(itemName)) {
+                await onDeleteItemOverride(desc, itemName);
+              }
+            } else {
+              await onSaveItemOverride(desc, itemName, code);
+            }
+          }
+          setSelectedItems(new Set());
+          toast({ title: 'Item overrides saved', description: `${items.length} items updated` });
+        };
+
+        return (
+          <div className="border-t border-border mx-3 mb-2">
+            {/* Item-level floating action bar */}
+            {selectedItems.size > 0 && (
+              <div className="sticky top-0 z-10 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 mt-2">
+                <span className="text-xs font-medium text-primary">
+                  {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected:
+                </span>
+                <BulkCombobox
+                  categoryLaborCode={categoryLaborCode}
+                  laborCodes={laborCodes}
+                  onAssign={handleItemBulkAssign}
+                />
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setSelectedItems(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            )}
+            {itemOverrideCount > 0 && (
+              <div className="mt-1.5 mb-1">
+                <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-primary/30 text-primary">
+                  {itemOverrideCount} item override{itemOverrideCount !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+            )}
+            <table className="w-full mt-2 text-xs">
+              <thead>
+                <tr className="text-muted-foreground uppercase tracking-wide text-[10px]">
+                  <th className="w-6 pb-1"></th>
+                  <th className="text-left pb-1 font-medium">Item</th>
+                  <th className="text-left pb-1 font-medium">System</th>
+                  <th className="text-left pb-1 font-medium">Size</th>
+                  <th className="text-right pb-1 font-medium">Qty</th>
+                  <th className="text-right pb-1 font-medium">Hrs</th>
+                  <th className="text-right pb-1 font-medium">Override</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {rawItems.length > 15 && (
-            <p className="mt-1.5 text-[10px] text-muted-foreground pb-1">
-              Showing 15 of {rawItems.length} items — assign code to route all {rawItems.length}.
-            </p>
-          )}
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {sortedItems.map((item, i) => {
+                  const itemName = item.itemName || '';
+                  const override = itemOverrideMap.get(itemName);
+                  const isChecked = selectedItems.has(itemName);
+                  return (
+                    <tr key={i} className={cn(
+                      "border-t border-border/50",
+                      override && "bg-primary/5"
+                    )}>
+                      <td className="py-1 pr-1">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => handleItemSelect(itemName, e.target.checked)}
+                          className="shrink-0 rounded border-border h-3 w-3"
+                          disabled={!itemName}
+                        />
+                      </td>
+                      <td className="py-1 pr-3 text-foreground max-w-[200px] truncate">{itemName || '—'}</td>
+                      <td className="py-1 pr-3 text-muted-foreground max-w-[120px] truncate">{item.system || '—'}</td>
+                      <td className="py-1 pr-3 text-muted-foreground">{item.size || '—'}</td>
+                      <td className="py-1 text-right text-foreground tabular-nums">{item.qty ?? '—'}</td>
+                      <td className="py-1 text-right text-foreground tabular-nums">{item.hours?.toFixed(1) ?? '—'}</td>
+                      <td className="py-1 text-right">
+                        {override && (
+                          <Badge variant="outline" className="font-mono text-[9px] h-4 px-1 border-primary/30 text-primary">
+                            {override}
+                          </Badge>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {rawItems.length > 30 && (
+              <p className="mt-1.5 text-[10px] text-muted-foreground pb-1">
+                Showing 30 of {rawItems.length} items (sorted by hours).
+              </p>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 });
@@ -487,14 +568,18 @@ export function MaterialDescSection({
             desc={group.desc}
             data={group}
             rawItems={group.rawItems}
+            categoryName={categoryName}
             categoryLaborCode={categoryLaborCode}
             existing={overrideMap.get(group.desc)}
+            itemNameOverrides={itemNameOverrides}
             laborCodes={laborCodes}
             patterns={patterns}
             isSelected={selectedDescs.has(group.desc)}
             onToggleSelect={handleToggleSelect}
             onSave={onSave}
             onDelete={onDelete}
+            onSaveItemOverride={onSaveItemOverride}
+            onDeleteItemOverride={onDeleteItemOverride}
           />
         ))}
       </div>
