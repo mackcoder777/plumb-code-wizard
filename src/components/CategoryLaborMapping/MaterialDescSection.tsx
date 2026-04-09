@@ -129,14 +129,18 @@ interface MaterialDescRowProps {
   desc: string;
   data: { items: number; hours: number; samples: string[] };
   rawItems: RawItem[];
+  categoryName: string;
   categoryLaborCode: string | null;
   existing: CategoryMaterialDescOverride | undefined;
+  itemNameOverrides: CategoryItemNameOverride[];
   laborCodes: LaborCode[];
   patterns: MaterialDescLaborPattern[];
   isSelected: boolean;
   onToggleSelect: (desc: string, checked: boolean) => void;
   onSave: (materialDescription: string, laborCode: string) => Promise<void>;
   onDelete: (materialDescription: string) => Promise<void>;
+  onSaveItemOverride: (materialDescription: string, itemName: string, laborCode: string) => Promise<void>;
+  onDeleteItemOverride: (materialDescription: string, itemName: string) => Promise<void>;
 }
 
 const MaterialDescRow = React.memo(function MaterialDescRow({
