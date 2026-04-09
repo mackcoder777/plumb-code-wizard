@@ -1,28 +1,33 @@
 
 
-# Sort Expanded Item Rows by Hours (Descending)
+# Add Item-Name Override Recalculation Effect
 
 ## Problem
-When you expand a material description group in Category Labor Mapping, the item rows appear in arbitrary insertion order. Items with the most hours should appear first so you can quickly see what's driving the labor in that group.
+The material description override recalc effect (Index.tsx lines 1240-1338) watches `dbMaterialDescOverrides` and recalculates affected items when overrides change. There is **no equivalent effect** for `dbItemNameOverrides`. This means:
+- User assigns an item-name override in the Category Labor Mapping UI
+- The DB updates (optimistic + server)
+- But already-loaded `estimateData` items keep their old cost codes until a full page refresh
 
-## Change
+## Solution
+Add a parallel `useEffect` that mirrors the material desc recalc pattern exactly, but watches `dbItemNameOverrides` instead. It will:
 
-**File: `src/components/CategoryLaborMapping/MaterialDescSection.tsx` (~line 284)**
+1. Track previous state via a `prevItemNameOverridesRef`
+2. Detect which `(category, materialDesc, itemName)` triples changed or were deleted
+3. For each affected item in `estimateData`, re-run the full priority chain (item name override → material desc override → category → system)
+4. Batch-update changed items in state and persist to DB via `batchUpdateSilent`
 
-Sort `rawItems` by hours descending before slicing to the first 15:
+### File: `src/pages/Index.tsx`
 
-```typescript
-// BEFORE:
-{rawItems.slice(0, 15).map((item, i) => (
+**Add** near line 982 (alongside existing refs):
+- `const prevItemNameOverridesRef = useRef<string>('')`
 
-// AFTER:
-{[...rawItems].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 15).map((item, i) => (
-```
-
-One line change. The sort is done on a shallow copy to avoid mutating the source array. Items with the most hours appear at the top of the expanded preview table.
+**Add** after the material desc recalc effect (~line 1338):
+- New `useEffect` with dependency `[dbItemNameOverrides, currentProject?.id]`
+- Same structure as the material desc effect but keyed on `(reportCat, materialDesc, itemName)` triples
+- Recalculation uses the same priority chain already in the material desc effect
 
 ## Files changed
 | File | Change |
 |------|--------|
-| `src/components/CategoryLaborMapping/MaterialDescSection.tsx` | Sort rawItems by hours desc before rendering |
+| `src/pages/Index.tsx` | Add `prevItemNameOverridesRef` + new useEffect for item-name override recalculation |
 
