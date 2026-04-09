@@ -1088,7 +1088,9 @@ const EnhancedCostCodeManager = () => {
               categoryHead = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
             }
 
-            if (materialDescHead) {
+            if (itemNameHead) {
+              resolvedHead = itemNameHead;
+            } else if (materialDescHead) {
               resolvedHead = materialDescHead;
             } else if (categoryHead && categoryHead === persistedHead) {
               // Category mapping matches current head — keep it, don't let system override
@@ -1121,9 +1123,14 @@ const EnhancedCostCodeManager = () => {
           return baseItem;
         }
 
-        // Tier 0: Material description override
+        // Tier -1: Item name override (highest priority)
         let appliedCode: string | null = null;
-        if (materialDescOverridesRef.current.length > 0 && item.report_cat && item.material_desc) {
+        if (itemNameOverridesRef.current.length > 0 && item.report_cat && item.material_desc && item.item_name) {
+          appliedCode = getLaborCodeFromItemName(item.report_cat, item.material_desc, item.item_name, itemNameOverridesRef.current);
+        }
+
+        // Tier 0: Material description override
+        if (!appliedCode && materialDescOverridesRef.current.length > 0 && item.report_cat && item.material_desc) {
           appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current);
         }
 
