@@ -239,6 +239,10 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
               title: "Mapping Saved",
               description: message,
             });
+            // Record to global learning (skip __SYSTEM__ sentinel)
+            if (!isUsingSystemMapping(laborCode)) {
+              recordCategoryPattern.mutate({ categoryName: category, laborCode });
+            }
           },
         }
       );
