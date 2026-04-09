@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
 import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { getSuggestionForMaterialDesc } from '@/hooks/useMaterialDescLaborPatterns';
+import type { CategoryItemNameOverride } from '@/hooks/useCategoryItemNameOverrides';
 
 interface LaborCode {
   code: string;
@@ -31,10 +32,13 @@ interface MaterialDescSectionProps {
   categoryLaborCode: string | null;
   materialDescGroups: MaterialDescGroup[];
   materialDescOverrides: CategoryMaterialDescOverride[];
+  itemNameOverrides: CategoryItemNameOverride[];
   laborCodes: LaborCode[];
   patterns: MaterialDescLaborPattern[];
   onSave: (materialDescription: string, laborCode: string) => Promise<void>;
   onDelete: (materialDescription: string) => Promise<void>;
+  onSaveItemOverride: (materialDescription: string, itemName: string, laborCode: string) => Promise<void>;
+  onDeleteItemOverride: (materialDescription: string, itemName: string) => Promise<void>;
 }
 
 // ── Searchable combobox ──────────────────────────────────────────────────────
