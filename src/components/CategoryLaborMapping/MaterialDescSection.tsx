@@ -281,7 +281,7 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
               </tr>
             </thead>
             <tbody>
-              {rawItems.slice(0, 15).map((item, i) => (
+              {[...rawItems].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 15).map((item, i) => (
                 <tr key={i} className="border-t border-border/50">
                   <td className="py-1 pr-3 text-foreground max-w-[200px] truncate">{item.itemName || '—'}</td>
                   <td className="py-1 pr-3 text-muted-foreground max-w-[120px] truncate">{item.system || '—'}</td>
