@@ -454,10 +454,13 @@ export function MaterialDescSection({
   categoryLaborCode,
   materialDescGroups,
   materialDescOverrides,
+  itemNameOverrides,
   laborCodes,
   patterns,
   onSave,
   onDelete,
+  onSaveItemOverride,
+  onDeleteItemOverride,
 }: MaterialDescSectionProps) {
   const [selectedDescs, setSelectedDescs] = useState<Set<string>>(new Set());
   const [showAll, setShowAll] = useState(false);
