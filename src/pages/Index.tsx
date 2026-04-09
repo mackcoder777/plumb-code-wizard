@@ -976,6 +976,8 @@ const EnhancedCostCodeManager = () => {
   const hasAutoAppliedRef = useRef<string | null>(null);
   const materialDescOverridesRef = useRef(dbMaterialDescOverrides);
   materialDescOverridesRef.current = dbMaterialDescOverrides;
+  const itemNameOverridesRef = useRef(dbItemNameOverrides);
+  itemNameOverridesRef.current = dbItemNameOverrides;
   const autoApplyRunKeyRef = useRef('');
   const prevMaterialDescOverridesRef = useRef<string>('');
 
