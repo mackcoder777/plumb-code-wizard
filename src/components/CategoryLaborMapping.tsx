@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
 import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
+import type { CategoryItemNameOverride } from '@/hooks/useCategoryItemNameOverrides';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
@@ -9,6 +10,11 @@ import {
   useSaveCategoryMaterialDescOverride,
   useDeleteCategoryMaterialDescOverride,
 } from '@/hooks/useCategoryMaterialDescOverrides';
+import {
+  useCategoryItemNameOverrides,
+  useSaveCategoryItemNameOverride,
+  useDeleteCategoryItemNameOverride,
+} from '@/hooks/useCategoryItemNameOverrides';
 import { useMaterialDescLaborPatterns, useRecordMaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { useCategoryLaborPatterns, useRecordCategoryLaborPattern, getSuggestionForCategory, MIN_SUGGESTION_CONFIDENCE } from '@/hooks/useCategoryLaborPatterns';
 import { Card, CardContent } from '@/components/ui/card';
