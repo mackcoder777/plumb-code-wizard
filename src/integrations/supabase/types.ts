@@ -128,6 +128,33 @@ export type Database = {
           },
         ]
       }
+      category_labor_patterns: {
+        Row: {
+          category_name: string
+          confidence_score: number
+          id: string
+          labor_code: string
+          last_used_at: string
+          usage_count: number
+        }
+        Insert: {
+          category_name: string
+          confidence_score?: number
+          id?: string
+          labor_code: string
+          last_used_at?: string
+          usage_count?: number
+        }
+        Update: {
+          category_name?: string
+          confidence_score?: number
+          id?: string
+          labor_code?: string
+          last_used_at?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       category_material_desc_overrides: {
         Row: {
           category_name: string
