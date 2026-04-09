@@ -34,6 +34,7 @@ import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
+import { useCategoryItemNameOverrides, getLaborCodeFromItemName } from '@/hooks/useCategoryItemNameOverrides';
 import { useAuth } from '@/hooks/useAuth';
 import { useCostHeadActivityOverrides, shouldUseLevelActivity, CostHeadActivityOverride, usePruneStaleCostHeadOverrides } from '@/hooks/useCostHeadActivityOverrides';
 import { Auth } from '@/components/Auth';
