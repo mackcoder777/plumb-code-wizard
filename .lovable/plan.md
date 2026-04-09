@@ -1,36 +1,28 @@
 
 
-# Hide Zero-Hour Items in Category Labor Mapping
+# Sort Expanded Item Rows by Hours (Descending)
 
 ## Problem
-The Material Description Routing section shows entries with 0.0 hours (e.g., "Polyethylene - Identification 167 items · 0.0 hrs", "Carbon Steel - Access Doors/Panels 94 items · 0.0 hrs"). These clutter the UI and distract from entries that actually carry labor hours.
+When you expand a material description group in Category Labor Mapping, the item rows appear in arbitrary insertion order. Items with the most hours should appear first so you can quickly see what's driving the labor in that group.
 
-## Changes
+## Change
 
-### File: `src/components/CategoryLaborMapping.tsx` (~line 77)
+**File: `src/components/CategoryLaborMapping/MaterialDescSection.tsx` (~line 284)**
 
-Filter out zero-hour material description groups before sorting:
+Sort `rawItems` by hours descending before slicing to the first 15:
 
 ```typescript
 // BEFORE:
-return Object.entries(groups)
-  .sort((a, b) => b[1].hours - a[1].hours)
-  .map(([desc, d]) => ({ desc, ...d }));
+{rawItems.slice(0, 15).map((item, i) => (
 
 // AFTER:
-return Object.entries(groups)
-  .filter(([, d]) => d.hours > 0)
-  .sort((a, b) => b[1].hours - a[1].hours)
-  .map(([desc, d]) => ({ desc, ...d }));
+{[...rawItems].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 15).map((item, i) => (
 ```
 
-This filters at the data source so zero-hour entries never reach the `MaterialDescSection` component. Items with 0 hours but existing overrides will also be hidden — this is correct because there's no labor to route.
+One line change. The sort is done on a shallow copy to avoid mutating the source array. Items with the most hours appear at the top of the expanded preview table.
 
-### File: `src/hooks/useCategoryMappings.ts` (useCategoryIndex)
-
-Also filter zero-hour categories from the category index so top-level entries like "Pipe 0 items · 0 hrs" don't appear:
-
-The `useCategoryIndex` function already sorts by `itemCount`. Add a filter to exclude categories where `totalHours === 0`.
-
-## No other files changed.
+## Files changed
+| File | Change |
+|------|--------|
+| `src/components/CategoryLaborMapping/MaterialDescSection.tsx` | Sort rawItems by hours desc before rendering |
 
