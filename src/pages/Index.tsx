@@ -1072,8 +1072,13 @@ const EnhancedCostCodeManager = () => {
             // Category mapping > System mapping > keep persisted
             let resolvedHead = persistedHead;
 
-            // Tier 0: Material description override (highest priority)
-            const materialDescHead = (item.report_cat && item.material_desc && materialDescOverridesRef.current.length > 0)
+            // Tier -1: Item name override (highest priority)
+            const itemNameHead = (item.report_cat && item.material_desc && item.item_name && itemNameOverridesRef.current.length > 0)
+              ? getLaborCodeFromItemName(item.report_cat, item.material_desc, item.item_name, itemNameOverridesRef.current)
+              : null;
+
+            // Tier 0: Material description override
+            const materialDescHead = (!itemNameHead && item.report_cat && item.material_desc && materialDescOverridesRef.current.length > 0)
               ? getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current)
               : null;
 
