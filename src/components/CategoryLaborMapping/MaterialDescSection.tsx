@@ -147,18 +147,23 @@ const MaterialDescRow = React.memo(function MaterialDescRow({
   desc,
   data,
   rawItems,
+  categoryName,
   categoryLaborCode,
   existing,
+  itemNameOverrides,
   laborCodes,
   patterns,
   isSelected,
   onToggleSelect,
   onSave,
   onDelete,
+  onSaveItemOverride,
+  onDeleteItemOverride,
 }: MaterialDescRowProps) {
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const requestIdRef = useRef(0);
 
   const currentCode = existing?.labor_code ?? '__CATEGORY__';
