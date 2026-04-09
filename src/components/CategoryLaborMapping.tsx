@@ -43,16 +43,19 @@ interface BoundMaterialDescSectionProps {
   categoryName: string;
   categoryLaborCode: string | null;
   materialDescOverrides: CategoryMaterialDescOverride[];
+  itemNameOverrides: CategoryItemNameOverride[];
   laborCodes: { code: string; description: string }[];
   patterns: MaterialDescLaborPattern[];
   estimateData: EstimateItem[];
   onSave: (categoryName: string, materialDescription: string, laborCode: string) => Promise<void>;
   onDelete: (categoryName: string, materialDescription: string) => Promise<void>;
+  onSaveItemOverride: (categoryName: string, materialDescription: string, itemName: string, laborCode: string) => Promise<void>;
+  onDeleteItemOverride: (categoryName: string, materialDescription: string, itemName: string) => Promise<void>;
 }
 
 const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
-  categoryName, categoryLaborCode, materialDescOverrides, laborCodes, patterns,
-  estimateData, onSave, onDelete,
+  categoryName, categoryLaborCode, materialDescOverrides, itemNameOverrides, laborCodes, patterns,
+  estimateData, onSave, onDelete, onSaveItemOverride, onDeleteItemOverride,
 }: BoundMaterialDescSectionProps) {
   const materialDescGroups = useMemo(() => {
     const groups: Record<string, {
@@ -95,6 +98,14 @@ const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
     (materialDescription: string) => onDelete(categoryName, materialDescription),
     [categoryName, onDelete]
   );
+  const boundOnSaveItemOverride = useCallback(
+    (materialDescription: string, itemName: string, laborCode: string) => onSaveItemOverride(categoryName, materialDescription, itemName, laborCode),
+    [categoryName, onSaveItemOverride]
+  );
+  const boundOnDeleteItemOverride = useCallback(
+    (materialDescription: string, itemName: string) => onDeleteItemOverride(categoryName, materialDescription, itemName),
+    [categoryName, onDeleteItemOverride]
+  );
 
   return (
     <MaterialDescSection
@@ -102,10 +113,13 @@ const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
       categoryLaborCode={categoryLaborCode}
       materialDescGroups={materialDescGroups}
       materialDescOverrides={materialDescOverrides}
+      itemNameOverrides={itemNameOverrides}
       laborCodes={laborCodes}
       patterns={patterns}
       onSave={boundOnSave}
       onDelete={boundOnDelete}
+      onSaveItemOverride={boundOnSaveItemOverride}
+      onDeleteItemOverride={boundOnDeleteItemOverride}
     />
   );
 });
