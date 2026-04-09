@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { EstimateItem } from '@/types/estimate';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
 import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
+import type { CategoryItemNameOverride } from '@/hooks/useCategoryItemNameOverrides';
 import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
@@ -9,6 +10,11 @@ import {
   useSaveCategoryMaterialDescOverride,
   useDeleteCategoryMaterialDescOverride,
 } from '@/hooks/useCategoryMaterialDescOverrides';
+import {
+  useCategoryItemNameOverrides,
+  useSaveCategoryItemNameOverride,
+  useDeleteCategoryItemNameOverride,
+} from '@/hooks/useCategoryItemNameOverrides';
 import { useMaterialDescLaborPatterns, useRecordMaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import { useCategoryLaborPatterns, useRecordCategoryLaborPattern, getSuggestionForCategory, MIN_SUGGESTION_CONFIDENCE } from '@/hooks/useCategoryLaborPatterns';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,16 +43,19 @@ interface BoundMaterialDescSectionProps {
   categoryName: string;
   categoryLaborCode: string | null;
   materialDescOverrides: CategoryMaterialDescOverride[];
+  itemNameOverrides: CategoryItemNameOverride[];
   laborCodes: { code: string; description: string }[];
   patterns: MaterialDescLaborPattern[];
   estimateData: EstimateItem[];
   onSave: (categoryName: string, materialDescription: string, laborCode: string) => Promise<void>;
   onDelete: (categoryName: string, materialDescription: string) => Promise<void>;
+  onSaveItemOverride: (categoryName: string, materialDescription: string, itemName: string, laborCode: string) => Promise<void>;
+  onDeleteItemOverride: (categoryName: string, materialDescription: string, itemName: string) => Promise<void>;
 }
 
 const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
-  categoryName, categoryLaborCode, materialDescOverrides, laborCodes, patterns,
-  estimateData, onSave, onDelete,
+  categoryName, categoryLaborCode, materialDescOverrides, itemNameOverrides, laborCodes, patterns,
+  estimateData, onSave, onDelete, onSaveItemOverride, onDeleteItemOverride,
 }: BoundMaterialDescSectionProps) {
   const materialDescGroups = useMemo(() => {
     const groups: Record<string, {
@@ -89,6 +98,14 @@ const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
     (materialDescription: string) => onDelete(categoryName, materialDescription),
     [categoryName, onDelete]
   );
+  const boundOnSaveItemOverride = useCallback(
+    (materialDescription: string, itemName: string, laborCode: string) => onSaveItemOverride(categoryName, materialDescription, itemName, laborCode),
+    [categoryName, onSaveItemOverride]
+  );
+  const boundOnDeleteItemOverride = useCallback(
+    (materialDescription: string, itemName: string) => onDeleteItemOverride(categoryName, materialDescription, itemName),
+    [categoryName, onDeleteItemOverride]
+  );
 
   return (
     <MaterialDescSection
@@ -96,10 +113,13 @@ const BoundMaterialDescSection = React.memo(function BoundMaterialDescSection({
       categoryLaborCode={categoryLaborCode}
       materialDescGroups={materialDescGroups}
       materialDescOverrides={materialDescOverrides}
+      itemNameOverrides={itemNameOverrides}
       laborCodes={laborCodes}
       patterns={patterns}
       onSave={boundOnSave}
       onDelete={boundOnDelete}
+      onSaveItemOverride={boundOnSaveItemOverride}
+      onDeleteItemOverride={boundOnDeleteItemOverride}
     />
   );
 });
@@ -131,6 +151,11 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
   const saveOverride = useSaveCategoryMaterialDescOverride(projectId);
   const deleteOverride = useDeleteCategoryMaterialDescOverride(projectId);
   
+  // Item name overrides
+  const { data: itemNameOverrides = [] } = useCategoryItemNameOverrides(projectId);
+  const saveItemOverride = useSaveCategoryItemNameOverride(projectId);
+  const deleteItemOverride = useDeleteCategoryItemNameOverride(projectId);
+  
   // Material description learning patterns
   const { data: materialDescPatterns = [] } = useMaterialDescLaborPatterns();
   const recordPattern = useRecordMaterialDescLaborPattern();
@@ -154,8 +179,22 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
     },
     [deleteOverride]
   );
+
+  // Stable callbacks for item name overrides
+  const handleSaveItemOverride = useCallback(
+    async (categoryName: string, materialDescription: string, itemName: string, laborCode: string) => {
+      await saveItemOverride.mutateAsync({ categoryName, materialDescription, itemName, laborCode });
+    },
+    [saveItemOverride]
+  );
+
+  const handleDeleteItemOverride = useCallback(
+    async (categoryName: string, materialDescription: string, itemName: string) => {
+      await deleteItemOverride.mutateAsync({ categoryName, materialDescription, itemName });
+    },
+    [deleteItemOverride]
+  );
   
-  // Build mappings lookup
   const mappingsLookup = useMemo(() => {
     const lookup: Record<string, string> = {};
     dbMappings.forEach(m => {
@@ -539,11 +578,14 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                               categoryName={cat.category}
                               categoryLaborCode={currentCode ?? null}
                               materialDescOverrides={materialDescOverrides}
+                              itemNameOverrides={itemNameOverrides}
                               laborCodes={laborCodes}
                               patterns={materialDescPatterns}
                               estimateData={data}
                               onSave={handleSaveOverride}
                               onDelete={handleDeleteOverride}
+                              onSaveItemOverride={handleSaveItemOverride}
+                              onDeleteItemOverride={handleDeleteItemOverride}
                             />
                           </div>
                         )}

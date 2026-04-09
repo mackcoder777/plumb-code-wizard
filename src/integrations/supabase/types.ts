@@ -55,6 +55,47 @@ export type Database = {
           },
         ]
       }
+      category_item_name_overrides: {
+        Row: {
+          category_name: string
+          created_at: string | null
+          id: string
+          item_name: string
+          labor_code: string
+          material_description: string
+          project_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          category_name: string
+          created_at?: string | null
+          id?: string
+          item_name: string
+          labor_code: string
+          material_description: string
+          project_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          category_name?: string
+          created_at?: string | null
+          id?: string
+          item_name?: string
+          labor_code?: string
+          material_description?: string
+          project_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_item_name_overrides_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       category_item_type_overrides: {
         Row: {
           category_name: string

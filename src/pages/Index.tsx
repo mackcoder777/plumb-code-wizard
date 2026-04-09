@@ -34,6 +34,7 @@ import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
+import { useCategoryItemNameOverrides, getLaborCodeFromItemName } from '@/hooks/useCategoryItemNameOverrides';
 import { useAuth } from '@/hooks/useAuth';
 import { useCostHeadActivityOverrides, shouldUseLevelActivity, CostHeadActivityOverride, usePruneStaleCostHeadOverrides } from '@/hooks/useCostHeadActivityOverrides';
 import { Auth } from '@/components/Auth';
@@ -617,6 +618,7 @@ const EnhancedCostCodeManager = () => {
   // Fetch category labor mappings for priority-based code assignment
   const { data: dbCategoryMappings = [] } = useCategoryMappings(activeProjectId || null);
   const { data: dbMaterialDescOverrides = [], isFetched: materialDescOverridesFetched } = useCategoryMaterialDescOverrides(activeProjectId || null);
+  const { data: dbItemNameOverrides = [] } = useCategoryItemNameOverrides(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
@@ -974,6 +976,8 @@ const EnhancedCostCodeManager = () => {
   const hasAutoAppliedRef = useRef<string | null>(null);
   const materialDescOverridesRef = useRef(dbMaterialDescOverrides);
   materialDescOverridesRef.current = dbMaterialDescOverrides;
+  const itemNameOverridesRef = useRef(dbItemNameOverrides);
+  itemNameOverridesRef.current = dbItemNameOverrides;
   const autoApplyRunKeyRef = useRef('');
   const prevMaterialDescOverridesRef = useRef<string>('');
 
@@ -1068,8 +1072,13 @@ const EnhancedCostCodeManager = () => {
             // Category mapping > System mapping > keep persisted
             let resolvedHead = persistedHead;
 
-            // Tier 0: Material description override (highest priority)
-            const materialDescHead = (item.report_cat && item.material_desc && materialDescOverridesRef.current.length > 0)
+            // Tier -1: Item name override (highest priority)
+            const itemNameHead = (item.report_cat && item.material_desc && item.item_name && itemNameOverridesRef.current.length > 0)
+              ? getLaborCodeFromItemName(item.report_cat, item.material_desc, item.item_name, itemNameOverridesRef.current)
+              : null;
+
+            // Tier 0: Material description override
+            const materialDescHead = (!itemNameHead && item.report_cat && item.material_desc && materialDescOverridesRef.current.length > 0)
               ? getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current)
               : null;
 
@@ -1079,7 +1088,9 @@ const EnhancedCostCodeManager = () => {
               categoryHead = getLaborCodeFromCategory(item.report_cat, dbCategoryMappings);
             }
 
-            if (materialDescHead) {
+            if (itemNameHead) {
+              resolvedHead = itemNameHead;
+            } else if (materialDescHead) {
               resolvedHead = materialDescHead;
             } else if (categoryHead && categoryHead === persistedHead) {
               // Category mapping matches current head — keep it, don't let system override
@@ -1112,9 +1123,14 @@ const EnhancedCostCodeManager = () => {
           return baseItem;
         }
 
-        // Tier 0: Material description override
+        // Tier -1: Item name override (highest priority)
         let appliedCode: string | null = null;
-        if (materialDescOverridesRef.current.length > 0 && item.report_cat && item.material_desc) {
+        if (itemNameOverridesRef.current.length > 0 && item.report_cat && item.material_desc && item.item_name) {
+          appliedCode = getLaborCodeFromItemName(item.report_cat, item.material_desc, item.item_name, itemNameOverridesRef.current);
+        }
+
+        // Tier 0: Material description override
+        if (!appliedCode && materialDescOverridesRef.current.length > 0 && item.report_cat && item.material_desc) {
           appliedCode = getLaborCodeFromMaterialDesc(item.report_cat, item.material_desc, materialDescOverridesRef.current);
         }
 
@@ -1256,9 +1272,10 @@ const EnhancedCostCodeManager = () => {
       const pairKey = `${item.reportCat}|||${item.materialDesc}`;
       if (!changedPairs.has(pairKey)) return item;
       
-      // Recalculate this item's cost code
-      const materialDescHead = getLaborCodeFromMaterialDesc(item.reportCat, item.materialDesc, dbMaterialDescOverrides);
-      let head = materialDescHead;
+      // Recalculate this item's cost code — item name override > material desc override
+      const itemNameHead = getLaborCodeFromItemName(item.reportCat, item.materialDesc, item.itemName, dbItemNameOverrides);
+      const materialDescHead = !itemNameHead ? getLaborCodeFromMaterialDesc(item.reportCat, item.materialDesc, dbMaterialDescOverrides) : null;
+      let head = itemNameHead || materialDescHead;
       if (!head && dbCategoryMappings.length > 0 && item.reportCat) {
         head = getLaborCodeFromCategory(item.reportCat, dbCategoryMappings);
       }
