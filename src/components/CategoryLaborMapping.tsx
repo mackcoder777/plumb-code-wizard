@@ -410,6 +410,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 {suggestion.laborCode}
                               </Button>
                             )}
+                            <div className="w-64">
                             <Popover
                               open={comboOpenMap[cat.category] || false}
                               onOpenChange={(open) => setComboOpenMap(prev => ({ ...prev, [cat.category]: open }))}
