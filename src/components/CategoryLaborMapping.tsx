@@ -478,6 +478,7 @@ export const CategoryLaborMappingPanel: React.FC<CategoryLaborMappingPanelProps>
                                 </Command>
                               </PopoverContent>
                             </Popover>
+                            </div>
                           </div>
                         </div>
                         
