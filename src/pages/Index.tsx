@@ -1272,9 +1272,10 @@ const EnhancedCostCodeManager = () => {
       const pairKey = `${item.reportCat}|||${item.materialDesc}`;
       if (!changedPairs.has(pairKey)) return item;
       
-      // Recalculate this item's cost code
-      const materialDescHead = getLaborCodeFromMaterialDesc(item.reportCat, item.materialDesc, dbMaterialDescOverrides);
-      let head = materialDescHead;
+      // Recalculate this item's cost code — item name override > material desc override
+      const itemNameHead = getLaborCodeFromItemName(item.reportCat, item.materialDesc, item.itemName, dbItemNameOverrides);
+      const materialDescHead = !itemNameHead ? getLaborCodeFromMaterialDesc(item.reportCat, item.materialDesc, dbMaterialDescOverrides) : null;
+      let head = itemNameHead || materialDescHead;
       if (!head && dbCategoryMappings.length > 0 && item.reportCat) {
         head = getLaborCodeFromCategory(item.reportCat, dbCategoryMappings);
       }
