@@ -10,6 +10,7 @@ import {
   useDeleteCategoryMaterialDescOverride,
 } from '@/hooks/useCategoryMaterialDescOverrides';
 import { useMaterialDescLaborPatterns, useRecordMaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
+import { useCategoryLaborPatterns, useRecordCategoryLaborPattern, getSuggestionForCategory, MIN_SUGGESTION_CONFIDENCE } from '@/hooks/useCategoryLaborPatterns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
