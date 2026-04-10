@@ -252,7 +252,8 @@ interface FabricationConfig {
 
 export interface BidRate {
   hours: number;
-  rate: string; // String to support editing decimal values
+  rate: string; // String to support editing decimal values — stored at full precision when back-calculated
+  total?: string; // Optional user-entered dollar total — when set, this is the source of truth
 }
 
 export interface BidRates {
@@ -781,15 +782,24 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return { rate: 7.25, jurisdiction: 'Enter ZIP Code' };
   }, [jobsiteZipCode, customTaxRate]);
 
-  // LRCN calculations
+  // LRCN calculations — uses entry.total as source of truth when present
   const lrcnCalculations = useMemo(() => {
     const parseRate = (rate: string) => parseFloat(rate) || 0;
+    // Resolve the authoritative dollar total for a bid rate entry:
+    // If user entered a total, use it; otherwise compute hours × rate.
+    const resolveTotal = (entry: BidRate): number => {
+      if (entry.total !== undefined && entry.total !== '') {
+        const parsed = parseFloat(entry.total);
+        if (!isNaN(parsed)) return parsed;
+      }
+      return entry.hours * parseRate(entry.rate);
+    };
     
-    const straightTotal = bidRates.straightTime.hours * parseRate(bidRates.straightTime.rate);
-    const shiftTotal = bidRates.shiftTime.hours * parseRate(bidRates.shiftTime.rate);
-    const overtimeTotal = bidRates.overtime.hours * parseRate(bidRates.overtime.rate);
-    const doubleTimeTotal = bidRates.doubleTime.hours * parseRate(bidRates.doubleTime.rate);
-    const shopTotal = bidRates.shop.hours * parseRate(bidRates.shop.rate);
+    const straightTotal = resolveTotal(bidRates.straightTime);
+    const shiftTotal = resolveTotal(bidRates.shiftTime);
+    const overtimeTotal = resolveTotal(bidRates.overtime);
+    const doubleTimeTotal = resolveTotal(bidRates.doubleTime);
+    const shopTotal = resolveTotal(bidRates.shop);
     
     const bidTotal = straightTotal + shiftTotal + overtimeTotal + doubleTimeTotal + shopTotal;
     const fieldHours = bidRates.straightTime.hours + bidRates.shiftTime.hours +
