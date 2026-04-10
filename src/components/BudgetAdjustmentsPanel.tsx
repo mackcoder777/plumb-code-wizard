@@ -2994,17 +2994,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               {/* LRCN Audit Breakdown Table */}
               {(() => {
                 const parseRate = (rate: string) => parseFloat(rate) || 0;
+                // Resolve authoritative bid dollars per row: entry.total ?? (hours × rate)
+                const resolveRowTotal = (entry: BidRate): number => {
+                  if (entry.total !== undefined && entry.total !== '') {
+                    const parsed = parseFloat(entry.total);
+                    if (!isNaN(parsed)) return parsed;
+                  }
+                  return entry.hours * parseRate(entry.rate);
+                };
                 const auditRows = [
-                  { label: 'Straight Time', hours: bidRates.straightTime.hours, bidRate: parseRate(bidRates.straightTime.rate), budgetRateVal: budgetRate },
-                  { label: 'Shift Time', hours: bidRates.shiftTime.hours, bidRate: parseRate(bidRates.shiftTime.rate), budgetRateVal: budgetRate },
-                  { label: 'Overtime', hours: bidRates.overtime.hours, bidRate: parseRate(bidRates.overtime.rate), budgetRateVal: budgetRate },
-                  { label: 'Double Time', hours: bidRates.doubleTime.hours, bidRate: parseRate(bidRates.doubleTime.rate), budgetRateVal: budgetRate },
-                  { label: 'Shop', hours: bidRates.shop.hours, bidRate: parseRate(bidRates.shop.rate), budgetRateVal: lrcnCalculations.shopRate },
+                  { label: 'Straight Time', entry: bidRates.straightTime, budgetRateVal: budgetRate },
+                  { label: 'Shift Time', entry: bidRates.shiftTime, budgetRateVal: budgetRate },
+                  { label: 'Overtime', entry: bidRates.overtime, budgetRateVal: budgetRate },
+                  { label: 'Double Time', entry: bidRates.doubleTime, budgetRateVal: budgetRate },
+                  { label: 'Shop', entry: bidRates.shop, budgetRateVal: lrcnCalculations.shopRate },
                 ];
-                const totalBid = auditRows.reduce((s, r) => s + r.hours * r.bidRate, 0);
-                const totalBudget = auditRows.reduce((s, r) => s + r.hours * r.budgetRateVal, 0);
+                const totalBid = auditRows.reduce((s, r) => s + resolveRowTotal(r.entry), 0);
+                const totalBudget = auditRows.reduce((s, r) => s + r.entry.hours * r.budgetRateVal, 0);
                 const totalDelta = totalBid - totalBudget;
-                const totalHours = auditRows.reduce((s, r) => s + r.hours, 0);
+                const totalHours = auditRows.reduce((s, r) => s + r.entry.hours, 0);
                 const deltaColor = (d: number) => d > 0.005 ? 'text-emerald-600 dark:text-emerald-400' : d < -0.005 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
                 const fmt = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -3026,14 +3034,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         </TableHeader>
                         <TableBody>
                           {auditRows.map((row) => {
-                            const bidDollars = row.hours * row.bidRate;
-                            const budgetDollars = row.hours * row.budgetRateVal;
+                            const bidDollars = resolveRowTotal(row.entry);
+                            const budgetDollars = row.entry.hours * row.budgetRateVal;
                             const delta = bidDollars - budgetDollars;
+                            const displayRate = parseRate(row.entry.rate);
                             return (
                               <TableRow key={row.label}>
                                 <TableCell className="text-xs font-medium py-2">{row.label}</TableCell>
-                                <TableCell className="text-xs text-right font-mono py-2">{row.hours.toLocaleString()}</TableCell>
-                                <TableCell className="text-xs text-right font-mono py-2">${row.bidRate.toFixed(2)}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">{row.entry.hours.toLocaleString()}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">${displayRate.toFixed(2)}</TableCell>
                                 <TableCell className="text-xs text-right font-mono py-2">{fmt(bidDollars)}</TableCell>
                                 <TableCell className="text-xs text-right font-mono py-2 bg-primary/5">${row.budgetRateVal.toFixed(2)}</TableCell>
                                 <TableCell className="text-xs text-right font-mono py-2 bg-primary/5">{fmt(budgetDollars)}</TableCell>
