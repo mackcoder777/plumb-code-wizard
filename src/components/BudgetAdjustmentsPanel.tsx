@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { useBudgetSettings } from '@/hooks/useBudgetSettings';
 import type { EstimateItem } from '@/types/estimate';
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
