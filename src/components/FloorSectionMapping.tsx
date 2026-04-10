@@ -1084,7 +1084,9 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         if (codeFormatMode === 'multitrade') {
           // In multitrade: localMappings holds the building identifier,
           // which is stored in activity_code (section_code is always the trade prefix)
-          sec[m.floor_pattern] = m.activity_code ?? '0000';
+          let act_val = m.activity_code ?? '0000';
+          if (/^\d$/.test(act_val)) act_val = `B${act_val}`; // Normalize bare single digits (e.g. "1" → "B1")
+          sec[m.floor_pattern] = act_val;
         } else {
           sec[m.floor_pattern] = m.section_code;
         }

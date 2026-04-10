@@ -94,7 +94,7 @@ export function floorHasBuildingInfo(floor: string): boolean {
  */
 export function suggestSectionForBuilding(buildingId: string): string {
   if (!buildingId) return '';
-  if (/^\d+$/.test(buildingId)) return buildingId;
+  if (/^\d+$/.test(buildingId)) return buildingId.length === 1 ? `B${buildingId}` : buildingId;
   if (buildingId.length === 1) return `B${buildingId}`;
   return buildingId;
 }
