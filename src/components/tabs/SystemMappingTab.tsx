@@ -21,7 +21,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn, normalizeActivityCode } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity } from 'lucide-react';
+import { Search, Check, X, AlertCircle, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity, Building2 } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -1003,24 +1003,36 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Building to Section Mapping - Always visible in multitrade mode */}
+      {/* Building to Section Mapping - Collapsible, default open in multitrade mode */}
       {codeFormatMode === 'multitrade' && projectId && (
-        <div className="space-y-2">
-          {buildingSectionMappings.length === 0 && suggestedBuildingMappings.length > 0 && (
-            <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
-                Buildings were auto-detected from your drawing names. Review the section codes below and click Save — cost codes will show 0000 until you save.
-              </AlertDescription>
-            </Alert>
-          )}
-          <BuildingSectionMappingPanel
-            projectId={projectId}
-            estimateItems={data}
-            onMappingsChange={onBuildingMappingsChanged}
-            suggestedMappings={suggestedBuildingMappings}
-          />
-        </div>
+        <Collapsible defaultOpen>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between group">
+              <div className="flex items-center gap-2 text-left">
+                <Building2 className="h-4 w-4 shrink-0" />
+                <span>Building → Section Code</span>
+                <Badge variant="secondary">{buildingSectionMappings.length} mapped</Badge>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4 space-y-2">
+            {buildingSectionMappings.length === 0 && suggestedBuildingMappings.length > 0 && (
+              <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-sm text-amber-800 dark:text-amber-200">
+                  Buildings were auto-detected from your drawing names. Review the section codes below and click Save — cost codes will show 0000 until you save.
+                </AlertDescription>
+              </Alert>
+            )}
+            <BuildingSectionMappingPanel
+              projectId={projectId}
+              estimateItems={data}
+              onMappingsChange={onBuildingMappingsChanged}
+              suggestedMappings={suggestedBuildingMappings}
+            />
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {/* System to Activity Mapping - Collapsible (closed by default) */}
