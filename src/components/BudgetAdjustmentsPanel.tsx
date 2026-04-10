@@ -667,189 +667,78 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     },
   });
 
-  // Track previous projectId to detect changes
-  const [prevProjectId, setPrevProjectId] = useState(projectId);
-
+  // ── DB-backed persistence effects (replace all localStorage-only effects) ──
+  // Each setting change writes to both localStorage (instant) and DB (debounced 500ms)
+  const settingsInitializedRef = useRef(false);
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_custom_fab_codes_${projectId}`, JSON.stringify(customFabCodes));
+    // Skip the very first render cycle — state is populated by the DB load effect above
+    if (!settingsInitializedRef.current) {
+      settingsInitializedRef.current = true;
+      return;
     }
-  }, [customFabCodes, projectId, prevProjectId]);
-
-  // Re-load all settings when projectId changes (e.g., from 'default' to actual project ID)
-  useEffect(() => {
-    if (projectId !== prevProjectId && projectId !== 'default') {
-      if (import.meta.env.DEV) console.log('[BudgetAdjustments] ProjectId changed from', prevProjectId, 'to', projectId, '- reloading settings');
-      
-      // Reload ZIP code
-      const savedZip = localStorage.getItem(`budget_zip_${projectId}`);
-      if (savedZip) setJobsiteZipCode(savedZip);
-      
-      // Reload custom tax rate
-      const savedTaxRate = localStorage.getItem(`budget_taxrate_${projectId}`);
-      setCustomTaxRate(savedTaxRate ? parseFloat(savedTaxRate) : null);
-      
-      // Reload foreman bonus settings
-      const savedForemanEnabled = localStorage.getItem(`budget_foreman_enabled_${projectId}`);
-      setForemanBonusEnabled(savedForemanEnabled === null ? true : savedForemanEnabled === 'true');
-      
-      const savedForemanPct = localStorage.getItem(`budget_foreman_pct_${projectId}`);
-      setForemanBonusPercent(savedForemanPct ? parseFloat(savedForemanPct) : 1);
-      
-      // Reload fabrication configs
-      const savedFabConfigs = localStorage.getItem(`budget_fab_configs_${projectId}`);
-      setFabricationConfigs(savedFabConfigs ? JSON.parse(savedFabConfigs) : {});
-      
-      // Reload material tax overrides
-      const savedTaxOverrides = localStorage.getItem(`budget_tax_overrides_${projectId}`);
-      setMaterialTaxOverrides(savedTaxOverrides ? JSON.parse(savedTaxOverrides) : {});
-      
-      // Reload LRCN settings
-      const savedLrcnEnabled = localStorage.getItem(`budget_lrcn_enabled_${projectId}`);
-      setLrcnEnabled(savedLrcnEnabled === 'true');
-
-      // Reload Fab LRCN
-      const savedFabLrcnEnabled = localStorage.getItem(`budget_fab_lrcn_enabled_${projectId}`);
-      setFabLrcnEnabled(savedFabLrcnEnabled === null ? true : savedFabLrcnEnabled === 'true');
-      
-      const savedBidRates = localStorage.getItem(`budget_bid_rates_${projectId}`);
-      setBidRates(savedBidRates ? JSON.parse(savedBidRates) : {
-        straightTime: { hours: 0, rate: '92.03' },
-        shiftTime: { hours: 0, rate: '95.70' },
-        overtime: { hours: 0, rate: '121.57' },
-        doubleTime: { hours: 0, rate: '145.38' },
-        shop: { hours: 0, rate: '0' }
-      });
-      
-      const savedBudgetRate = localStorage.getItem(`budget_rate_${projectId}`);
-      const rate = savedBudgetRate ? parseFloat(savedBudgetRate) : 85;
-      setBudgetRate(rate);
-      setBudgetRateInput(rate.toString());
-
-      // Reload fab code map
-      const savedFabCodeMap = localStorage.getItem(`budget_fab_code_map_${projectId}`);
-      setFabCodeMap(savedFabCodeMap ? { ...DEFAULT_FAB_CODE_MAP, ...JSON.parse(savedFabCodeMap) } : { ...DEFAULT_FAB_CODE_MAP });
-
-      // Reload fab rates
-      const savedFabRates = localStorage.getItem(`budget_fab_rates_${projectId}`);
-      setFabRates(savedFabRates ? JSON.parse(savedFabRates) : {});
-
-      // Reload custom fab codes
-      const savedCustomFabCodes = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
-      setCustomFabCodes(savedCustomFabCodes ? JSON.parse(savedCustomFabCodes) : {});
-      
-      setPrevProjectId(projectId);
-    }
-  }, [projectId, prevProjectId]);
-
-  // Persist settings to localStorage - only save if projectId is not 'default' and stable
-  useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_zip_${projectId}`, jobsiteZipCode);
-    }
-  }, [jobsiteZipCode, projectId, prevProjectId]);
+    if (!projectId || projectId === 'default') return;
+    saveSetting('zip', jobsiteZipCode);
+  }, [jobsiteZipCode]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      if (customTaxRate !== null) {
-        localStorage.setItem(`budget_taxrate_${projectId}`, customTaxRate.toString());
-      } else {
-        localStorage.removeItem(`budget_taxrate_${projectId}`);
-      }
-    }
-  }, [customTaxRate, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('taxrate', customTaxRate);
+  }, [customTaxRate]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_foreman_enabled_${projectId}`, foremanBonusEnabled.toString());
-    }
-  }, [foremanBonusEnabled, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('foreman_enabled', foremanBonusEnabled);
+  }, [foremanBonusEnabled]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_foreman_pct_${projectId}`, foremanBonusPercent.toString());
-    }
-  }, [foremanBonusPercent, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('foreman_pct', foremanBonusPercent);
+  }, [foremanBonusPercent]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_fab_configs_${projectId}`, JSON.stringify(fabricationConfigs));
-    }
-  }, [fabricationConfigs, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('fab_configs', fabricationConfigs);
+  }, [fabricationConfigs]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_tax_overrides_${projectId}`, JSON.stringify(materialTaxOverrides));
-    }
-  }, [materialTaxOverrides, projectId, prevProjectId]);
-
-  // LRCN persistence
-  useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_lrcn_enabled_${projectId}`, lrcnEnabled.toString());
-    }
-  }, [lrcnEnabled, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('tax_overrides', materialTaxOverrides);
+  }, [materialTaxOverrides]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_bid_rates_${projectId}`, JSON.stringify(bidRates));
-    }
-  }, [bidRates, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('lrcn_enabled', lrcnEnabled);
+  }, [lrcnEnabled]);
 
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_rate_${projectId}`, budgetRate.toString());
-    }
-  }, [budgetRate, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('bid_rates', bidRates);
+  }, [bidRates]);
 
-  // Persist fabCodeMap
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_fab_code_map_${projectId}`, JSON.stringify(fabCodeMap));
-    }
-  }, [fabCodeMap, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('budget_rate', budgetRate);
+  }, [budgetRate]);
 
-  // Persist fabRates
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_fab_rates_${projectId}`, JSON.stringify(fabRates));
-    }
-  }, [fabRates, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('fab_code_map', fabCodeMap);
+  }, [fabCodeMap]);
 
-  // Persist fabLrcnEnabled
   useEffect(() => {
-    if (projectId !== 'default' && projectId === prevProjectId) {
-      localStorage.setItem(`budget_fab_lrcn_enabled_${projectId}`, fabLrcnEnabled.toString());
-    }
-  }, [fabLrcnEnabled, projectId, prevProjectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('fab_rates', fabRates);
+  }, [fabRates]);
 
-  // One-time migration: convert full-code keys (e.g. "BA 0000 DWTR") to cost-head-only keys ("DWTR")
   useEffect(() => {
-    const migrateStorageKey = (storageKey: string) => {
-      try {
-        const raw = localStorage.getItem(storageKey);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        const needsMigration = Object.keys(parsed).some(k => k.includes(' '));
-        if (!needsMigration) return;
-        const migrated: Record<string, unknown> = {};
-        Object.entries(parsed).forEach(([key, value]) => {
-          const parts = key.trim().split(/\s+/);
-          const costHead = parts[parts.length - 1];
-          migrated[costHead] = value;
-        });
-        localStorage.setItem(storageKey, JSON.stringify(migrated));
-        // Also update in-memory state
-        if (storageKey === `budget_fab_configs_${projectId}`) {
-          setFabricationConfigs(migrated as Record<string, FabricationConfig>);
-        }
-      } catch {
-        // Silent
-      }
-    };
-    migrateStorageKey(`budget_fab_configs_${projectId}`);
-    migrateStorageKey(`budget_tax_overrides_${projectId}`);
-  }, [projectId]);
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('fab_lrcn_enabled', fabLrcnEnabled);
+  }, [fabLrcnEnabled]);
+
+  useEffect(() => {
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('custom_fab_codes', customFabCodes);
+  }, [customFabCodes]);
 
   // Aggregate laborSummary by cost head (last segment of full code)
   const groupedByCostHead = useMemo(() => {
