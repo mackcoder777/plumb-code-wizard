@@ -799,7 +799,9 @@ const EnhancedCostCodeManager = () => {
         if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
           costHead = parts.slice(4).join(' ');
         } else if (parts.length >= 3) {
-          costHead = parts.slice(2).join(' ');
+          costHead = codeFormatMode === 'multitrade'
+            ? parts[parts.length - 1]  // Last token only — prevents prefix/section leaks
+            : parts.slice(2).join(' ');
         } else {
           costHead = rawCostHead;
         }

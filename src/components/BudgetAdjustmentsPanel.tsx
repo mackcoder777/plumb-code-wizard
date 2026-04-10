@@ -1122,9 +1122,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // zone-resolved canonical sections. Prevents timing-gap transients from
     // surviving to export when zone resolution has already placed items correctly.
 
+    // In multitrade mode, fallback sections appear as activity codes (00CS, 00UG, 00RF, 00AG)
+    // rather than section prefixes (which are always PL)
+    const FALLBACK_ACTIVITY_CODES = new Set(['00CS', '00UG', '00RF', '00AG']);
     const fallbackKeys = Object.keys(result).filter(k => {
-      const sec = k.trim().split(/\s+/)[0];
-      return FALLBACK_SECTIONS.has(sec);
+      const kParts = k.trim().split(/\s+/);
+      const sec = kParts[0];
+      if (FALLBACK_SECTIONS.has(sec)) return true;
+      // Multitrade: check activity segment for fallback codes
+      if (kParts.length >= 3 && FALLBACK_ACTIVITY_CODES.has(kParts[1])) return true;
+      return false;
     });
 
     fallbackKeys.forEach(fbKey => {
@@ -1133,11 +1140,22 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const fbAct = parts.length >= 3 ? parts[1] : '';
       const fbHead = parts[parts.length - 1];
 
+      // Determine if this is a multitrade activity-based fallback (e.g. PL 00CS WATR)
+      const isMultitradeFallback = !FALLBACK_SECTIONS.has(fbSec) && FALLBACK_ACTIVITY_CODES.has(fbAct);
+
       // AG (Site Above Grade) always folds into ST, not a building section
-      if (fbSec === 'AG') {
+      if (fbSec === 'AG' || (isMultitradeFallback && fbAct === '00AG')) {
         const stKey = Object.keys(result).find(k => {
           const kParts = k.trim().split(/\s+/);
-          return kParts[0] === 'ST' && kParts[kParts.length - 1] === fbHead;
+          const kSec = kParts[0];
+          const kAct = kParts.length >= 3 ? kParts[1] : '';
+          if (isMultitradeFallback) {
+            // In multitrade: look for PL SITE head or PL 00ST head
+            return kSec === fbSec && !FALLBACK_ACTIVITY_CODES.has(kAct) &&
+                   (kAct === 'SITE' || kAct === '00ST') &&
+                   kParts[kParts.length - 1] === fbHead;
+          }
+          return kSec === 'ST' && kParts[kParts.length - 1] === fbHead;
         });
         if (stKey) {
           result[stKey] = {
@@ -1150,7 +1168,34 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return; // skip normal folding for AG
       }
 
-      // Try 1: exact activity + cost head match in any canonical section
+      // For multitrade activity-based fallbacks, fold into the largest canonical
+      // building code with the same cost head
+      if (isMultitradeFallback) {
+        // Find all canonical keys with the same section (PL) and cost head,
+        // but a real building activity (not a fallback activity)
+        const candidates = Object.keys(result).filter(k => {
+          if (k === fbKey) return false;
+          const kParts = k.trim().split(/\s+/);
+          return kParts[0] === fbSec &&
+                 !FALLBACK_ACTIVITY_CODES.has(kParts[1]) &&
+                 kParts[kParts.length - 1] === fbHead;
+        });
+        if (candidates.length > 0) {
+          // Pick the candidate with the most hours
+          const target = candidates.reduce((best, c) =>
+            (result[c]?.hours ?? 0) > (result[best]?.hours ?? 0) ? c : best
+          );
+          result[target] = {
+            ...result[target],
+            hours: (result[target].hours ?? 0) + (result[fbKey].hours ?? 0),
+            materialDollars: (result[target].materialDollars ?? 0) + (result[fbKey].materialDollars ?? 0),
+          };
+          delete result[fbKey];
+        }
+        return;
+      }
+
+      // Standard mode: Try 1 — exact activity + cost head match in any canonical section
       let canonicalKey = Object.keys(result).find(k => {
         const kParts = k.trim().split(/\s+/);
         return !FALLBACK_SECTIONS.has(kParts[0]) &&

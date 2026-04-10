@@ -317,7 +317,7 @@ export function resolveFloorMappingStatic(
       const activity = buildingFloorMatch?.activity_code
         ? normalizeActivityCode(buildingFloorMatch.activity_code)
         : floorActivity;
-      return { section: canonicalSection, activity, hasExplicitMapping };
+      return { section: canonicalSection, activity, buildingActivity: activity, hasExplicitMapping };
     }
 
     // Priority 3: Zone resolution failed for standalone floor
