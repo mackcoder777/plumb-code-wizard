@@ -595,21 +595,27 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Get new section and activity from zone-aware resolver with cost-head override support
       const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
       
-      // Build new full code with floor activity priority over system activity
-      const liveActivity = item.floor ? activityMappingsToApply[item.floor] : undefined;
+      // Build new full code with activity resolution
       let activityCode: string;
-      if (liveActivity !== undefined) {
-        activityCode = liveActivity;
+      if (codeFormatMode === 'multitrade') {
+        // In multitrade mode, always use zone-resolved building activity
+        // Never let the direct floor activity (e.g. "00CS") override the zone-resolved building ACT (e.g. "0MOD")
+        activityCode = (resolved.buildingActivity ?? resolved.activity) || '0000';
       } else {
-        const floorActivity = resolved.activity || '0000';
-        const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
-        const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
-        if (hasLevelOverride) {
-          activityCode = floorActivity;
-        } else if (explicitActivity !== null) {
-          activityCode = explicitActivity;
+        const liveActivity = item.floor ? activityMappingsToApply[item.floor] : undefined;
+        if (liveActivity !== undefined) {
+          activityCode = liveActivity;
         } else {
-          activityCode = getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+          const floorActivity = resolved.activity || '0000';
+          const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
+          const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+          if (hasLevelOverride) {
+            activityCode = floorActivity;
+          } else if (explicitActivity !== null) {
+            activityCode = explicitActivity;
+          } else {
+            activityCode = getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined);
+          }
         }
       }
       const newFullCode = `${resolved.section} ${normalizeActivityCode(activityCode)} ${costHead}`;
