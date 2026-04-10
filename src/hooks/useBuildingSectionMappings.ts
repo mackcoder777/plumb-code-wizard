@@ -234,6 +234,8 @@ export function resolveSectionStatic(
     if (zonePatternMatch) {
       return getCanonicalSectionForBuilding(zonePatternMatch.building_identifier, floorMappings, buildingMappings);
     }
+    // Priority 3: Zone failed — honor explicit floor mapping if it exists
+    if (fromFloor) return fromFloor.section;
   }
 
   // Non-standalone floor with a mapping — use it directly
@@ -318,8 +320,17 @@ export function resolveFloorMappingStatic(
       return { section: canonicalSection, activity, hasExplicitMapping };
     }
 
-    // Priority 3: Zone resolution failed for standalone floor — return uncoded
-    // Do NOT fall through to fromFloor path which would assign a fallback activity
+    // Priority 3: Zone resolution failed for standalone floor
+    // If user has an explicit floor mapping (e.g., Site → SITE), honor it
+    if (hasExplicitMapping) {
+      return {
+        section: fromFloor!.section,
+        activity: floorActivity,
+        buildingActivity: undefined,
+        hasExplicitMapping: true
+      };
+    }
+    // No explicit mapping — return uncoded for PM review
     return {
       section: fromFloor?.section || '',
       activity: null,
