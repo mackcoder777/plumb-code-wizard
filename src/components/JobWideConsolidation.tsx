@@ -117,7 +117,7 @@ export const JobWideConsolidation: React.FC<JobWideConsolidationProps> = ({
       // The finalLaborSummary pipeline will use merged_act === __JOBWIDE__ to identify these
       const { error } = await (supabase as any)
         .from('project_small_code_merges')
-        .insert(records);
+        .upsert(records, { onConflict: 'project_id,sec_code,cost_head,merged_act' });
 
       if (error) throw error;
 
