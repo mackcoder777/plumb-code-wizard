@@ -1714,19 +1714,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       const parts = (entry.key || '').split('|');
       const sec = parts[0] || '';
       const head = parts[1] || '';
+      const actualHead = head.split(' ').pop() || head; // "PL BGAW" → "BGAW"
 
       // Rule 1: Known alias / BG variant with fallback chain
-      const chain = BG_TO_ABOVE_GRADE[head];
+      const chain = BG_TO_ABOVE_GRADE[actualHead];
       if (chain) {
         let candidates = [...chain];
 
         // BGPD: dynamic fallback based on source system name
-        if (head === 'BGPD') {
+        if (actualHead === 'BGPD') {
           const sourceSystems = new Set<string>();
           estimateData.forEach(item => {
             if (!item.costCode) return;
             const ip = (item.costCode || '').trim().split(/\s+/);
-            if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
+           if (ip[0] === sec && ip[ip.length - 1] === actualHead) sourceSystems.add((item.system || '').trim());
           });
           candidates = ['PMPD', getBgpdFallback(sourceSystems)];
         }
@@ -1747,7 +1748,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
       // Rule 2: Category override codes → infer target from source systems
       // Above-grade peer system codes are excluded — they cannot merge into each other
-      if (ABOVE_GRADE_SYSTEM_CODES.has(head)) {
+      if (ABOVE_GRADE_SYSTEM_CODES.has(actualHead)) {
         // Rule 2b: same cost head, different activity — check first before peer-merge
         const sameHeadMatch = Object.entries(finalLaborSummary ?? {})
           .filter(([k]) => {
@@ -1778,7 +1779,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           .sort((a, b) => (b[1].hours ?? 0) - (a[1].hours ?? 0));
         if (sameSec.length > 0) {
           const tHead = sameSec[0][0].trim().split(/\s+/).slice(2).join(' ');
-          if (ABOVE_GRADE_SYSTEM_CODES.has(tHead)) {
+          if (ABOVE_GRADE_SYSTEM_CODES.has(tHead.split(' ').pop() || tHead)) {
             suggestions[entry.key] = {
               targetHead: tHead,
               targetKey: sameSec[0][0],
@@ -1811,13 +1812,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         estimateData.forEach(item => {
           if (!item.costCode) return;
           const ip = (item.costCode || '').trim().split(/\s+/);
-          if (ip[0] === sec && ip[ip.length - 1] === head) sourceSystems.add((item.system || '').trim());
+          if (ip[0] === sec && ip[ip.length - 1] === actualHead) sourceSystems.add((item.system || '').trim());
         });
 
         const systemTargetHeads = new Set<string>();
         sourceSystems.forEach(sys => {
           const sysMapping = systemMappings.find(m => (m.system || '').toLowerCase().trim() === sys.toLowerCase().trim());
-          if (sysMapping?.laborCode && sysMapping.laborCode !== head) systemTargetHeads.add(sysMapping.laborCode);
+          if (sysMapping?.laborCode && sysMapping.laborCode !== actualHead) systemTargetHeads.add(sysMapping.laborCode);
         });
 
         for (const targetHead of systemTargetHeads) {
