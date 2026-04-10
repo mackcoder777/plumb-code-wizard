@@ -489,87 +489,100 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   estimateData = [],
   systemMappings = [],
 }) => {
-  // Load persisted settings from localStorage
-  const [jobsiteZipCode, setJobsiteZipCode] = useState(() => {
-    const saved = localStorage.getItem(`budget_zip_${projectId}`);
-    return saved || '';
-  });
-  const [customTaxRate, setCustomTaxRate] = useState<number | null>(() => {
-    const saved = localStorage.getItem(`budget_taxrate_${projectId}`);
-    return saved ? parseFloat(saved) : null;
-  });
-  const [foremanBonusEnabled, setForemanBonusEnabled] = useState(() => {
-    const saved = localStorage.getItem(`budget_foreman_enabled_${projectId}`);
-    return saved === null ? true : saved === 'true';
-  });
-  const [foremanBonusPercent, setForemanBonusPercent] = useState(() => {
-    const saved = localStorage.getItem(`budget_foreman_pct_${projectId}`);
-    return saved ? parseFloat(saved) : 1;
-  });
-  const [fabricationConfigs, setFabricationConfigs] = useState<Record<string, FabricationConfig>>(() => {
-    const saved = localStorage.getItem(`budget_fab_configs_${projectId}`);
-    return saved ? JSON.parse(saved) : {};
-  });
-  const [materialTaxOverrides, setMaterialTaxOverrides] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem(`budget_tax_overrides_${projectId}`);
-    return saved ? JSON.parse(saved) : {};
-  });
+  // ── Budget settings persistence (DB-backed with localStorage cache) ──
+  const { dbSettings, isLoading: settingsLoading, saveSetting, getSetting } = useBudgetSettings(projectId);
 
-  // Per-fab-code bid/budget rates
-  const [fabRates, setFabRates] = useState<Record<string, { bidRate: string; budgetRate: string }>>(() => {
-    try {
-      const stored = localStorage.getItem(`budget_fab_rates_${projectId}`);
-      return stored ? JSON.parse(stored) : {};
-    } catch { return {}; }
+  // State initializers use empty defaults — populated by DB load effect below
+  const [jobsiteZipCode, setJobsiteZipCode] = useState('');
+  const [customTaxRate, setCustomTaxRate] = useState<number | null>(null);
+  const [foremanBonusEnabled, setForemanBonusEnabled] = useState(true);
+  const [foremanBonusPercent, setForemanBonusPercent] = useState(1);
+  const [fabricationConfigs, setFabricationConfigs] = useState<Record<string, FabricationConfig>>({});
+  const [materialTaxOverrides, setMaterialTaxOverrides] = useState<Record<string, boolean>>({});
+  const [fabRates, setFabRates] = useState<Record<string, { bidRate: string; budgetRate: string }>>({});
+  const [fabCodeMap, setFabCodeMap] = useState<Record<string, string>>({ ...DEFAULT_FAB_CODE_MAP });
+  const [lrcnEnabled, setLrcnEnabled] = useState(false);
+  const [fabLrcnEnabled, setFabLrcnEnabled] = useState(true);
+  const [bidRates, setBidRates] = useState<BidRates>({
+    straightTime: { hours: 0, rate: '92.03' },
+    shiftTime: { hours: 0, rate: '95.70' },
+    overtime: { hours: 0, rate: '121.57' },
+    doubleTime: { hours: 0, rate: '145.38' },
+    shop: { hours: 0, rate: '0' }
   });
+  const [budgetRate, setBudgetRate] = useState(85);
+  const [budgetRateInput, setBudgetRateInput] = useState('85');
+  const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>({});
+  const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
 
-  // Fab code routing map: field cost head → fab material cost head
-  const [fabCodeMap, setFabCodeMap] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem(`budget_fab_code_map_${projectId}`);
-      return saved ? { ...DEFAULT_FAB_CODE_MAP, ...JSON.parse(saved) } : { ...DEFAULT_FAB_CODE_MAP };
-    } catch {
-      return { ...DEFAULT_FAB_CODE_MAP };
-    }
-  });
+  // Track whether we've loaded DB settings for this project
+  const settingsLoadedForRef = useRef<string | null>(null);
 
-  // LRCN (Labor Rate Contingency) state
-  const [lrcnEnabled, setLrcnEnabled] = useState(() => {
-    const saved = localStorage.getItem(`budget_lrcn_enabled_${projectId}`);
-    return saved === 'true';
-  });
+  // Load settings from DB (or localStorage fallback) when dbSettings arrive or projectId changes
+  useEffect(() => {
+    if (settingsLoading) return;
+    if (!projectId || projectId === 'default') return;
+    if (settingsLoadedForRef.current === projectId && Object.keys(dbSettings).length === 0) return;
+    // Only run once per projectId unless dbSettings change
+    if (settingsLoadedForRef.current === projectId) return;
+    settingsLoadedForRef.current = projectId;
 
-  // Fab LRCN state
-  const [fabLrcnEnabled, setFabLrcnEnabled] = useState(() => {
-    const saved = localStorage.getItem(`budget_fab_lrcn_enabled_${projectId}`);
-    return saved === null ? true : saved === 'true';
-  });
-  
-  const [bidRates, setBidRates] = useState<BidRates>(() => {
-    const saved = localStorage.getItem(`budget_bid_rates_${projectId}`);
-    return saved ? JSON.parse(saved) : {
+    if (import.meta.env.DEV) console.log('[BudgetAdjustments] Loading settings from DB for', projectId);
+
+    setJobsiteZipCode(getSetting<string>('zip', ''));
+    setCustomTaxRate(getSetting<number | null>('taxrate', null));
+    setForemanBonusEnabled(getSetting<boolean>('foreman_enabled', true));
+    setForemanBonusPercent(getSetting<number>('foreman_pct', 1));
+    setFabricationConfigs(getSetting<Record<string, FabricationConfig>>('fab_configs', {}));
+    setMaterialTaxOverrides(getSetting<Record<string, boolean>>('tax_overrides', {}));
+    setLrcnEnabled(getSetting<boolean>('lrcn_enabled', false));
+    setFabLrcnEnabled(getSetting<boolean>('fab_lrcn_enabled', true));
+    setBidRates(getSetting<BidRates>('bid_rates', {
       straightTime: { hours: 0, rate: '92.03' },
       shiftTime: { hours: 0, rate: '95.70' },
       overtime: { hours: 0, rate: '121.57' },
       doubleTime: { hours: 0, rate: '145.38' },
       shop: { hours: 0, rate: '0' }
-    };
-  });
-  
-  const [budgetRate, setBudgetRate] = useState(() => {
-    const saved = localStorage.getItem(`budget_rate_${projectId}`);
-    return saved ? parseFloat(saved) : 85;
-  });
-  const [budgetRateInput, setBudgetRateInput] = useState(() => budgetRate.toString());
+    }));
+    const rate = getSetting<number>('budget_rate', 85);
+    setBudgetRate(rate);
+    setBudgetRateInput(rate.toString());
+    const savedFabCodeMap = getSetting<Record<string, string>>('fab_code_map', {});
+    setFabCodeMap({ ...DEFAULT_FAB_CODE_MAP, ...savedFabCodeMap });
+    setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
+    setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
 
-  const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>(() => {
-    try {
-      const stored = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
-      return stored ? JSON.parse(stored) : {};
-    } catch { return {}; }
-  });
-
-  const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
+    // Auto-migrate: if DB was empty but localStorage had data, persist to DB
+    if (Object.keys(dbSettings).length === 0) {
+      if (import.meta.env.DEV) console.log('[BudgetAdjustments] Auto-migrating localStorage to DB');
+      const lsZip = localStorage.getItem(`budget_zip_${projectId}`);
+      if (lsZip) saveSetting('zip', lsZip);
+      const lsTax = localStorage.getItem(`budget_taxrate_${projectId}`);
+      if (lsTax) saveSetting('taxrate', parseFloat(lsTax));
+      const lsFE = localStorage.getItem(`budget_foreman_enabled_${projectId}`);
+      if (lsFE !== null) saveSetting('foreman_enabled', lsFE === 'true');
+      const lsFP = localStorage.getItem(`budget_foreman_pct_${projectId}`);
+      if (lsFP) saveSetting('foreman_pct', parseFloat(lsFP));
+      const lsFC = localStorage.getItem(`budget_fab_configs_${projectId}`);
+      if (lsFC) saveSetting('fab_configs', JSON.parse(lsFC));
+      const lsTO = localStorage.getItem(`budget_tax_overrides_${projectId}`);
+      if (lsTO) saveSetting('tax_overrides', JSON.parse(lsTO));
+      const lsLE = localStorage.getItem(`budget_lrcn_enabled_${projectId}`);
+      if (lsLE) saveSetting('lrcn_enabled', lsLE === 'true');
+      const lsFLE = localStorage.getItem(`budget_fab_lrcn_enabled_${projectId}`);
+      if (lsFLE !== null) saveSetting('fab_lrcn_enabled', lsFLE === 'true');
+      const lsBR = localStorage.getItem(`budget_bid_rates_${projectId}`);
+      if (lsBR) saveSetting('bid_rates', JSON.parse(lsBR));
+      const lsRate = localStorage.getItem(`budget_rate_${projectId}`);
+      if (lsRate) saveSetting('budget_rate', parseFloat(lsRate));
+      const lsFCM = localStorage.getItem(`budget_fab_code_map_${projectId}`);
+      if (lsFCM) saveSetting('fab_code_map', JSON.parse(lsFCM));
+      const lsFR = localStorage.getItem(`budget_fab_rates_${projectId}`);
+      if (lsFR) saveSetting('fab_rates', JSON.parse(lsFR));
+      const lsCFC = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
+      if (lsCFC) saveSetting('custom_fab_codes', JSON.parse(lsCFC));
+    }
+  }, [settingsLoading, projectId, dbSettings, getSetting, saveSetting]);
 
 const [consolidations, setConsolidations] = useState<Record<string, boolean>>({});
 const [undoingKey, setUndoingKey] = useState<string | null>(null);
