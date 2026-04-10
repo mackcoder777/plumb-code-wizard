@@ -1,33 +1,41 @@
 
 
-# Add Item-Name Override Recalculation Effect
+# Fix: Deduplicate Records Before Upsert in Job-Wide Consolidation
 
 ## Problem
-The material description override recalc effect (Index.tsx lines 1240-1338) watches `dbMaterialDescOverrides` and recalculates affected items when overrides change. There is **no equivalent effect** for `dbItemNameOverrides`. This means:
-- User assigns an item-name override in the Category Labor Mapping UI
-- The DB updates (optimistic + server)
-- But already-loaded `estimateData` items keep their old cost codes until a full page refresh
+The `candidate.sections` array contains one entry per `(sec, act)` combination. Multiple activity codes in the same section (e.g., `B2 00L1 BGNG` and `B2 00L2 BGNG`) produce records with identical `(project_id, sec_code='B2', cost_head='BGNG', merged_act='__JOBWIDE__')`. Postgres rejects an upsert batch where two rows target the same conflict key.
 
-## Solution
-Add a parallel `useEffect` that mirrors the material desc recalc pattern exactly, but watches `dbItemNameOverrides` instead. It will:
+## Fix
 
-1. Track previous state via a `prevItemNameOverridesRef`
-2. Detect which `(category, materialDesc, itemName)` triples changed or were deleted
-3. For each affected item in `estimateData`, re-run the full priority chain (item name override → material desc override → category → system)
-4. Batch-update changed items in state and persist to DB via `batchUpdateSilent`
+**File: `src/components/JobWideConsolidation.tsx` (~line 108)**
 
-### File: `src/pages/Index.tsx`
+Deduplicate `records` by `sec_code` before upserting:
 
-**Add** near line 982 (alongside existing refs):
-- `const prevItemNameOverridesRef = useRef<string>('')`
+```typescript
+// Before:
+const records = candidate.sections.map(s => ({
+  project_id: projectId,
+  sec_code: s.sec,
+  cost_head: candidate.head,
+  reassign_to_head: candidate.head,
+  merged_act: JOB_WIDE_MARKER,
+}));
 
-**Add** after the material desc recalc effect (~line 1338):
-- New `useEffect` with dependency `[dbItemNameOverrides, currentProject?.id]`
-- Same structure as the material desc effect but keyed on `(reportCat, materialDesc, itemName)` triples
-- Recalculation uses the same priority chain already in the material desc effect
+// After:
+const uniqueSecs = [...new Set(candidate.sections.map(s => s.sec))];
+const records = uniqueSecs.map(sec => ({
+  project_id: projectId,
+  sec_code: sec,
+  cost_head: candidate.head,
+  reassign_to_head: candidate.head,
+  merged_act: JOB_WIDE_MARKER,
+}));
+```
+
+One change, one file. The dedup ensures each `(project_id, sec_code, cost_head, merged_act)` tuple appears exactly once in the upsert batch.
 
 ## Files changed
 | File | Change |
 |------|--------|
-| `src/pages/Index.tsx` | Add `prevItemNameOverridesRef` + new useEffect for item-name override recalculation |
+| `src/components/JobWideConsolidation.tsx` | Deduplicate sections by `sec_code` before building upsert records |
 
