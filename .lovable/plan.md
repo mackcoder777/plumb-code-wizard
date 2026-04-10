@@ -1,41 +1,37 @@
 
 
-# Fix: Deduplicate Records Before Upsert in Job-Wide Consolidation
+# Wrap Building Section Mapping in a Collapsible
 
 ## Problem
-The `candidate.sections` array contains one entry per `(sec, act)` combination. Multiple activity codes in the same section (e.g., `B2 00L1 BGNG` and `B2 00L2 BGNG`) produce records with identical `(project_id, sec_code='B2', cost_head='BGNG', merged_act='__JOBWIDE__')`. Postgres rejects an upsert batch where two rows target the same conflict key.
+The Building → Section Code panel is rendered as a plain `<div>` in `SystemMappingTab.tsx` (line 1008), while other panels (Section Mapping, System to Activity Mapping) use `<Collapsible>` wrappers. This means it's always expanded and can't be collapsed.
 
 ## Fix
 
-**File: `src/components/JobWideConsolidation.tsx` (~line 108)**
+**File: `src/components/tabs/SystemMappingTab.tsx` (~lines 1006-1024)**
 
-Deduplicate `records` by `sec_code` before upserting:
+Wrap the `BuildingSectionMappingPanel` in a `<Collapsible>` with a `<CollapsibleTrigger>` button, matching the style of adjacent panels. Default it to **open** (so existing behavior isn't jarring) but allow collapsing.
 
-```typescript
-// Before:
-const records = candidate.sections.map(s => ({
-  project_id: projectId,
-  sec_code: s.sec,
-  cost_head: candidate.head,
-  reassign_to_head: candidate.head,
-  merged_act: JOB_WIDE_MARKER,
-}));
-
-// After:
-const uniqueSecs = [...new Set(candidate.sections.map(s => s.sec))];
-const records = uniqueSecs.map(sec => ({
-  project_id: projectId,
-  sec_code: sec,
-  cost_head: candidate.head,
-  reassign_to_head: candidate.head,
-  merged_act: JOB_WIDE_MARKER,
-}));
+```tsx
+<Collapsible defaultOpen>
+  <CollapsibleTrigger asChild>
+    <Button variant="outline" className="w-full justify-between">
+      <div className="flex items-center gap-2 text-left">
+        <Building2 className="h-4 w-4 shrink-0" />
+        <span>Building → Section Code</span>
+        <Badge variant="secondary">{buildingSectionMappings.length} mapped</Badge>
+      </div>
+      <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+    </Button>
+  </CollapsibleTrigger>
+  <CollapsibleContent className="pt-4">
+    {/* existing Alert + BuildingSectionMappingPanel */}
+  </CollapsibleContent>
+</Collapsible>
 ```
 
-One change, one file. The dedup ensures each `(project_id, sec_code, cost_head, merged_act)` tuple appears exactly once in the upsert batch.
+One file changed. No logic changes.
 
-## Files changed
 | File | Change |
 |------|--------|
-| `src/components/JobWideConsolidation.tsx` | Deduplicate sections by `sec_code` before building upsert records |
+| `src/components/tabs/SystemMappingTab.tsx` | Wrap BuildingSectionMappingPanel block in Collapsible |
 
