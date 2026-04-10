@@ -1122,9 +1122,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // zone-resolved canonical sections. Prevents timing-gap transients from
     // surviving to export when zone resolution has already placed items correctly.
 
+    // In multitrade mode, fallback sections appear as activity codes (00CS, 00UG, 00RF, 00AG)
+    // rather than section prefixes (which are always PL)
+    const FALLBACK_ACTIVITY_CODES = new Set(['00CS', '00UG', '00RF', '00AG']);
     const fallbackKeys = Object.keys(result).filter(k => {
-      const sec = k.trim().split(/\s+/)[0];
-      return FALLBACK_SECTIONS.has(sec);
+      const kParts = k.trim().split(/\s+/);
+      const sec = kParts[0];
+      if (FALLBACK_SECTIONS.has(sec)) return true;
+      // Multitrade: check activity segment for fallback codes
+      if (kParts.length >= 3 && FALLBACK_ACTIVITY_CODES.has(kParts[1])) return true;
+      return false;
     });
 
     fallbackKeys.forEach(fbKey => {
