@@ -252,7 +252,8 @@ interface FabricationConfig {
 
 export interface BidRate {
   hours: number;
-  rate: string; // String to support editing decimal values
+  rate: string; // String to support editing decimal values — stored at full precision when back-calculated
+  total?: string; // Optional user-entered dollar total — when set, this is the source of truth
 }
 
 export interface BidRates {
@@ -781,15 +782,24 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return { rate: 7.25, jurisdiction: 'Enter ZIP Code' };
   }, [jobsiteZipCode, customTaxRate]);
 
-  // LRCN calculations
+  // LRCN calculations — uses entry.total as source of truth when present
   const lrcnCalculations = useMemo(() => {
     const parseRate = (rate: string) => parseFloat(rate) || 0;
+    // Resolve the authoritative dollar total for a bid rate entry:
+    // If user entered a total, use it; otherwise compute hours × rate.
+    const resolveTotal = (entry: BidRate): number => {
+      if (entry.total !== undefined && entry.total !== '') {
+        const parsed = parseFloat(entry.total);
+        if (!isNaN(parsed)) return parsed;
+      }
+      return entry.hours * parseRate(entry.rate);
+    };
     
-    const straightTotal = bidRates.straightTime.hours * parseRate(bidRates.straightTime.rate);
-    const shiftTotal = bidRates.shiftTime.hours * parseRate(bidRates.shiftTime.rate);
-    const overtimeTotal = bidRates.overtime.hours * parseRate(bidRates.overtime.rate);
-    const doubleTimeTotal = bidRates.doubleTime.hours * parseRate(bidRates.doubleTime.rate);
-    const shopTotal = bidRates.shop.hours * parseRate(bidRates.shop.rate);
+    const straightTotal = resolveTotal(bidRates.straightTime);
+    const shiftTotal = resolveTotal(bidRates.shiftTime);
+    const overtimeTotal = resolveTotal(bidRates.overtime);
+    const doubleTimeTotal = resolveTotal(bidRates.doubleTime);
+    const shopTotal = resolveTotal(bidRates.shop);
     
     const bidTotal = straightTotal + shiftTotal + overtimeTotal + doubleTimeTotal + shopTotal;
     const fieldHours = bidRates.straightTime.hours + bidRates.shiftTime.hours +
@@ -2838,190 +2848,97 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                       <TableHead>Labor Type</TableHead>
                       <TableHead className="text-right w-28">Hours</TableHead>
                       <TableHead className="text-right w-32">Rate ($/hr)</TableHead>
-                      <TableHead className="text-right w-32">Total</TableHead>
+                      <TableHead className="text-right w-36">Total ($)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow>
-                      <TableCell>Straight Time</TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={bidRates.straightTime.hours || ''}
-                          onChange={(e) => setBidRates(prev => ({
-                            ...prev,
-                            straightTime: { ...prev.straightTime, hours: parseFloat(e.target.value) || 0 }
-                          }))}
-                          className="w-24 text-right font-mono"
-                          placeholder="0"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          inputMode="decimal"
-                          value={bidRates.straightTime.rate}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              setBidRates(prev => ({
-                                ...prev,
-                                straightTime: { ...prev.straightTime, rate: val }
-                              }));
-                            }
-                          }}
-                          className="w-28 text-right font-mono"
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium">
-                        ${lrcnCalculations.straightTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Shift Time</TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={bidRates.shiftTime.hours || ''}
-                          onChange={(e) => setBidRates(prev => ({
-                            ...prev,
-                            shiftTime: { ...prev.shiftTime, hours: parseFloat(e.target.value) || 0 }
-                          }))}
-                          className="w-24 text-right font-mono"
-                          placeholder="0"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          inputMode="decimal"
-                          value={bidRates.shiftTime.rate}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              setBidRates(prev => ({
-                                ...prev,
-                                shiftTime: { ...prev.shiftTime, rate: val }
-                              }));
-                            }
-                          }}
-                          className="w-28 text-right font-mono"
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium">
-                        ${lrcnCalculations.shiftTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Overtime</TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={bidRates.overtime.hours || ''}
-                          onChange={(e) => setBidRates(prev => ({
-                            ...prev,
-                            overtime: { ...prev.overtime, hours: parseFloat(e.target.value) || 0 }
-                          }))}
-                          className="w-24 text-right font-mono"
-                          placeholder="0"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          inputMode="decimal"
-                          value={bidRates.overtime.rate}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              setBidRates(prev => ({
-                                ...prev,
-                                overtime: { ...prev.overtime, rate: val }
-                              }));
-                            }
-                          }}
-                          className="w-28 text-right font-mono"
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium">
-                        ${lrcnCalculations.overtimeTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Double Time</TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={bidRates.doubleTime.hours || ''}
-                          onChange={(e) => setBidRates(prev => ({
-                            ...prev,
-                            doubleTime: { ...prev.doubleTime, hours: parseFloat(e.target.value) || 0 }
-                          }))}
-                          className="w-24 text-right font-mono"
-                          placeholder="0"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          inputMode="decimal"
-                          value={bidRates.doubleTime.rate}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              setBidRates(prev => ({
-                                ...prev,
-                                doubleTime: { ...prev.doubleTime, rate: val }
-                              }));
-                            }
-                          }}
-                          className="w-28 text-right font-mono"
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium">
-                        ${lrcnCalculations.doubleTimeTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Shop</TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={bidRates.shop.hours || ''}
-                          onChange={(e) => setBidRates(prev => ({
-                            ...prev,
-                            shop: { ...prev.shop, hours: parseFloat(e.target.value) || 0 }
-                          }))}
-                          className="w-24 text-right font-mono"
-                          placeholder="0"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          inputMode="decimal"
-                          value={bidRates.shop.rate}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                              setBidRates(prev => ({
-                                ...prev,
-                                shop: { ...prev.shop, rate: val }
-                              }));
-                            }
-                          }}
-                          className="w-28 text-right font-mono"
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-medium">
-                        ${lrcnCalculations.shopTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                    </TableRow>
+                    {([
+                      { key: 'straightTime' as const, label: 'Straight Time', totalKey: 'straightTotal' as const },
+                      { key: 'shiftTime' as const, label: 'Shift Time', totalKey: 'shiftTotal' as const },
+                      { key: 'overtime' as const, label: 'Overtime', totalKey: 'overtimeTotal' as const },
+                      { key: 'doubleTime' as const, label: 'Double Time', totalKey: 'doubleTimeTotal' as const },
+                      { key: 'shop' as const, label: 'Shop', totalKey: 'shopTotal' as const },
+                    ] as const).map(({ key, label, totalKey }) => {
+                      const entry = bidRates[key];
+                      const resolvedTotal = lrcnCalculations[totalKey];
+                      const hasUserTotal = entry.total !== undefined && entry.total !== '';
+                      return (
+                        <TableRow key={key}>
+                          <TableCell>{label}</TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={entry.hours || ''}
+                              onChange={(e) => {
+                                const newHours = parseFloat(e.target.value) || 0;
+                                setBidRates(prev => {
+                                  const prevEntry = prev[key];
+                                  // If there's a user-entered total, back-calculate rate from total / newHours
+                                  if (prevEntry.total !== undefined && prevEntry.total !== '' && newHours > 0) {
+                                    const totalVal = parseFloat(prevEntry.total) || 0;
+                                    return { ...prev, [key]: { ...prevEntry, hours: newHours, rate: String(totalVal / newHours) } };
+                                  }
+                                  return { ...prev, [key]: { ...prevEntry, hours: newHours } };
+                                });
+                              }}
+                              className="w-24 text-right font-mono"
+                              placeholder="0"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              inputMode="decimal"
+                              value={hasUserTotal ? (parseFloat(entry.rate) || 0).toFixed(2) : entry.rate}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                  // User is manually typing a rate — clear total so rate is source of truth
+                                  setBidRates(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], rate: val, total: undefined }
+                                  }));
+                                }
+                              }}
+                              className="w-28 text-right font-mono"
+                              placeholder="0.00"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              inputMode="decimal"
+                              value={hasUserTotal ? entry.total : resolvedTotal.toFixed(2)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                  const parsedTotal = parseFloat(val);
+                                  const hours = entry.hours;
+                                  // Back-calculate rate at full precision
+                                  const newRate = (!isNaN(parsedTotal) && hours > 0)
+                                    ? String(parsedTotal / hours)
+                                    : entry.rate;
+                                  setBidRates(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], total: val, rate: newRate }
+                                  }));
+                                }
+                              }}
+                              onBlur={() => {
+                                // On blur, if total is empty, clear it so computed value shows
+                                if (entry.total === '') {
+                                  setBidRates(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], total: undefined }
+                                  }));
+                                }
+                              }}
+                              className={`w-32 text-right font-mono ${hasUserTotal ? 'border-primary/50 bg-primary/5' : ''}`}
+                              placeholder={resolvedTotal.toFixed(2)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                     <TableRow className="border-t-2 font-bold bg-muted/50">
                       <TableCell>BID TOTAL</TableCell>
                       <TableCell className="text-right font-mono">{lrcnCalculations.totalHours.toLocaleString()}</TableCell>
@@ -3077,17 +2994,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               {/* LRCN Audit Breakdown Table */}
               {(() => {
                 const parseRate = (rate: string) => parseFloat(rate) || 0;
+                // Resolve authoritative bid dollars per row: entry.total ?? (hours × rate)
+                const resolveRowTotal = (entry: BidRate): number => {
+                  if (entry.total !== undefined && entry.total !== '') {
+                    const parsed = parseFloat(entry.total);
+                    if (!isNaN(parsed)) return parsed;
+                  }
+                  return entry.hours * parseRate(entry.rate);
+                };
                 const auditRows = [
-                  { label: 'Straight Time', hours: bidRates.straightTime.hours, bidRate: parseRate(bidRates.straightTime.rate), budgetRateVal: budgetRate },
-                  { label: 'Shift Time', hours: bidRates.shiftTime.hours, bidRate: parseRate(bidRates.shiftTime.rate), budgetRateVal: budgetRate },
-                  { label: 'Overtime', hours: bidRates.overtime.hours, bidRate: parseRate(bidRates.overtime.rate), budgetRateVal: budgetRate },
-                  { label: 'Double Time', hours: bidRates.doubleTime.hours, bidRate: parseRate(bidRates.doubleTime.rate), budgetRateVal: budgetRate },
-                  { label: 'Shop', hours: bidRates.shop.hours, bidRate: parseRate(bidRates.shop.rate), budgetRateVal: lrcnCalculations.shopRate },
+                  { label: 'Straight Time', entry: bidRates.straightTime, budgetRateVal: budgetRate },
+                  { label: 'Shift Time', entry: bidRates.shiftTime, budgetRateVal: budgetRate },
+                  { label: 'Overtime', entry: bidRates.overtime, budgetRateVal: budgetRate },
+                  { label: 'Double Time', entry: bidRates.doubleTime, budgetRateVal: budgetRate },
+                  { label: 'Shop', entry: bidRates.shop, budgetRateVal: lrcnCalculations.shopRate },
                 ];
-                const totalBid = auditRows.reduce((s, r) => s + r.hours * r.bidRate, 0);
-                const totalBudget = auditRows.reduce((s, r) => s + r.hours * r.budgetRateVal, 0);
+                const totalBid = auditRows.reduce((s, r) => s + resolveRowTotal(r.entry), 0);
+                const totalBudget = auditRows.reduce((s, r) => s + r.entry.hours * r.budgetRateVal, 0);
                 const totalDelta = totalBid - totalBudget;
-                const totalHours = auditRows.reduce((s, r) => s + r.hours, 0);
+                const totalHours = auditRows.reduce((s, r) => s + r.entry.hours, 0);
                 const deltaColor = (d: number) => d > 0.005 ? 'text-emerald-600 dark:text-emerald-400' : d < -0.005 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground';
                 const fmt = (n: number) => '$' + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -3109,14 +3034,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                         </TableHeader>
                         <TableBody>
                           {auditRows.map((row) => {
-                            const bidDollars = row.hours * row.bidRate;
-                            const budgetDollars = row.hours * row.budgetRateVal;
+                            const bidDollars = resolveRowTotal(row.entry);
+                            const budgetDollars = row.entry.hours * row.budgetRateVal;
                             const delta = bidDollars - budgetDollars;
+                            const displayRate = parseRate(row.entry.rate);
                             return (
                               <TableRow key={row.label}>
                                 <TableCell className="text-xs font-medium py-2">{row.label}</TableCell>
-                                <TableCell className="text-xs text-right font-mono py-2">{row.hours.toLocaleString()}</TableCell>
-                                <TableCell className="text-xs text-right font-mono py-2">${row.bidRate.toFixed(2)}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">{row.entry.hours.toLocaleString()}</TableCell>
+                                <TableCell className="text-xs text-right font-mono py-2">${displayRate.toFixed(2)}</TableCell>
                                 <TableCell className="text-xs text-right font-mono py-2">{fmt(bidDollars)}</TableCell>
                                 <TableCell className="text-xs text-right font-mono py-2 bg-primary/5">${row.budgetRateVal.toFixed(2)}</TableCell>
                                 <TableCell className="text-xs text-right font-mono py-2 bg-primary/5">{fmt(budgetDollars)}</TableCell>
