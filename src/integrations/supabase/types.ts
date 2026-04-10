@@ -685,6 +685,38 @@ export type Database = {
         }
         Relationships: []
       }
+      project_budget_settings: {
+        Row: {
+          id: string
+          project_id: string
+          settings_key: string
+          settings_value: Json
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          settings_key: string
+          settings_value?: Json
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          settings_key?: string
+          settings_value?: Json
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_budget_settings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_small_code_merges: {
         Row: {
           cost_head: string
