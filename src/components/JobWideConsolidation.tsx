@@ -105,11 +105,12 @@ export const JobWideConsolidation: React.FC<JobWideConsolidationProps> = ({
       // Create a merge record for each section instance
       const targetSec = codeFormatMode === 'multitrade' ? tradePrefix : candidate.sections[0]?.sec || '01';
       
-      const records = candidate.sections.map(s => ({
+      const uniqueSecs = [...new Set(candidate.sections.map(s => s.sec))];
+      const records = uniqueSecs.map(sec => ({
         project_id: projectId,
-        sec_code: s.sec,
+        sec_code: sec,
         cost_head: candidate.head,
-        reassign_to_head: candidate.head, // Same head, just consolidated
+        reassign_to_head: candidate.head,
         merged_act: JOB_WIDE_MARKER,
       }));
 
