@@ -1496,11 +1496,33 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       } else {
         // Standard merge to 0000
         if (matchingKeys.length < 1) return;
-        const group = matchingKeys.map(k => result[k]);
+
+        // Guard: Never consume codes with real location activities.
+        // SITE/00ST = Site section (user-assigned, never fold).
+        // Above-threshold non-fallback activities = building codes (00BD, 00B1, etc.)
+        // that represent deliberate multitrade location assignments.
+        // Only consume: 0000-activity target, known transient fallback activities,
+        // and genuinely sub-threshold floor codes (the original small-code intent).
+        const safeMatchingKeys = matchingKeys.filter(k => {
+          const kParts = k.trim().split(/\s+/);
+          const kAct = kParts.length >= 3 ? kParts[1] : '0000';
+          // ST (Site) is a real user-assigned section — never merge it away
+          if (kAct === 'SITE' || kAct === '00ST') return false;
+          // Always include the 0000-activity merge target
+          if (kAct === '0000') return true;
+          // Include known transient fallback activities (00CS, 00UG, 00RF, 00AG)
+          if (FALLBACK_ACTIVITY_CODES.has(kAct)) return true;
+          // All other activities: only include if below threshold.
+          // This protects real building codes (00BD, 00B1, etc.) with meaningful hours.
+          return (result[k]?.hours ?? 0) < minHoursThreshold;
+        });
+
+        if (safeMatchingKeys.length < 1) return;
+        const group = safeMatchingKeys.map(k => result[k]);
         const mergedHours = group.reduce((s, i) => s + (i.hours ?? 0), 0);
         const mergedDollars = group.reduce((s, i) => s + (i.dollars ?? 0), 0);
         const mergedCode = `${sec} ${merge.merged_act} ${head}`;
-        matchingKeys.forEach(k => delete result[k]);
+        safeMatchingKeys.forEach(k => delete result[k]);
         if (result[mergedCode]) {
           result[mergedCode] = {
             ...result[mergedCode],
