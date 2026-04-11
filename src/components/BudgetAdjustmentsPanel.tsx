@@ -1512,9 +1512,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           if (kAct === '0000') return true;
           // Include known transient fallback activities (00CS, 00UG, 00RF, 00AG)
           if (FALLBACK_ACTIVITY_CODES.has(kAct)) return true;
-          // All other activities: only include if below threshold.
-          // This protects real building codes (00BD, 00B1, etc.) with meaningful hours.
-          return (result[k]?.hours ?? 0) < minHoursThreshold;
+          // All other activities: include in merge.
+          // Building codes (00BD, 00B1, etc.) should consolidate when a merge rule exists.
+          // The only protected activity is SITE/00ST (hardcoded above).
+          return true;
         });
 
         if (safeMatchingKeys.length < 1) return;
