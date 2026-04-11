@@ -519,6 +519,11 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   // Track whether we've loaded DB settings for this project
   const settingsLoadedForRef = useRef<string | null>(null);
 
+  // Fix B: reset settingsLoadedForRef on unmount so remounts re-hydrate from DB
+  useEffect(() => {
+    return () => { settingsLoadedForRef.current = null; };
+  }, []);
+
   // Load settings from DB (or localStorage fallback) when dbSettings arrive or projectId changes
   useEffect(() => {
     if (settingsLoading) return;
@@ -671,6 +676,13 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // ── DB-backed persistence effects (replace all localStorage-only effects) ──
   // Each setting change writes to both localStorage (instant) and DB (debounced 500ms)
   const settingsInitializedRef = useRef(false);
+
+  // Fix B: reset settingsInitializedRef when projectId changes so save effects
+  // don't fire during the load cycle of a new project
+  useEffect(() => {
+    settingsInitializedRef.current = false;
+  }, [projectId]);
+
   useEffect(() => {
     // Skip the very first render cycle — state is populated by the DB load effect above
     if (!settingsInitializedRef.current) {
