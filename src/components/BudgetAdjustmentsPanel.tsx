@@ -470,6 +470,61 @@ const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
   SEQP: '',
 };
 
+// Material spec → fab code lookup (pattern-based, order matters)
+const MATERIAL_SPEC_TO_FAB_CODE: Array<{ pattern: RegExp; fabCode: string }> = [
+  { pattern: /^CI\b|cast\s+iron/i,                                              fabCode: 'CSTI' },
+  { pattern: /^copper/i,                                                         fabCode: 'COPR' },
+  { pattern: /^CS\s|carbon\s+steel/i,                                           fabCode: 'CRBN' },
+  { pattern: /^ABS|^PP\s|^PVDF|^PE\s+Butt|^CPVC|butt\s+fusion|polyprop|polyethylene/i, fabCode: 'PLST' },
+];
+
+function getFabCodeFromSpec(materialSpec: string): string | null {
+  if (!materialSpec || materialSpec.trim() === 'No Matl Spec') return null;
+  for (const { pattern, fabCode } of MATERIAL_SPEC_TO_FAB_CODE) {
+    if (pattern.test(materialSpec.trim())) return fabCode;
+  }
+  return null;
+}
+
+// For a given cost head, find the dominant fab code suggestion from estimate items
+function getDominantFabCode(
+  costHead: string,
+  estimateData: EstimateItem[]
+): { fabCode: string; specName: string; confidence: number } | null {
+  const hoursByFabCode: Record<string, { hours: number; specName: string }> = {};
+  let totalHours = 0;
+
+  estimateData.forEach(item => {
+    const itemHead = (item.costCode || '').trim().split(/\s+/).pop() || '';
+    if (itemHead !== costHead) return;
+    const hours = item.hours || 0;
+    if (hours <= 0) return;
+    const spec = (item.materialSpec || '').trim();
+    const fabCode = getFabCodeFromSpec(spec);
+    if (!fabCode) return;
+    if (!hoursByFabCode[fabCode]) {
+      hoursByFabCode[fabCode] = { hours: 0, specName: spec };
+    }
+    hoursByFabCode[fabCode].hours += hours;
+    totalHours += hours;
+  });
+
+  if (Object.keys(hoursByFabCode).length === 0) return null;
+
+  const dominant = Object.entries(hoursByFabCode).reduce((best, [code, data]) =>
+    data.hours > best.hours ? { fabCode: code, hours: data.hours, specName: data.specName } : best,
+    { fabCode: '', hours: 0, specName: '' }
+  );
+
+  if (!dominant.fabCode) return null;
+
+  return {
+    fabCode: dominant.fabCode,
+    specName: dominant.specName,
+    confidence: totalHours > 0 ? dominant.hours / totalHours : 0,
+  };
+}
+
 const FAB_COST_HEAD_DESCRIPTIONS: Record<string, string> = {
   COPR: 'FABRICATION - COPPER',
   CSTF: 'FABRICATION - CAST IRON',
@@ -2745,6 +2800,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       ...prev,
       [code]: { enabled, percentage: prev[code]?.percentage || 15 }
     }));
+
+    // Auto-suggest fab routing when enabling — only if not already set by user
+    if (enabled && !fabCodeMap[code]) {
+      const suggestion = getDominantFabCode(code, estimateData);
+      if (suggestion) {
+        setFabCodeMap(prev => ({ ...prev, [code]: suggestion.fabCode }));
+        toast({
+          title: `Fab routing auto-suggested: ${code} → ${suggestion.fabCode}`,
+          description: `Based on dominant material spec "${suggestion.specName}" (${Math.round(suggestion.confidence * 100)}% of hours). Override in Fab Material Routing if needed.`,
+        });
+      }
+    }
+
+    // Clear routing when disabling so it doesn't persist stale suggestions
+    if (!enabled) {
+      setFabCodeMap(prev => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
+    }
   };
 
   const setFabPercentForCode = (code: string, percentage: number) => {
@@ -3364,6 +3440,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               <div className="text-xs text-muted-foreground">→ {assembledCode}</div>
                             </TableCell>
                             <TableCell>
+                              {(() => {
+                                const suggestion = getDominantFabCode(costHead, estimateData);
+                                if (!suggestion || suggestion.fabCode === currentFabCostHead) return null;
+                                return (
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span className="text-xs text-blue-500">
+                                      ⚡ Suggested: <strong>{suggestion.fabCode}</strong>
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      — {suggestion.specName} ({Math.round(suggestion.confidence * 100)}% of hrs)
+                                    </span>
+                                    <button
+                                      onClick={() => setFabCodeMap(prev => ({ ...prev, [costHead]: suggestion.fabCode }))}
+                                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                    >
+                                      Apply
+                                    </button>
+                                  </div>
+                                );
+                              })()}
                               <select
                                 value={currentFabCostHead}
                                 onChange={(e) => {
