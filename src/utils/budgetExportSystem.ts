@@ -1047,6 +1047,53 @@ export function exportAuditReport(
   }
   const materialSummary = aggregateMaterialByCostCode(items);
 
+  // Build contingency lines — must match Budget Packet exactly
+  const contingencyLines: Array<[string, string, number]> = [];
+
+  if (budgetAdjustments?.foremanBonusEnabled && (budgetAdjustments.foremanBonusDollars ?? 0) > 0) {
+    contingencyLines.push([
+      'GC 0000 FCNT',
+      `FIELD BONUS CONTINGENCY ${budgetAdjustments.foremanBonusPercent}% - STRIP OF FIELD LABOR`,
+      Math.round(budgetAdjustments.foremanBonusDollars * 100) / 100,
+    ]);
+  }
+
+  if (budgetAdjustments?.laborRateContingencyEnabled && (budgetAdjustments.lrcnAmount ?? 0) > 0) {
+    contingencyLines.push([
+      '01 0000 LRCN',
+      'LABOR RATE CONTINGENCY',
+      Math.round(budgetAdjustments.lrcnAmount * 100) / 100,
+    ]);
+  }
+
+  if (budgetAdjustments?.laborRateContingencyEnabled) {
+    const bidShopHours = budgetAdjustments.bidRates?.shop?.hours || 0;
+    const budgetFabHours = budgetAdjustments.totalFabHours || 0;
+    const shopBidRate = budgetAdjustments.shopRate || 0;
+    if (bidShopHours > 0 && budgetFabHours > 0 && shopBidRate > 0) {
+      const gcFabContAmount = (bidShopHours - budgetFabHours) * shopBidRate;
+      if (gcFabContAmount > 0) {
+        contingencyLines.push([
+          'GC 0FAB CONT',
+          'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY',
+          Math.round(gcFabContAmount * 100) / 100,
+        ]);
+      }
+    }
+  }
+
+  if (budgetAdjustments?.fabLrcnEnabled && (budgetAdjustments.fabLrcnAmount ?? 0) > 0) {
+    contingencyLines.push([
+      'MA 0FAB LRCN',
+      'FAB LABOR RATE CONTINGENCY',
+      Math.round(budgetAdjustments.fabLrcnAmount * 100) / 100,
+    ]);
+  }
+
+  const rawMaterialTotal = materialSummary.reduce((s, m) => s + m.materialDollars, 0);
+  const contingencyTotal = contingencyLines.reduce((s, l) => s + l[2], 0);
+  const totalMaterialAudit = rawMaterialTotal + contingencyTotal;
+
   const summaryData = [
     ['LABOR SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Hours', 'Labor $', 'Items'],
@@ -1055,11 +1102,20 @@ export function exportAuditReport(
     ['MATERIAL SUMMARY BY COST CODE'],
     ['Cost Code', 'Description', 'Material $', 'Items'],
     ...materialSummary.map(m => [m.costCode, m.description, Math.round(m.materialDollars * 100) / 100, m.itemCount]),
+    ...(contingencyLines.length > 0 ? [
+      [],
+      ['CONTINGENCY LINES'],
+      ['Cost Code', 'Description', 'Amount'],
+      ...contingencyLines.map(l => [l[0], l[1], l[2]]),
+    ] : []),
     [],
     ['TOTALS'],
     ['Total Labor Hours:', Math.round(laborSummaryRows.reduce((s, l) => s + l.hours, 0))],
     ['Total Labor $:', Math.round(laborSummaryRows.reduce((s, l) => s + l.laborDollars, 0) * 100) / 100],
-    ['Total Material $:', Math.round(materialSummary.reduce((s, m) => s + m.materialDollars, 0) * 100) / 100],
+    ['Total Material $ (ex. contingency):', Math.round(rawMaterialTotal * 100) / 100],
+    ['Total Contingency $:', Math.round(contingencyTotal * 100) / 100],
+    ['Total Material $ (inc. contingency):', Math.round(totalMaterialAudit * 100) / 100],
+    ['GRAND TOTAL $:', Math.round((laborSummaryRows.reduce((s, l) => s + l.laborDollars, 0) + totalMaterialAudit) * 100) / 100],
   ];
 
   const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
