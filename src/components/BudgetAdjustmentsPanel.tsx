@@ -425,49 +425,27 @@ const getBgpdFallback = (sourceSystems: Set<string>): string => {
 
 // Maps field labor cost heads → fabrication material cost head
 const DEFAULT_FAB_CODE_MAP: Record<string, string> = {
-  // Cast Iron → CSTF
-  SNWV: 'CSTF',
-  STRM: 'CSTF',
-  BGWV: 'CSTF',
-  OVFL: 'CSTF',
-  GRWV: 'CSTF',
-  CSTI: 'CSTF',
-  // Copper → COPR
-  DWTR: 'COPR',
-  HWTR: 'COPR',
-  RCLM: 'COPR',
-  COPR: 'COPR',
-  // Carbon Steel / Threaded → CRBN
-  NGAS: 'CRBN',
-  MGAS: 'CRBN',
-  FIRE: 'CRBN',
-  STEL: 'CRBN',
-  COND: 'CRBN',
-  // Hangers → HFBS (Hanger Fab Sheets)
-  HNGS: 'HFBS',
-  SUPP: 'HFBS',
-  // Stainless → SSTL
-  SSTL: 'SSTL',
-  ACID: 'SSTL',
-  // Plastic / CPVC → PLST
-  PLST: 'PLST',
-  CPVC: 'PLST',
-  AWST: 'PLST',
-  BGSD: 'CSTF',
-  BGNG: 'CRBN',
-  BGAW: 'PLST',
-  BGTP: 'COPR',
-  BGWT: 'COPR',
-  BGCN: 'CRBN',
-  BGPD: 'CSTF',
-  INDR: 'CSTF',
-  TRAP: 'COPR',
-  PMPD: 'CSTF',
-  WATR: 'COPR',
-  FNSH: 'FNSH',
-  FOVT: 'FUEL',
+  // Fixed routing — material-independent, always correct regardless of job
+  HNGS: 'HNGS',  // Hangers always route to hanger fab
+  SUPP: 'HNGS',  // Supports same as hangers
+  NGAS: 'CRBN',  // Gas pipe is always carbon steel
+  MGAS: 'CRBN',  // Medium pressure gas — always carbon steel
+  FNSH: 'FNSH',  // Fixtures always route to finish fab
+  FIRE: 'CRBN',  // Fire protection — always carbon steel
+
+  // Spec-dependent — these are intentionally left empty so the
+  // auto-suggest engine reads materialSpec from the estimate.
+  // Do NOT add entries here that vary by job material selection.
+  // SNWV, STRM, BGWV, BGWT, BGSD, BGNG, BGAW, BGPD, BGTP,
+  // WATR, DWTR, COND, AWST, RCLM, TRAP, PMPD, INDR — all spec-dependent.
+
+  // No-fab codes — fab strip should never be enabled on these
+  // but if it is, route to empty so UI warning fires
   DEMO: '',
   SEQP: '',
+  PIDV: '',
+  SLVS: '',
+  DRNS: '',
 };
 
 // Material spec → fab code lookup (pattern-based, order matters)
