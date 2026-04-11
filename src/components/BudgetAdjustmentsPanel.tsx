@@ -558,6 +558,12 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
     setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
 
+    // All setState calls complete — defer setting initialized=true until AFTER
+    // React processes the re-render so save effects skip the load-triggered updates
+    setTimeout(() => {
+      settingsInitializedRef.current = true;
+    }, 0);
+
     // Auto-migrate: if DB was empty but localStorage had data, persist to DB
     if (Object.keys(dbSettings).length === 0) {
       if (import.meta.env.DEV) console.log('[BudgetAdjustments] Auto-migrating localStorage to DB');
@@ -681,15 +687,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // don't fire during the load cycle of a new project
   useEffect(() => {
     settingsInitializedRef.current = false;
+    settingsLoadedForRef.current = null;
   }, [projectId]);
 
   useEffect(() => {
-    // Skip the very first render cycle — state is populated by the DB load effect above
-    if (!settingsInitializedRef.current) {
-      settingsInitializedRef.current = true;
-      return;
-    }
-    if (!projectId || projectId === 'default') return;
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
     saveSetting('zip', jobsiteZipCode);
   }, [jobsiteZipCode]);
 
