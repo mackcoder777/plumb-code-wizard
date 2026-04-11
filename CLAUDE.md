@@ -591,3 +591,27 @@ Format: SEC ACT COSTHEAD | Description | # of Hours | Rate | Total Cost
 This document is the authoritative reference for all development on this codebase. All code
 changes must be verified against the QC checklist in Section 17. All changes must comply
 with the architectural rules in Section 16.
+
+20. PM Authority Rule
+
+THE PM IS ALWAYS THE SOURCE OF ANY CODE ASSIGNMENT.
+
+- System → cost head mapping: user assigns only.
+  Auto-suggest may surface recommendations. No silent assignment.
+- If a system has no mapping, route to uncoded state. Never fall back
+  to a guessed code.
+- No hardcoded cost head defaults anywhere in the pipeline.
+- This rule cannot be overridden by any convenience feature.
+
+Every time a fix touches cost head assignment logic, this rule gets checked first.
+If the fix silently assigns anything, it gets rejected before any other review.
+
+21. Technical Debt Log
+
+- floor_section_mappings table lacks a building_identifier column. The only way to
+  associate a floor mapping with a building is by parsing the floor_pattern string
+  with a regex. When naming doesn't follow the "Bldg X - ..." convention (e.g.,
+  "Modular Bldgs - Level 1"), the regex fails. A pragmatic fallback (match
+  activity_code to building_identifier) is in place. The true fix is adding
+  building_identifier as an optional FK column to floor_section_mappings, making the
+  association explicit. When present, use it directly; when null, fall back to regex.
