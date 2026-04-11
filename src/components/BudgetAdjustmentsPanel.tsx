@@ -486,11 +486,27 @@ function getFabCodeFromSpec(materialSpec: string): string | null {
   return null;
 }
 
+// Fixed fab routing — these cost heads always route to a specific fab code
+// regardless of material spec. Not spec-dependent.
+const FIXED_FAB_ROUTING: Record<string, string> = {
+  HNGS: 'HNGS',
+  SZMC: 'HNGS',
+  PIDV: 'HNGS',
+  SLVS: 'HNGS',
+};
+
 // For a given cost head, find the dominant fab code suggestion from estimate items
 function getDominantFabCode(
   costHead: string,
   estimateData: EstimateItem[]
 ): { fabCode: string; specName: string; confidence: number } | null {
+  if (FIXED_FAB_ROUTING[costHead]) {
+    return {
+      fabCode: FIXED_FAB_ROUTING[costHead],
+      specName: 'Fixed routing — not spec-dependent',
+      confidence: 1.0,
+    };
+  }
   const hoursByFabCode: Record<string, { hours: number; specName: string }> = {};
   let totalHours = 0;
 
