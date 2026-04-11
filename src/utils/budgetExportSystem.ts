@@ -622,6 +622,30 @@ export function exportBudgetPacket(
     materialRowIndex++;
   }
 
+  // Add GC 0FAB CONT — unbudgeted shop hour volume contingency
+  // Captures the dollar gap between bid shop hours and budget fab hours produced.
+  // Only written when: LRCN is enabled (bid shop hours entered), fab strip is
+  // producing hours, and bid shop hours exceed budget fab hours (positive gap only).
+  if (budgetAdjustments?.laborRateContingencyEnabled) {
+    const bidShopHours = budgetAdjustments.bidRates?.shop?.hours || 0;
+    const budgetFabHours = budgetAdjustments.totalFabHours || 0;
+    const shopBidRate = budgetAdjustments.shopRate || 0;
+
+    if (bidShopHours > 0 && budgetFabHours > 0 && shopBidRate > 0) {
+      const unbudgetedHours = bidShopHours - budgetFabHours;
+      const gcFabContAmount = unbudgetedHours * shopBidRate;
+
+      if (gcFabContAmount > 0) {
+        const gcFabContRow = MATERIAL_START_ROW + materialRowIndex;
+        ws[`B${gcFabContRow}`] = { t: 's', v: 'GC 0FAB CONT' };
+        ws[`D${gcFabContRow}`] = { t: 's', v: 'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY' };
+        ws[`H${gcFabContRow}`] = { t: 'n', v: Math.round(gcFabContAmount * 100) / 100, z: '#,##0.00' };
+        totalMaterialDollars += gcFabContAmount;
+        materialRowIndex++;
+      }
+    }
+  }
+
   const grandTotal = totalLaborDollars + totalMaterialDollars;
   const SUMMARY_BOX_ROW = MATERIAL_START_ROW + 2;
   ws[`J${SUMMARY_BOX_ROW}`] = { t: 's', v: 'TOTAL COST' };
