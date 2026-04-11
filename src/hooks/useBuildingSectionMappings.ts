@@ -310,10 +310,19 @@ export function resolveFloorMappingStatic(
     if (zonePatternMatch) {
       const canonicalSection = getCanonicalSectionForBuilding(zonePatternMatch.building_identifier, floorMappings, buildingMappings);
       // Pull activity from floor mapping for this building (e.g., "Bldg MOD - ..." entry has activity_code = "0MOD")
-      const buildingFloorMatch = floorMappings.find(fm => {
+      let buildingFloorMatch = floorMappings.find(fm => {
         const m = (fm.floor_pattern || '').match(/^bldg\s+([A-Z0-9]+)\s*-/i);
         return m && m[1].toUpperCase() === zonePatternMatch.building_identifier.toUpperCase();
       });
+      // Fallback: match floor mapping whose activity_code equals the building identifier
+      // (handles non-standard naming like "Modular Bldgs - Level 1" with activity_code "MOD")
+      if (!buildingFloorMatch) {
+        const targetId = zonePatternMatch.building_identifier.toUpperCase().replace(/^0+/, '');
+        buildingFloorMatch = floorMappings.find(fm =>
+          fm.activity_code &&
+          fm.activity_code.toUpperCase().replace(/^0+/, '') === targetId
+        );
+      }
       const activity = buildingFloorMatch?.activity_code
         ? normalizeActivityCode(buildingFloorMatch.activity_code)
         : floorActivity;
