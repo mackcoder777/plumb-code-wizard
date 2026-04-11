@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { toast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -63,6 +64,8 @@ export function useBudgetSettings(projectId: string | undefined) {
   const saveSetting = useCallback(
     (key: SettingsKey, value: unknown) => {
       if (!projectId || projectId === 'default') return;
+      // Fix A: skip null/undefined writes — settings_value is NOT NULL jsonb
+      if (value === null || value === undefined) return;
 
       // Immediate localStorage cache
       localStorage.setItem(`budget_${key}_${projectId}`, typeof value === 'string' ? value : JSON.stringify(value));
@@ -90,9 +93,16 @@ export function useBudgetSettings(projectId: string | undefined) {
               },
               { onConflict: 'project_id,settings_key' }
             );
-          if (error) console.error(`Failed to save setting ${key}:`, error);
+          if (error) {
+            console.error(`Failed to save setting ${key}:`, error);
+            toast({ title: 'Failed to save setting', description: key, variant: 'destructive' });
+            // Revert optimistic update
+            queryClient.invalidateQueries({ queryKey });
+          }
         } catch (err) {
           console.error(`Failed to save setting ${key}:`, err);
+          toast({ title: 'Failed to save setting', description: key, variant: 'destructive' });
+          queryClient.invalidateQueries({ queryKey });
         }
       }, 500);
     },
