@@ -4445,7 +4445,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
                   {/* ── STANDALONE CODES TAB ── */}
                   {smallCodeTab === 'standalone' && (
-                    standaloneGroups.length === 0 ? (
+                    standaloneGroups.length === 0 && inExportRows.length === 0 && savedOnlyRows.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-4">
                         No standalone codes below the hour threshold.
                       </p>
