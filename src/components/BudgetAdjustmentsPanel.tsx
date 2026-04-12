@@ -2157,20 +2157,26 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const getDefaultAction = (lines: Array<{ code: string; hours: number; isSmall: boolean }>) => {
     const MIN_HOURS = minHoursThreshold;
 
-    // Standalone small codes: default to reassign since there's nothing to merge/redistribute within
     if (lines.length === 1) {
       return { action: '__reassign__' as const, targets: undefined, reason: 'Auto: standalone code — reassign to another cost head' };
     }
 
-    const underMin = lines.filter(l => l.hours < MIN_HOURS);
-    const donors = lines.filter(l => l.hours > MIN_HOURS);
+    // Filter out zero-hour ghost lines — they inflate the deficit without real hours
+    // e.g. 00CS fallback entries that exist in the pipeline but carry 0h
+    const liveLines = lines.filter(l => l.hours > 0);
+    if (liveLines.length <= 1) {
+      return { action: '__merge__' as const, targets: undefined, reason: 'Auto: only one live activity — merge' };
+    }
+
+    const underMin = liveLines.filter(l => l.hours < MIN_HOURS);
+    const donors = liveLines.filter(l => l.hours > MIN_HOURS);
     const deficit = underMin.reduce((sum, l) => sum + (MIN_HOURS - l.hours), 0);
     const totalExcess = donors.reduce((sum, l) => sum + (l.hours - MIN_HOURS), 0);
 
     if (donors.length > 0 && totalExcess >= deficit) {
       const targets: Record<string, number> = {};
       const toActKey = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
-      lines.forEach(l => { targets[toActKey(l.code)] = l.hours; });
+      liveLines.forEach(l => { targets[toActKey(l.code)] = l.hours; });
       underMin.forEach(l => { targets[toActKey(l.code)] = MIN_HOURS; });
       donors.forEach(l => {
         const contribution = deficit * ((l.hours - MIN_HOURS) / totalExcess);
