@@ -1422,15 +1422,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           redistEntries.forEach(([actCode, delta]) => {
             const isFullCode = actCode.includes(' ');
             const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            // Match on parsed key segments, not mutable .code field
+            // This survives section alias normalization and fallback folding
             const matchKey =
-              matchingKeys.find((k) => (result[k]?.code ?? '').trim() === fullCode) ?? fullCode;
+              matchingKeys.find((k) => {
+                if (isFullCode) {
+                  const kParts = k.trim().split(/\s+/);
+                  const fParts = fullCode.trim().split(/\s+/);
+                  return kParts[0] === fParts[0] && kParts[1] === fParts[1] && kParts.slice(2).join(' ') === fParts.slice(2).join(' ');
+                }
+                const kParts = k.trim().split(/\s+/);
+                return kParts[0] === sec && kParts[1] === actCode && kParts.slice(2).join(' ') === head;
+              }) ?? fullCode;
             if (result[matchKey]) {
               remappedAdj[matchKey] = (remappedAdj[matchKey] ?? 0) + (delta as number);
               return;
             }
             // Find a live key with same section and cost head, different activity
             const fallback = Object.keys(result).find(lk => {
-              const lkParts = (result[lk]?.code ?? '').trim().split(/\s+/);
+              const lkParts = lk.trim().split(/\s+/);
               return lkParts[0] === sec && lkParts.slice(2).join(' ') === head;
             });
             if (fallback) {
@@ -1461,10 +1471,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           redistEntries.forEach(([actCode, delta]) => {
             const isFullCode = actCode.includes(' ');
             const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            // Match on parsed key segments, not mutable .code field
             const matchKey =
-              matchingKeys.find(
-                (k) => (result[k].code ?? '').trim() === fullCode
-              ) ?? fullCode;
+              matchingKeys.find((k) => {
+                if (isFullCode) {
+                  const kParts = k.trim().split(/\s+/);
+                  const fParts = fullCode.trim().split(/\s+/);
+                  return kParts[0] === fParts[0] && kParts[1] === fParts[1] && kParts.slice(2).join(' ') === fParts.slice(2).join(' ');
+                }
+                const kParts = k.trim().split(/\s+/);
+                return kParts[0] === sec && kParts[1] === actCode && kParts.slice(2).join(' ') === head;
+              }) ?? fullCode;
             const rate = result[matchKey].hours > 0
               ? result[matchKey].dollars / result[matchKey].hours
               : 0;
