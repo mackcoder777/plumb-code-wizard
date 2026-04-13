@@ -1422,15 +1422,25 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           redistEntries.forEach(([actCode, delta]) => {
             const isFullCode = actCode.includes(' ');
             const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            // Match on parsed key segments, not mutable .code field
+            // This survives section alias normalization and fallback folding
             const matchKey =
-              matchingKeys.find((k) => (result[k]?.code ?? '').trim() === fullCode) ?? fullCode;
+              matchingKeys.find((k) => {
+                if (isFullCode) {
+                  const kParts = k.trim().split(/\s+/);
+                  const fParts = fullCode.trim().split(/\s+/);
+                  return kParts[0] === fParts[0] && kParts[1] === fParts[1] && kParts.slice(2).join(' ') === fParts.slice(2).join(' ');
+                }
+                const kParts = k.trim().split(/\s+/);
+                return kParts[0] === sec && kParts[1] === actCode && kParts.slice(2).join(' ') === head;
+              }) ?? fullCode;
             if (result[matchKey]) {
               remappedAdj[matchKey] = (remappedAdj[matchKey] ?? 0) + (delta as number);
               return;
             }
             // Find a live key with same section and cost head, different activity
             const fallback = Object.keys(result).find(lk => {
-              const lkParts = (result[lk]?.code ?? '').trim().split(/\s+/);
+              const lkParts = lk.trim().split(/\s+/);
               return lkParts[0] === sec && lkParts.slice(2).join(' ') === head;
             });
             if (fallback) {
@@ -1461,10 +1471,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           redistEntries.forEach(([actCode, delta]) => {
             const isFullCode = actCode.includes(' ');
             const fullCode = isFullCode ? actCode : `${sec} ${actCode} ${head}`;
+            // Match on parsed key segments, not mutable .code field
             const matchKey =
-              matchingKeys.find(
-                (k) => (result[k].code ?? '').trim() === fullCode
-              ) ?? fullCode;
+              matchingKeys.find((k) => {
+                if (isFullCode) {
+                  const kParts = k.trim().split(/\s+/);
+                  const fParts = fullCode.trim().split(/\s+/);
+                  return kParts[0] === fParts[0] && kParts[1] === fParts[1] && kParts.slice(2).join(' ') === fParts.slice(2).join(' ');
+                }
+                const kParts = k.trim().split(/\s+/);
+                return kParts[0] === sec && kParts[1] === actCode && kParts.slice(2).join(' ') === head;
+              }) ?? fullCode;
             const rate = result[matchKey].hours > 0
               ? result[matchKey].dollars / result[matchKey].hours
               : 0;
@@ -3910,6 +3927,50 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     })}
                 </div>
               )}
+
+              {(() => {
+                // Detect saved redistributions where finalLaborSummary still has sub-threshold rows
+                const failedRedistKeys = (savedMergesData ?? []).filter(m => {
+                  if (!m.redistribute_adjustments || Object.keys(m.redistribute_adjustments as object).length === 0) return false;
+                  const sec = (m.sec_code || '').trim();
+                  const head = (m.cost_head || '').trim();
+                  return Object.entries(finalLaborSummary ?? {}).some(([k, e]) => {
+                    const kParts = k.trim().split(/\s+/);
+                    return kParts[0] === sec && kParts.slice(2).join(' ') === head && ((e as any).rawHours ?? e.hours ?? 0) < minHoursThreshold && ((e as any).rawHours ?? e.hours ?? 0) > 0.05;
+                  });
+                });
+                if (failedRedistKeys.length === 0) return null;
+                return (
+                  <div className="mb-3 flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
+                    <span className="mt-0.5 shrink-0 text-destructive">⚠️</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-destructive">
+                        {failedRedistKeys.length} saved redistribution{failedRedistKeys.length > 1 ? 's' : ''} did not achieve the {minHoursThreshold}h minimum
+                      </p>
+                      <p className="mt-0.5 text-xs text-destructive/80">
+                        These were computed with stale data. Undo and re-apply auto-resolve to fix:
+                        {' '}<span className="font-mono">{failedRedistKeys.map(m => `${m.sec_code}|${m.cost_head}`).join(', ')}</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const ids = failedRedistKeys.map(m => m.id);
+                        const { error } = await supabase
+                          .from('project_small_code_merges')
+                          .delete()
+                          .in('id', ids);
+                        if (!error) {
+                          queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+                          toast({ title: `Cleared ${ids.length} failed redistribution${ids.length > 1 ? 's' : ''}`, description: 'Re-apply auto-resolve to rebuild with correct deltas.' });
+                        }
+                      }}
+                      className="shrink-0 rounded bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Clear &amp; rebuild
+                    </button>
+                  </div>
+                );
+              })()}
 
               {staleMergeUpdates.filter(Boolean).length > 0 && (
                 <div className="mb-3 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
