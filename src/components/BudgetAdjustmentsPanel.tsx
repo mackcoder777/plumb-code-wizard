@@ -4235,44 +4235,56 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                         const netDelta = row.lines.reduce((s, l) => s + (getTarget(l) - l.hours), 0);
                                         const isBalanced = Math.abs(netDelta) < 0.01;
                                         const MIN_HOURS = minHoursThreshold;
-                                        const handleAutoRebalance = () => {
-                                          const deficit = row.lines.reduce((s, l) => s + Math.max(0, MIN_HOURS - l.hours), 0);
-                                          const donors = row.lines.filter(l => l.hours > MIN_HOURS);
-                                          const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
-                                          const newTargets: Record<string, number> = {};
-                                          const toActKey2 = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
-                                          if (totalExcess <= 0) {
-                                            row.lines.forEach(l => { newTargets[toActKey2(l.code)] = l.hours; });
-                                          } else {
-                                            const actualDeficit = Math.min(deficit, totalExcess);
-                                            // Round deficit lines up to whole numbers (minimum target 8h)
-                                            const deficitLines = row.lines.filter(l => l.hours < MIN_HOURS);
-                                            const donorLines = row.lines.filter(l => l.hours >= MIN_HOURS);
-                                            deficitLines.forEach(l => {
-                                              const need = MIN_HOURS - l.hours;
-                                              const raw = l.hours + Math.min(need, need * (actualDeficit / deficit));
-                                              newTargets[toActKey2(l.code)] = Math.ceil(raw);
-                                            });
-                                            // Compute how many hours were actually added after rounding
-                                            const actualAdded = deficitLines.reduce(
-                                              (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
-                                            );
-                                            // Round donor lines down to whole numbers
-                                            donorLines.forEach(l => {
-                                              const contribution = l.hours * (actualAdded / totalExcess);
-                                              newTargets[toActKey2(l.code)] = Math.floor(l.hours - contribution);
-                                            });
-                                            // Fix residual: sum of all deltas must be zero
-                                            const rebalanceNet = [...deficitLines, ...donorLines].reduce(
-                                              (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
-                                            );
-                                            if (rebalanceNet !== 0 && donorLines.length > 0) {
-                                              const largestDonor = [...donorLines].sort((a, b) => b.hours - a.hours)[0];
-                                              newTargets[toActKey2(largestDonor.code)] = Math.round(newTargets[toActKey2(largestDonor.code)] - rebalanceNet);
-                                            }
-                                          }
-                                          setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
-                                        };
+                                         const handleAutoRebalance = () => {
+                                           // Filter out zero-hour ghost lines before computing deficit/donors
+                                           const liveLines = row.lines.filter(l => l.hours > 0);
+                                           // Only strictly above MIN_HOURS are donors — exactly-at-threshold lines are NOT donors
+                                           const donors = liveLines.filter(l => l.hours > MIN_HOURS);
+                                           const totalExcess = donors.reduce((s, l) => s + (l.hours - MIN_HOURS), 0);
+                                           const deficitLines = liveLines.filter(l => l.hours < MIN_HOURS);
+                                           const deficit = deficitLines.reduce((s, l) => s + (MIN_HOURS - l.hours), 0);
+                                           const newTargets: Record<string, number> = {};
+                                           const toActKey2 = (code: string) => { const p = (code ?? '').trim().split(/\s+/); return p.length >= 3 ? p[1] : code; };
+                                           // Initialize all live lines to their current hours
+                                           liveLines.forEach(l => { newTargets[toActKey2(l.code)] = l.hours; });
+                                           if (totalExcess <= 0) {
+                                             // Not enough excess — leave as-is, will fall back to merge
+                                           } else {
+                                             const actualDeficit = Math.min(deficit, totalExcess);
+                                             // Raise deficit lines to MIN_HOURS (ceil to whole number)
+                                             deficitLines.forEach(l => {
+                                               const need = MIN_HOURS - l.hours;
+                                               const raw = l.hours + Math.min(need, need * (actualDeficit / deficit));
+                                               newTargets[toActKey2(l.code)] = Math.ceil(raw);
+                                             });
+                                             // Compute hours actually added after rounding
+                                             const actualAdded = deficitLines.reduce(
+                                               (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
+                                             );
+                                             // Reduce donor lines proportional to their EXCESS (not total hours)
+                                             // This ensures exactly-at-threshold lines are never touched
+                                             donors.forEach(l => {
+                                               const excess = l.hours - MIN_HOURS;
+                                               const contribution = excess * (actualAdded / totalExcess);
+                                               // Floor but never below MIN_HOURS
+                                               newTargets[toActKey2(l.code)] = Math.max(MIN_HOURS, Math.floor(l.hours - contribution));
+                                             });
+                                             // Fix residual: absorb rounding drift into largest-excess donor
+                                             // but never push it below MIN_HOURS
+                                             const allLines = [...deficitLines, ...donors];
+                                             const rebalanceNet = allLines.reduce(
+                                               (sum, l) => sum + (newTargets[toActKey2(l.code)] - l.hours), 0
+                                             );
+                                             if (Math.abs(rebalanceNet) > 0.01 && donors.length > 0) {
+                                               const largestDonor = [...donors].sort((a, b) => b.hours - a.hours)[0];
+                                               const key = toActKey2(largestDonor.code);
+                                               const adjusted = Math.round(newTargets[key] - rebalanceNet);
+                                               // Only absorb if it doesn't push below MIN_HOURS
+                                               newTargets[key] = Math.max(MIN_HOURS, adjusted);
+                                             }
+                                           }
+                                           setRedistributeAdjustments(prev => ({ ...prev, [mergeKey]: newTargets }));
+                                         };
                                         return (
                                           <div className="flex flex-col gap-1 mt-2 border-t border-border pt-2">
                                             {row.lines.map((line) => {
