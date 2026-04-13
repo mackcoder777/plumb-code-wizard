@@ -76,6 +76,22 @@ const containerStyle: React.CSSProperties = {
   width: '100%',
 };
 
+/**
+ * Maps a floor-level activity code to a 2-char level prefix for multitrade ACT composition.
+ * "00L1"→"01", "00L2"→"02", "00RF"→"0R", "00UG"→"0U", unknown→"00"
+ * Only used when buildingActivity starts with "00" (standard 2-char building suffix).
+ */
+function extractMultitradeLevelPrefix(floorActivity: string): string {
+  const act = (floorActivity || '0000').toUpperCase().trim();
+  const levelMatch = act.match(/^0*L(\d+)$/);
+  if (levelMatch) return String(parseInt(levelMatch[1], 10)).padStart(2, '0');
+  if (/^0*RF$/.test(act)) return '0R';
+  if (/^0*UG$/.test(act)) return '0U';
+  if (/^0*ST$/.test(act)) return '0S';
+  if (/^0*CS$/.test(act)) return '0C';
+  return '00';
+}
+
 const getVirtualRowStyle = (start: number, size: number): React.CSSProperties => ({
   position: 'absolute',
   top: 0,
@@ -553,18 +569,30 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const buildFullLaborCode = useCallback((costHead: string, item: { floor: string; drawing?: string; zone?: string; system?: string; reportCat?: string; itemType?: string }): string => {
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
     const floorActivity = resolved.activity || '0000';
-    const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
     const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
     let activity: string;
-    if (hasLevelOverride) {
-      activity = floorActivity;
-    } else if (explicitActivity !== null) {
-      activity = explicitActivity;
+    if (codeFormatMode === 'multitrade') {
+      const buildingAct = (resolved.buildingActivity ?? resolved.activity) || '0000';
+      if (hasLevelOverride && buildingAct.startsWith('00')) {
+        // Combine level prefix from floor activity with building suffix
+        // e.g. floor "Level 1" (activity "00L1") + building act "00BA" → "01BA"
+        activity = extractMultitradeLevelPrefix(floorActivity) + buildingAct.slice(2);
+      } else {
+        // Non-level or non-standard building code (e.g. "0MOD") — use flat building act
+        activity = buildingAct;
+      }
     } else {
-      activity = item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000';
+      const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
+      if (hasLevelOverride) {
+        activity = floorActivity;
+      } else if (explicitActivity !== null) {
+        activity = explicitActivity;
+      } else {
+        activity = item.system ? getActivityFromSystem(item.system, systemActivityMappings, item.reportCat || item.itemType || undefined) : '0000';
+      }
     }
     return `${resolved.section} ${activity} ${costHead}`;
-  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides]);
+  }, [floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides, codeFormatMode]);
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
@@ -598,9 +626,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Build new full code with activity resolution
       let activityCode: string;
       if (codeFormatMode === 'multitrade') {
-        // In multitrade mode, always use zone-resolved building activity
-        // Never let the direct floor activity (e.g. "00CS") override the zone-resolved building ACT (e.g. "0MOD")
-        activityCode = (resolved.buildingActivity ?? resolved.activity) || '0000';
+        const buildingAct = (resolved.buildingActivity ?? resolved.activity) || '0000';
+        const hasLevelOverrideMulti = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+        if (hasLevelOverrideMulti && buildingAct.startsWith('00')) {
+          // Level override: inject floor-level prefix into building ACT
+          // "00L1" + "00BA" → "01BA", "00L2" + "00BA" → "02BA", "00RF" + "00BA" → "0RBA"
+          activityCode = extractMultitradeLevelPrefix(resolved.activity || '0000') + buildingAct.slice(2);
+        } else {
+          // Flat or non-standard building code — use building act unchanged
+          activityCode = buildingAct;
+        }
       } else {
         const liveActivity = item.floor ? activityMappingsToApply[item.floor] : undefined;
         if (liveActivity !== undefined) {
@@ -657,7 +692,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, materialDescOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, onDataUpdate]);
+  }, [data, categoryMappings, materialDescOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
