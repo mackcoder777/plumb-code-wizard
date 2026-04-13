@@ -3928,6 +3928,50 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                 </div>
               )}
 
+              {(() => {
+                // Detect saved redistributions where finalLaborSummary still has sub-threshold rows
+                const failedRedistKeys = (savedMergesData ?? []).filter(m => {
+                  if (!m.redistribute_adjustments || Object.keys(m.redistribute_adjustments as object).length === 0) return false;
+                  const sec = (m.sec_code || '').trim();
+                  const head = (m.cost_head || '').trim();
+                  return Object.entries(finalLaborSummary ?? {}).some(([k, e]) => {
+                    const kParts = k.trim().split(/\s+/);
+                    return kParts[0] === sec && kParts.slice(2).join(' ') === head && ((e as any).rawHours ?? e.hours ?? 0) < minHoursThreshold && ((e as any).rawHours ?? e.hours ?? 0) > 0.05;
+                  });
+                });
+                if (failedRedistKeys.length === 0) return null;
+                return (
+                  <div className="mb-3 flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
+                    <span className="mt-0.5 shrink-0 text-destructive">⚠️</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-destructive">
+                        {failedRedistKeys.length} saved redistribution{failedRedistKeys.length > 1 ? 's' : ''} did not achieve the {minHoursThreshold}h minimum
+                      </p>
+                      <p className="mt-0.5 text-xs text-destructive/80">
+                        These were computed with stale data. Undo and re-apply auto-resolve to fix:
+                        {' '}<span className="font-mono">{failedRedistKeys.map(m => `${m.sec_code}|${m.cost_head}`).join(', ')}</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const ids = failedRedistKeys.map(m => m.id);
+                        const { error } = await supabase
+                          .from('project_small_code_merges')
+                          .delete()
+                          .in('id', ids);
+                        if (!error) {
+                          queryClient.invalidateQueries({ queryKey: ['small-code-merges', projectId] });
+                          toast({ title: `Cleared ${ids.length} failed redistribution${ids.length > 1 ? 's' : ''}`, description: 'Re-apply auto-resolve to rebuild with correct deltas.' });
+                        }
+                      }}
+                      className="shrink-0 rounded bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Clear &amp; rebuild
+                    </button>
+                  </div>
+                );
+              })()}
+
               {staleMergeUpdates.filter(Boolean).length > 0 && (
                 <div className="mb-3 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
                   <span className="mt-0.5 shrink-0 text-amber-500">⚠️</span>
