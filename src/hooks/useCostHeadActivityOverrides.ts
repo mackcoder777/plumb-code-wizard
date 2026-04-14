@@ -5,15 +5,30 @@ export interface CostHeadActivityOverride {
   id: string;
   project_id: string;
   cost_head: string;
+  building_identifier: string | null;
   use_level_activity: boolean;
   created_at: string;
 }
 
+/**
+ * Checks whether a cost head has a level-activity override active.
+ * Checks specific building first, then falls back to global (null building).
+ * Pass buildingId=null in standard mode to only match global overrides.
+ */
 export function shouldUseLevelActivity(
   costHead: string,
+  buildingId: string | null,
   overrides: CostHeadActivityOverride[]
 ): boolean {
-  return overrides.some(o => o.cost_head === costHead && o.use_level_activity === true);
+  if (buildingId) {
+    const specific = overrides.find(
+      o => o.cost_head === costHead && o.building_identifier === buildingId && o.use_level_activity === true
+    );
+    if (specific !== undefined) return true;
+  }
+  return overrides.some(
+    o => o.cost_head === costHead && o.building_identifier === null && o.use_level_activity === true
+  );
 }
 
 export function useCostHeadActivityOverrides(projectId: string | null) {
@@ -71,15 +86,23 @@ export function useDeleteCostHeadActivityOverride() {
     mutationFn: async ({
       projectId,
       costHead,
+      buildingId,
     }: {
       projectId: string;
       costHead: string;
+      buildingId?: string | null;
     }) => {
-      const { error } = await supabase
+      let query = supabase
         .from('cost_head_activity_overrides')
         .delete()
         .eq('project_id', projectId)
         .eq('cost_head', costHead);
+      if (buildingId !== undefined) {
+        query = buildingId === null
+          ? query.is('building_identifier', null)
+          : query.eq('building_identifier', buildingId);
+      }
+      const { error } = await query;
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
@@ -96,19 +119,29 @@ export function useBatchUpsertCostHeadActivityOverrides() {
       overrides,
     }: {
       projectId: string;
-      overrides: Array<{ costHead: string; useLevelActivity: boolean }>;
+      overrides: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }>;
     }) => {
-      const records = overrides.map(o => ({
-        project_id: projectId,
-        cost_head: o.costHead,
-        use_level_activity: o.useLevelActivity,
-      }));
-      const { data, error } = await supabase
-        .from('cost_head_activity_overrides')
-        .upsert(records, { onConflict: 'project_id,cost_head' })
-        .select();
-      if (error) throw error;
-      return data;
+      // Partial unique indexes require manual delete-then-insert per record
+      for (const o of overrides) {
+        let delQ = supabase
+          .from('cost_head_activity_overrides')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('cost_head', o.costHead);
+        delQ = o.buildingId === null
+          ? delQ.is('building_identifier', null)
+          : delQ.eq('building_identifier', o.buildingId);
+        await delQ;
+        const { error } = await supabase
+          .from('cost_head_activity_overrides')
+          .insert({
+            project_id: projectId,
+            cost_head: o.costHead,
+            building_identifier: o.buildingId,
+            use_level_activity: o.useLevelActivity,
+          });
+        if (error) throw error;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['cost-head-activity-overrides', variables.projectId] });
