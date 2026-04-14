@@ -799,8 +799,6 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
-  const [hourThreshold, setHourThreshold] = useState<number | null>(null);
-  const [expandedHeads, setExpandedHeads] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const active = new Set(
@@ -810,10 +808,9 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     setInitialized(true);
   }, [costHeadActivityOverrides]);
 
-  // Group by full cost code (SEC ACT HEAD), not just the head token.
-  // Checkbox still toggles the underlying cost head in the overrides table.
+  // Group by bare cost HEAD only — this toggle applies to all buildings sharing the head
   const costHeadSummary = useMemo(() => {
-    const map = new Map<string, { fullCode: string; costHead: string; hours: number }>();
+    const map = new Map<string, { costHead: string; hours: number }>();
     estimateData.forEach(item => {
       const code = (item.costCode || '').trim();
       if (!code) return;
@@ -821,29 +818,138 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       const head = parts.length >= 3 ? parts.slice(2).join(' ') : parts[0] || '';
       if (!head || head === 'UNCD') return;
       const hours = item.hours || 0;
-      const existing = map.get(code);
+      const existing = map.get(head);
       if (existing) { existing.hours += hours; }
-      else { map.set(code, { fullCode: code, costHead: head, hours }); }
+      else { map.set(head, { costHead: head, hours }); }
     });
     return Array.from(map.values()).sort((a, b) => b.hours - a.hours);
   }, [estimateData]);
 
-  // Per-full-code level breakdown: maps fullCode → { actMap, unresolvedFloors }
-  const levelBreakdown = useMemo(() => {
-    const result = new Map<string, {
+  if (costHeadSummary.length === 0) return null;
+
+  const hasOverrideChanges = (() => {
+    const savedSet = new Set(
+      costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => o.cost_head)
+    );
+    if (localOverrides.size !== savedSet.size) return true;
+    for (const h of localOverrides) { if (!savedSet.has(h)) return true; }
+    return false;
+  })();
+
+  const handleToggle = (costHead: string) => {
+    setLocalOverrides(prev => {
+      const next = new Set(prev);
+      next.has(costHead) ? next.delete(costHead) : next.add(costHead);
+      return next;
+    });
+  };
+
+  const handleSaveAndReapply = () => {
+    if (!onCostHeadOverridesChange) return;
+    const checked = Array.from(localOverrides).map(h => ({ costHead: h, useLevelActivity: true }));
+    onCostHeadOverridesChange(checked);
+    if (onApplySectionCodes) onApplySectionCodes(localMappings, localActivityMappings);
+    toast({
+      title: 'Activity overrides saved',
+      description: `${checked.length} cost head(s) will use level-based activity codes.`,
+    });
+  };
+
+  return (
+    <div className="mt-6 border-t border-border pt-4">
+      <Collapsible open={overrideOpen} onOpenChange={setOverrideOpen}>
+        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left font-semibold text-sm hover:text-primary transition-colors">
+          {overrideOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          Per-Head Activity Overrides
+          {localOverrides.size > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs">{localOverrides.size} active</Badge>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {codeFormatMode === 'multitrade'
+              ? 'Checked cost heads will use level+building ACT codes (01BA, 02BA, 0RBA…) across ALL buildings. This applies job-wide — checking SZMC splits every building\'s SZMC code by level.'
+              : 'Checked cost heads will use level-based activity codes (00L1, 00L2, 00RF…) instead of the section\'s flat mapping.'}
+          </p>
+          <div className="max-h-64 overflow-y-auto space-y-1 border border-border rounded-md p-2">
+            {costHeadSummary.map(h => (
+              <label
+                key={h.costHead}
+                className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer text-sm"
+              >
+                <Checkbox
+                  checked={localOverrides.has(h.costHead)}
+                  onCheckedChange={() => handleToggle(h.costHead)}
+                />
+                <span className="font-mono font-medium w-16">{h.costHead}</span>
+                <span className="text-muted-foreground flex-1 text-xs">all buildings</span>
+                <span className={cn(
+                  'text-xs tabular-nums font-medium',
+                  h.hours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
+                )}>
+                  {h.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h total
+                </span>
+              </label>
+            ))}
+          </div>
+          {hasOverrideChanges && initialized && (
+            <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
+              <Save className="w-3.5 h-3.5 mr-1.5" />
+              Save & Re-apply
+            </Button>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+};
+
+// ─── Code Splitting Preview (read-only, shown when overrides are active) ──────
+interface CodeSplittingPreviewProps {
+  estimateData: EstimateItem[];
+  activeOverrideHeads: Set<string>;
+  localMappings: Record<string, string>;
+  localActivityMappings: Record<string, string>;
+  codeFormatMode?: 'standard' | 'multitrade';
+}
+
+const CodeSplittingPreview: React.FC<CodeSplittingPreviewProps> = ({
+  estimateData,
+  activeOverrideHeads,
+  localMappings,
+  localActivityMappings,
+  codeFormatMode = 'standard',
+}) => {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [hourThreshold, setHourThreshold] = useState<number | null>(1000);
+  const [expandedCodes, setExpandedCodes] = useState<Set<string>>(new Set());
+
+  const codeBreakdown = useMemo(() => {
+    const map = new Map<string, {
+      fullCode: string;
+      costHead: string;
+      totalHours: number;
       actMap: Map<string, { hours: number; items: number }>;
       unresolvedFloors: Map<string, { hours: number; items: number }>;
     }>();
+
     estimateData.forEach(item => {
       const code = (item.costCode || '').trim();
       if (!code) return;
       const parts = code.split(/\s+/);
       const head = parts.length >= 3 ? parts.slice(2).join(' ') : parts[0] || '';
       if (!head || head === 'UNCD') return;
+      if (!activeOverrideHeads.has(head)) return;
+
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      if (!result.has(code)) result.set(code, { actMap: new Map(), unresolvedFloors: new Map() });
-      const entry = result.get(code)!;
+
+      if (!map.has(code)) {
+        map.set(code, { fullCode: code, costHead: head, totalHours: 0, actMap: new Map(), unresolvedFloors: new Map() });
+      }
+      const entry = map.get(code)!;
+      entry.totalHours += hours;
+
       if (codeFormatMode === 'multitrade') {
         const buildingId = (localMappings[floor] || '').toUpperCase();
         const floorActivity = localActivityMappings[floor] || '0000';
@@ -867,84 +973,46 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
         else { entry.actMap.set(projectedAct, { hours, items: 1 }); }
       }
     });
-    return result;
-  }, [estimateData, localMappings, localActivityMappings, codeFormatMode]);
 
-  if (costHeadSummary.length === 0) return null;
+    return Array.from(map.values()).sort((a, b) => b.totalHours - a.totalHours);
+  }, [estimateData, activeOverrideHeads, localMappings, localActivityMappings, codeFormatMode]);
 
-  const hasOverrideChanges = (() => {
-    const savedSet = new Set(
-      costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => o.cost_head)
-    );
-    if (localOverrides.size !== savedSet.size) return true;
-    for (const h of localOverrides) { if (!savedSet.has(h)) return true; }
-    return false;
-  })();
+  if (activeOverrideHeads.size === 0 || codeBreakdown.length === 0) return null;
 
-  const handleToggle = (costHead: string, fullCode: string) => {
-    setLocalOverrides(prev => {
-      const next = new Set(prev);
-      if (next.has(costHead)) {
-        next.delete(costHead);
-        setExpandedHeads(p => { const n = new Set(p); n.delete(fullCode); return n; });
-      } else {
-        next.add(costHead);
-        setExpandedHeads(p => new Set([...p, fullCode]));
-      }
-      return next;
-    });
-  };
-
-  const toggleExpanded = (costHead: string) => {
-    setExpandedHeads(prev => {
-      const next = new Set(prev);
-      next.has(costHead) ? next.delete(costHead) : next.add(costHead);
-      return next;
-    });
-  };
-
-  const handleSaveAndReapply = () => {
-    if (!onCostHeadOverridesChange) return;
-    const checked = costHeadSummary
-      .filter(h => localOverrides.has(h.costHead))
-      .map(h => ({ costHead: h.costHead, useLevelActivity: true }));
-    onCostHeadOverridesChange(checked);
-    if (onApplySectionCodes) onApplySectionCodes(localMappings, localActivityMappings);
-    toast({
-      title: 'Activity overrides saved',
-      description: `${checked.length} cost head(s) will use level-based activity codes.`,
-    });
-  };
-
-  // Always show checked heads; filter unchecked by threshold
-  const visibleHeads = costHeadSummary.filter(h =>
-    localOverrides.has(h.costHead) || hourThreshold === null || h.hours >= hourThreshold
+  const visibleCodes = codeBreakdown.filter(c =>
+    hourThreshold === null || c.totalHours >= hourThreshold
   );
 
+  const toggleCode = (fullCode: string) => {
+    setExpandedCodes(prev => {
+      const next = new Set(prev);
+      next.has(fullCode) ? next.delete(fullCode) : next.add(fullCode);
+      return next;
+    });
+  };
+
   return (
-    <div className="mt-6 border-t border-border pt-4">
-      <Collapsible open={overrideOpen} onOpenChange={setOverrideOpen}>
+    <div className="mt-4 border-t border-border pt-4">
+      <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
         <CollapsibleTrigger className="flex items-center gap-2 w-full text-left font-semibold text-sm hover:text-primary transition-colors">
-          {overrideOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Per-Head Activity Overrides
-          {localOverrides.size > 0 && (
-            <Badge variant="secondary" className="ml-2 text-xs">{localOverrides.size} active</Badge>
-          )}
+          {previewOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          Level Splitting Preview
+          <Badge variant="outline" className="ml-2 text-xs text-muted-foreground font-normal">
+            read-only — shows projected result per code
+          </Badge>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 space-y-3">
           <p className="text-xs text-muted-foreground">
-            {codeFormatMode === 'multitrade'
-              ? 'Checked cost heads will use level+building ACT codes (01BA, 02BA, 0RBA…) instead of the flat building activity. Expand any row to preview how hours distribute across projected ACT codes.'
-              : 'Checked cost heads will use level-based activity codes (00L1, 00L2, 00RF…) instead of the section\'s flat mapping.'}
+            These are the specific full codes that will be split by level when you click Re-apply Sections.
+            Each row shows exactly which ACT codes will be produced and how many hours land on each.
           </p>
 
-          {/* Hour threshold filter */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground font-medium">Show:</span>
             {([
-              { label: `All (${costHeadSummary.length})`, value: null },
-              { label: `1,000h+ (${costHeadSummary.filter(h => h.hours >= 1000).length})`, value: 1000 },
-              { label: `500h+ (${costHeadSummary.filter(h => h.hours >= 500).length})`, value: 500 },
+              { label: `All (${codeBreakdown.length})`, value: null },
+              { label: `1,000h+ (${codeBreakdown.filter(c => c.totalHours >= 1000).length})`, value: 1000 },
+              { label: `500h+ (${codeBreakdown.filter(c => c.totalHours >= 500).length})`, value: 500 },
             ] as { label: string; value: number | null }[]).map(opt => (
               <button
                 key={String(opt.value)}
@@ -963,108 +1031,65 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
           </div>
 
           <div className="max-h-96 overflow-y-auto space-y-1 border border-border rounded-md p-2">
-            {visibleHeads.map(h => {
-              const isChecked = localOverrides.has(h.costHead);
-              const isExpanded2 = expandedHeads.has(h.fullCode);
-              const breakdown = levelBreakdown.get(h.fullCode);
-              const breakdownEntries = breakdown
-                ? Array.from(breakdown.actMap.entries()).sort((a, b) => b[1].hours - a[1].hours)
-                : [];
-              const unresolvedEntries = breakdown
-                ? Array.from(breakdown.unresolvedFloors.entries()).sort((a, b) => b[1].hours - a[1].hours)
-                : [];
+            {visibleCodes.map(c => {
+              const isExpanded = expandedCodes.has(c.fullCode);
+              const actEntries = Array.from(c.actMap.entries()).sort((a, b) => b[1].hours - a[1].hours);
+              const unresolvedEntries = Array.from(c.unresolvedFloors.entries()).sort((a, b) => b[1].hours - a[1].hours);
               const totalUnresolvedHours = unresolvedEntries.reduce((s, [, d]) => s + d.hours, 0);
               const totalUnresolvedItems = unresolvedEntries.reduce((s, [, d]) => s + d.items, 0);
 
               return (
-                <div key={h.fullCode} className="rounded border border-transparent hover:border-border/50 transition-colors">
-                  <div className="flex items-center gap-3 px-2 py-1.5 text-sm">
-                    <Checkbox
-                      checked={isChecked}
-                      onCheckedChange={() => handleToggle(h.costHead, h.fullCode)}
-                    />
-                    <span
-                      className="font-mono font-medium flex-1 cursor-pointer truncate"
-                      onClick={() => handleToggle(h.costHead, h.fullCode)}
-                      title={h.fullCode}
-                    >
-                      {h.fullCode}
-                    </span>
+                <div key={c.fullCode} className="rounded border border-transparent hover:border-border/50 transition-colors">
+                  <button
+                    type="button"
+                    className="flex items-center gap-3 px-2 py-1.5 text-sm w-full text-left"
+                    onClick={() => toggleCode(c.fullCode)}
+                  >
+                    <span className="font-mono font-medium flex-1 truncate" title={c.fullCode}>{c.fullCode}</span>
                     <span className={cn(
                       'text-xs tabular-nums font-medium shrink-0',
-                      h.hours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
+                      c.totalHours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
                     )}>
-                      {h.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                      {c.totalHours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleExpanded(h.fullCode)}
-                      className="ml-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                      title={isExpanded2 ? 'Hide level breakdown' : 'Show projected ACT breakdown'}
-                    >
-                      {isExpanded2 ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
+                    <span className="text-muted-foreground shrink-0">
+                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </span>
+                  </button>
 
-                  {isExpanded2 && (
+                  {isExpanded && (
                     <div className="mx-2 mb-2 space-y-1">
-                      {breakdownEntries.length > 0 && (
+                      {actEntries.length > 0 && (
                         <div className="rounded border bg-muted/30 overflow-hidden">
                           <div className="grid grid-cols-[1fr_90px_60px] text-xs font-medium text-muted-foreground px-3 py-1.5 border-b bg-muted/50">
                             <span>{codeFormatMode === 'multitrade' ? 'Projected ACT' : 'Activity Code'}</span>
                             <span className="text-right">Hours</span>
                             <span className="text-right">Items</span>
                           </div>
-                          {breakdownEntries.map(([actCode, data]) => (
-                            <div
-                              key={actCode}
-                              className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b last:border-b-0 text-xs hover:bg-muted/50"
-                            >
-                              <span className="font-mono font-medium text-foreground">{actCode}</span>
-                              <span className="text-right tabular-nums text-muted-foreground">
-                                {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
-                              </span>
-                              <span className="text-right tabular-nums text-muted-foreground">
-                                {data.items.toLocaleString()}
-                              </span>
+                          {actEntries.map(([actCode, data]) => (
+                            <div key={actCode} className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b last:border-b-0 text-xs hover:bg-muted/50">
+                              <span className="font-mono font-medium">{actCode}</span>
+                              <span className="text-right tabular-nums text-muted-foreground">{data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h</span>
+                              <span className="text-right tabular-nums text-muted-foreground">{data.items.toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
                       )}
-
                       {unresolvedEntries.length > 0 && (
                         <div className="rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 overflow-hidden">
                           <div className="flex items-start gap-2 px-3 py-2 border-b border-amber-200 dark:border-amber-800 bg-amber-100/60 dark:bg-amber-900/30">
                             <span className="text-amber-600 shrink-0 mt-0.5">⚠</span>
                             <div className="text-xs text-amber-800 dark:text-amber-300">
-                              <span className="font-semibold">
-                                {totalUnresolvedHours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
-                                ({totalUnresolvedItems.toLocaleString()} items)
-                              </span>
-                              {' '}on floors with no building mapping.
-                              Save Section Mapping above for these floors, then re-open this panel.
+                              <span className="font-semibold">{totalUnresolvedHours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h ({totalUnresolvedItems.toLocaleString()} items)</span>{' '}on floors with no building mapping. Fix in Section Mapping above.
                             </div>
                           </div>
                           {unresolvedEntries.map(([floorName, data]) => (
-                            <div
-                              key={floorName}
-                              className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b border-amber-100 dark:border-amber-900 last:border-b-0 text-xs"
-                            >
-                              <span className="font-mono text-amber-700 dark:text-amber-400 truncate" title={floorName}>{floorName}</span>
-                              <span className="text-right tabular-nums text-amber-600 dark:text-amber-500">
-                                {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
-                              </span>
-                              <span className="text-right tabular-nums text-amber-600 dark:text-amber-500">
-                                {data.items.toLocaleString()}
-                              </span>
+                            <div key={floorName} className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b border-amber-100 dark:border-amber-900 last:border-b-0 text-xs">
+                              <span className="font-mono text-amber-700 dark:text-amber-400 truncate">{floorName}</span>
+                              <span className="text-right tabular-nums text-amber-600 dark:text-amber-500">{data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h</span>
+                              <span className="text-right tabular-nums text-amber-600 dark:text-amber-500">{data.items.toLocaleString()}</span>
                             </div>
                           ))}
-                        </div>
-                      )}
-
-                      {breakdownEntries.length === 0 && unresolvedEntries.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground italic border rounded">
-                          No floor mapping data — save Section Mapping above first, then re-open.
                         </div>
                       )}
                     </div>
@@ -1072,19 +1097,12 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
                 </div>
               );
             })}
-            {visibleHeads.length === 0 && (
+            {visibleCodes.length === 0 && (
               <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                No cost heads match the current filter.
+                No codes match the current filter.
               </div>
             )}
           </div>
-
-          {hasOverrideChanges && initialized && (
-            <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
-              <Save className="w-3.5 h-3.5 mr-1.5" />
-              Save & Re-apply
-            </Button>
-          )}
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -1893,6 +1911,13 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           costHeadActivityOverrides={costHeadActivityOverrides}
           onCostHeadOverridesChange={onCostHeadOverridesChange}
           onApplySectionCodes={onApplySectionCodes}
+          localMappings={localMappings}
+          localActivityMappings={localActivityMappings}
+          codeFormatMode={codeFormatMode}
+        />
+        <CodeSplittingPreview
+          estimateData={estimateData}
+          activeOverrideHeads={new Set(costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => o.cost_head))}
           localMappings={localMappings}
           localActivityMappings={localActivityMappings}
           codeFormatMode={codeFormatMode}
