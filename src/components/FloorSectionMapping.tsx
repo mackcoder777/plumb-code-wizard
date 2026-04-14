@@ -367,6 +367,18 @@ function suggestActivity(floorName: string): string {
   return '0000';
 }
 
+// ─── Level prefix helper (mirrors SystemMappingTab logic) ─────────────────────
+function extractMultitradeLevelPrefix(floorActivity: string): string {
+  const act = (floorActivity || '0000').toUpperCase().trim();
+  const levelMatch = act.match(/^0*L(\d+)$/);
+  if (levelMatch) return String(parseInt(levelMatch[1], 10)).padStart(2, '0');
+  if (/^0*RF$/.test(act)) return '0R';
+  if (/^0*UG$/.test(act)) return '0U';
+  if (/^0*ST$/.test(act)) return '0S';
+  if (/^0*CS$/.test(act)) return '0C';
+  return '00';
+}
+
 // ─── Grouping logic ───────────────────────────────────────────────────────────
 function groupFloors(
   floorCounts: Record<string, number>
@@ -772,6 +784,7 @@ interface CostHeadOverrideSectionProps {
   onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>) => void;
   localMappings: Record<string, string>;
   localActivityMappings: Record<string, string>;
+  codeFormatMode?: 'standard' | 'multitrade';
 }
 
 const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
@@ -781,23 +794,22 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   onApplySectionCodes,
   localMappings,
   localActivityMappings,
+  codeFormatMode = 'standard',
 }) => {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
+  const [hourThreshold, setHourThreshold] = useState<number | null>(null);
+  const [expandedHeads, setExpandedHeads] = useState<Set<string>>(new Set());
 
-  // Initialize local state from saved overrides
   useEffect(() => {
     const active = new Set(
-      costHeadActivityOverrides
-        .filter(o => o.use_level_activity)
-        .map(o => o.cost_head)
+      costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => o.cost_head)
     );
     setLocalOverrides(active);
     setInitialized(true);
   }, [costHeadActivityOverrides]);
 
-  // Compute unique cost heads with hours from estimate data
   const costHeadSummary = useMemo(() => {
     const map = new Map<string, { costHead: string; hours: number; description: string }>();
     estimateData.forEach(item => {
@@ -807,27 +819,54 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!head || head === 'UNCD') return;
       const hours = item.hours || 0;
       const existing = map.get(head);
-      if (existing) {
-        existing.hours += hours;
-      } else {
-        map.set(head, { costHead: head, hours, description: '' });
-      }
+      if (existing) { existing.hours += hours; }
+      else { map.set(head, { costHead: head, hours, description: '' }); }
     });
     return Array.from(map.values()).sort((a, b) => b.hours - a.hours);
   }, [estimateData]);
+
+  // Per-cost-head level breakdown: maps costHead → projectedACT → { hours, items }
+  const levelBreakdown = useMemo(() => {
+    const result = new Map<string, Map<string, { hours: number; items: number }>>();
+    estimateData.forEach(item => {
+      const code = item.costCode || '';
+      const parts = code.trim().split(/\s+/);
+      const head = parts.length >= 3 ? parts.slice(2).join(' ') : '';
+      if (!head || head === 'UNCD') return;
+      const floor = (item.floor || '').trim();
+      const hours = item.hours || 0;
+      let projectedAct: string;
+      if (codeFormatMode === 'multitrade') {
+        const buildingId = (localActivityMappings[floor] || '').toUpperCase();
+        const floorActivity = suggestActivity(floor);
+        if (buildingId && buildingId !== '0000') {
+          const levelPrefix = extractMultitradeLevelPrefix(floorActivity);
+          const buildingSuffix = buildingId.startsWith('00') ? buildingId.slice(2) : buildingId;
+          projectedAct = levelPrefix + buildingSuffix;
+        } else {
+          projectedAct = '(unresolved)';
+        }
+      } else {
+        projectedAct = normalizeActivityCode(localActivityMappings[floor] || suggestActivity(floor));
+      }
+      if (!result.has(head)) result.set(head, new Map());
+      const headMap = result.get(head)!;
+      if (!headMap.has(projectedAct)) headMap.set(projectedAct, { hours: 0, items: 0 });
+      const entry = headMap.get(projectedAct)!;
+      entry.hours += hours;
+      entry.items++;
+    });
+    return result;
+  }, [estimateData, localActivityMappings, codeFormatMode]);
 
   if (costHeadSummary.length === 0) return null;
 
   const hasOverrideChanges = (() => {
     const savedSet = new Set(
-      costHeadActivityOverrides
-        .filter(o => o.use_level_activity)
-        .map(o => o.cost_head)
+      costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => o.cost_head)
     );
     if (localOverrides.size !== savedSet.size) return true;
-    for (const h of localOverrides) {
-      if (!savedSet.has(h)) return true;
-    }
+    for (const h of localOverrides) { if (!savedSet.has(h)) return true; }
     return false;
   })();
 
@@ -836,9 +875,19 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       const next = new Set(prev);
       if (next.has(costHead)) {
         next.delete(costHead);
+        setExpandedHeads(p => { const n = new Set(p); n.delete(costHead); return n; });
       } else {
         next.add(costHead);
+        setExpandedHeads(p => new Set([...p, costHead]));
       }
+      return next;
+    });
+  };
+
+  const toggleExpanded = (costHead: string) => {
+    setExpandedHeads(prev => {
+      const next = new Set(prev);
+      next.has(costHead) ? next.delete(costHead) : next.add(costHead);
       return next;
     });
   };
@@ -849,17 +898,17 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       .filter(h => localOverrides.has(h.costHead))
       .map(h => ({ costHead: h.costHead, useLevelActivity: true }));
     onCostHeadOverridesChange(checked);
-
-    // Trigger re-apply
-    if (onApplySectionCodes) {
-      onApplySectionCodes(localMappings, localActivityMappings);
-    }
-
+    if (onApplySectionCodes) onApplySectionCodes(localMappings, localActivityMappings);
     toast({
       title: 'Activity overrides saved',
       description: `${checked.length} cost head(s) will use level-based activity codes.`,
     });
   };
+
+  // Always show checked heads; filter unchecked by threshold
+  const visibleHeads = costHeadSummary.filter(h =>
+    localOverrides.has(h.costHead) || hourThreshold === null || h.hours >= hourThreshold
+  );
 
   return (
     <div className="mt-6 border-t border-border pt-4">
@@ -873,24 +922,107 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 space-y-3">
           <p className="text-xs text-muted-foreground">
-            Checked cost heads will use level-based activity codes (00L1, 00L2, 00RF, etc.) instead of the section's flat mapping.
+            {codeFormatMode === 'multitrade'
+              ? 'Checked cost heads will use level+building ACT codes (01BA, 02BA, 0RBA…) instead of the flat building activity. Expand any row to preview how hours distribute across projected ACT codes.'
+              : 'Checked cost heads will use level-based activity codes (00L1, 00L2, 00RF…) instead of the section\'s flat mapping.'}
           </p>
-          <div className="max-h-64 overflow-y-auto space-y-1 border border-border rounded-md p-2">
-            {costHeadSummary.map(h => (
-              <label
-                key={h.costHead}
-                className="flex items-center gap-3 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer text-sm"
+
+          {/* Hour threshold filter */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium">Show:</span>
+            {([
+              { label: `All (${costHeadSummary.length})`, value: null },
+              { label: `1,000h+ (${costHeadSummary.filter(h => h.hours >= 1000).length})`, value: 1000 },
+              { label: `500h+ (${costHeadSummary.filter(h => h.hours >= 500).length})`, value: 500 },
+            ] as { label: string; value: number | null }[]).map(opt => (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setHourThreshold(opt.value)}
+                className={cn(
+                  'text-xs px-2 py-1 rounded border transition-colors',
+                  hourThreshold === opt.value
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-border hover:bg-muted'
+                )}
               >
-                <Checkbox
-                  checked={localOverrides.has(h.costHead)}
-                  onCheckedChange={() => handleToggle(h.costHead)}
-                />
-                <span className="font-mono font-medium w-16">{h.costHead}</span>
-                <span className="text-muted-foreground flex-1 truncate">{h.description || h.costHead}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">{h.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h</span>
-              </label>
+                {opt.label}
+              </button>
             ))}
           </div>
+
+          <div className="max-h-96 overflow-y-auto space-y-1 border border-border rounded-md p-2">
+            {visibleHeads.map(h => {
+              const isChecked = localOverrides.has(h.costHead);
+              const isExpanded2 = expandedHeads.has(h.costHead);
+              const breakdown = levelBreakdown.get(h.costHead);
+              const breakdownEntries = breakdown
+                ? Array.from(breakdown.entries()).sort((a, b) => b[1].hours - a[1].hours)
+                : [];
+
+              return (
+                <div key={h.costHead} className="rounded border border-transparent hover:border-border/50 transition-colors">
+                  <div className="flex items-center gap-3 px-2 py-1.5 text-sm">
+                    <Checkbox
+                      checked={isChecked}
+                      onCheckedChange={() => handleToggle(h.costHead)}
+                    />
+                    <span className="font-mono font-medium w-16 cursor-pointer" onClick={() => handleToggle(h.costHead)}>{h.costHead}</span>
+                    <span className="text-muted-foreground flex-1 truncate cursor-pointer" onClick={() => handleToggle(h.costHead)}>{h.description || h.costHead}</span>
+                    <span className={cn(
+                      'text-xs tabular-nums font-medium',
+                      h.hours >= 1000 ? 'text-amber-600' : 'text-muted-foreground'
+                    )}>
+                      {h.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(h.costHead)}
+                      className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
+                      title={isExpanded2 ? 'Hide level breakdown' : 'Show projected ACT breakdown'}
+                    >
+                      {isExpanded2 ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+
+                  {isExpanded2 && breakdownEntries.length > 0 && (
+                    <div className="mx-2 mb-2 rounded border bg-muted/30 overflow-hidden">
+                      <div className="grid grid-cols-[1fr_90px_60px] text-xs font-medium text-muted-foreground px-3 py-1.5 border-b bg-muted/50">
+                        <span>{codeFormatMode === 'multitrade' ? 'Projected ACT' : 'Activity Code'}</span>
+                        <span className="text-right">Hours</span>
+                        <span className="text-right">Items</span>
+                      </div>
+                      {breakdownEntries.map(([actCode, data]) => (
+                        <div
+                          key={actCode}
+                          className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b last:border-b-0 text-xs hover:bg-muted/50"
+                        >
+                          <span className="font-mono font-medium text-foreground">{actCode}</span>
+                          <span className="text-right tabular-nums text-muted-foreground">
+                            {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                          </span>
+                          <span className="text-right tabular-nums text-muted-foreground">
+                            {data.items.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isExpanded2 && breakdownEntries.length === 0 && (
+                    <div className="mx-2 mb-2 px-3 py-2 text-xs text-muted-foreground italic">
+                      No floor mapping data — save floor mappings first, then re-open.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {visibleHeads.length === 0 && (
+              <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                No cost heads match the current filter.
+              </div>
+            )}
+          </div>
+
           {hasOverrideChanges && initialized && (
             <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
               <Save className="w-3.5 h-3.5 mr-1.5" />
@@ -1707,6 +1839,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           onApplySectionCodes={onApplySectionCodes}
           localMappings={localMappings}
           localActivityMappings={localActivityMappings}
+          codeFormatMode={codeFormatMode}
         />
 
         {hasChanges && (
