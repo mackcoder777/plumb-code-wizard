@@ -638,8 +638,12 @@ const EnhancedCostCodeManager = () => {
     const floorActivity = floorMap.activity || '0000';
     // 2. Explicit user mapping
     const explicitActivity = floorMap.hasExplicitMapping ? floorMap.activity : null;
-    // 3. Check cost-head override
-    const hasLevelOverride = shouldUseLevelActivity(costHead, costHeadActivityOverrides);
+    // 3. Check cost-head override — pass building ID for per-building specificity
+    const buildingActCode = (floorMap.buildingActivity ?? '').toUpperCase();
+    const buildingId = codeFormatMode === 'multitrade' && buildingActCode && buildingActCode !== '0000'
+      ? buildingActCode.replace(/^00/, '') || null
+      : null;
+    const hasLevelOverride = shouldUseLevelActivity(costHead, buildingId, costHeadActivityOverrides);
     // 4. Final resolution
     if (hasLevelOverride) return floorActivity;
     if (explicitActivity !== null) return explicitActivity;
