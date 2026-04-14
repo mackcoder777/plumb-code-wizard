@@ -807,6 +807,50 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
   const [expandedHeads, setExpandedHeads] = useState<Set<string>>(new Set());
+  // levelMerges: "COSTHEAD||BLDGID||projectedAct" → override target ACT (e.g. "01BA")
+  const [levelMerges, setLevelMerges] = useState<Map<string, string>>(new Map());
+
+  const setLevelMerge = (costHead: string, bldgId: string, projectedAct: string, targetAct: string) => {
+    const key = `${costHead}||${bldgId}||${projectedAct}`;
+    setLevelMerges(prev => {
+      const next = new Map(prev);
+      if (!targetAct.trim() || targetAct.trim() === projectedAct) {
+        next.delete(key);
+      } else {
+        next.set(key, targetAct.trim().toUpperCase());
+      }
+      return next;
+    });
+  };
+
+  // For each (costHead, buildingId), compute projected ACT → { hours, items, floors[] }
+  const perBuildingBreakdown = useMemo(() => {
+    const result = new Map<string, Map<string, { hours: number; items: number; floors: string[] }>>();
+    estimateData.forEach(item => {
+      const code = (item.costCode || '').trim();
+      if (!code) return;
+      const parts = code.split(/\s+/);
+      const head = parts.length >= 3 ? parts.slice(2).join(' ') : parts[0] || '';
+      if (!head || head === 'UNCD') return;
+      const floor = (item.floor || '').trim();
+      const hours = item.hours || 0;
+      const bldgId = (localMappings[floor] || '').toUpperCase();
+      if (!bldgId || bldgId === '0000') return;
+      const floorActivity = localActivityMappings[floor] || '0000';
+      const levelPrefix = extractMultitradeLevelPrefix(floorActivity);
+      const buildingSuffix = bldgId.replace(/^00/, '');
+      const projectedAct = levelPrefix + buildingSuffix;
+      const mapKey = `${head}||${bldgId}`;
+      if (!result.has(mapKey)) result.set(mapKey, new Map());
+      const actMap = result.get(mapKey)!;
+      if (!actMap.has(projectedAct)) actMap.set(projectedAct, { hours: 0, items: 0, floors: [] });
+      const entry = actMap.get(projectedAct)!;
+      entry.hours += hours;
+      entry.items++;
+      if (!entry.floors.includes(floor)) entry.floors.push(floor);
+    });
+    return result;
+  }, [estimateData, localMappings, localActivityMappings]);
 
   useEffect(() => {
     const active = new Set(
@@ -959,24 +1003,127 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
                           {hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
                         </span>
                       </label>
+                      {/* Per-building rows */}
                       {codeFormatMode === 'multitrade' && buildings.map(bldgId => {
-                        const bldgHours = bMap.get(bldgId.toUpperCase()) || 0;
+                        const bldgIdUpper = bldgId.toUpperCase();
+                        const bldgHours = bMap.get(bldgIdUpper) || 0;
                         if (bldgHours === 0) return null;
                         const bKey = makeKey(costHead, bldgId);
+                        const isChecked = localOverrides.has(bKey);
+                        const breakdownKey = `${costHead}||${bldgIdUpper}`;
+                        const actMap = perBuildingBreakdown.get(breakdownKey);
+                        const actEntries = actMap
+                          ? Array.from(actMap.entries()).sort((a, b) => b[1].hours - a[1].hours)
+                          : [];
+                        // Compute merged view: group by target ACT
+                        const mergedView = new Map<string, { originalActs: string[]; hours: number; items: number }>();
+                        actEntries.forEach(([projectedAct, data]) => {
+                          const mergeKey = `${costHead}||${bldgIdUpper}||${projectedAct}`;
+                          const target = levelMerges.get(mergeKey) || projectedAct;
+                          if (!mergedView.has(target)) mergedView.set(target, { originalActs: [], hours: 0, items: 0 });
+                          const mv = mergedView.get(target)!;
+                          mv.originalActs.push(projectedAct);
+                          mv.hours += data.hours;
+                          mv.items += data.items;
+                        });
                         return (
-                          <label key={bldgId} className="flex items-center gap-3 px-3 py-1.5 hover:bg-muted/40 cursor-pointer text-xs">
-                            <Checkbox
-                              checked={localOverrides.has(bKey)}
-                              onCheckedChange={() => toggleOverride(costHead, bldgId)}
-                            />
-                            <span className="font-mono font-medium w-12">{bldgId}</span>
-                            <span className={cn(
-                              'tabular-nums ml-auto',
-                              bldgHours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
-                            )}>
-                              {bldgHours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
-                            </span>
-                          </label>
+                          <div key={bldgId}>
+                            <label className="flex items-center gap-3 px-3 py-1.5 hover:bg-muted/40 cursor-pointer text-xs">
+                              <Checkbox
+                                checked={isChecked}
+                                onCheckedChange={() => toggleOverride(costHead, bldgId)}
+                              />
+                              <span className="font-mono font-semibold w-12">{bldgId}</span>
+                              <span className={cn(
+                                'tabular-nums ml-auto',
+                                bldgHours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
+                              )}>
+                                {bldgHours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                              </span>
+                            </label>
+                            {/* Level breakdown + merge controls when checked */}
+                            {isChecked && actEntries.length > 0 && (
+                              <div className="mx-3 mb-2 rounded border border-border bg-background overflow-hidden">
+                                <div className="grid grid-cols-[auto_1fr_80px_60px_130px] text-xs font-medium text-muted-foreground px-2 py-1.5 border-b bg-muted/50 gap-2">
+                                  <span className="w-4" />
+                                  <span>Projected ACT</span>
+                                  <span className="text-right">Hours</span>
+                                  <span className="text-right">Items</span>
+                                  <span className="text-center">Merge → Code</span>
+                                </div>
+                                {actEntries.map(([projectedAct, data]) => {
+                                  const mergeKey = `${costHead}||${bldgIdUpper}||${projectedAct}`;
+                                  const currentMerge = levelMerges.get(mergeKey) || '';
+                                  const isMerged = !!currentMerge && currentMerge !== projectedAct;
+                                  return (
+                                    <div
+                                      key={projectedAct}
+                                      className={cn(
+                                        'grid grid-cols-[auto_1fr_80px_60px_130px] px-2 py-1.5 border-b last:border-b-0 text-xs gap-2 items-center',
+                                        isMerged ? 'bg-muted/30 text-muted-foreground' : 'hover:bg-muted/20'
+                                      )}
+                                    >
+                                      <span className={cn('w-4 text-center', isMerged ? 'text-muted-foreground' : 'text-foreground')}>
+                                        {isMerged ? '↳' : '●'}
+                                      </span>
+                                      <span className={cn('font-mono font-medium', isMerged && 'line-through opacity-60')}>
+                                        {projectedAct}
+                                        {isMerged && (
+                                          <span className="ml-1 no-underline opacity-100" style={{ textDecoration: 'none' }}>
+                                            → <span className="text-primary">{currentMerge}</span>
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="text-right tabular-nums text-muted-foreground">
+                                        {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                                      </span>
+                                      <span className="text-right tabular-nums text-muted-foreground">
+                                        {data.items.toLocaleString()}
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={currentMerge}
+                                          onChange={e => setLevelMerge(costHead, bldgIdUpper, projectedAct, e.target.value)}
+                                          placeholder={projectedAct}
+                                          maxLength={6}
+                                          className="w-20 text-xs border border-border rounded px-1.5 py-0.5 font-mono bg-background text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none"
+                                        />
+                                        {currentMerge && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setLevelMerge(costHead, bldgIdUpper, projectedAct, '')}
+                                            className="text-muted-foreground hover:text-foreground transition-colors"
+                                            title="Clear merge"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {/* Merged result summary */}
+                                {mergedView.size < actEntries.length && (
+                                  <div className="px-2 py-1.5 bg-primary/5 border-t text-xs text-muted-foreground">
+                                    <span className="font-medium text-foreground">After merge: </span>
+                                    {Array.from(mergedView.entries())
+                                      .sort((a, b) => b[1].hours - a[1].hours)
+                                      .map(([targetAct, mv]) => (
+                                        <span key={targetAct} className="mr-3">
+                                          <span className="font-mono text-primary">{targetAct}</span>
+                                          {' '}
+                                          <span className="tabular-nums">{mv.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h</span>
+                                          {mv.originalActs.length > 1 && (
+                                            <span className="text-muted-foreground/70"> ({mv.originalActs.join('+')})</span>
+                                          )}
+                                        </span>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -985,6 +1132,15 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
               );
             })}
           </div>
+          {levelMerges.size > 0 && (
+            <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span className="shrink-0 mt-0.5">⚠</span>
+              <span>
+                Level merges shown above are a preview. To make them permanent, the merged codes need to be set up as custom activity codes in the Fab Code Library — coming in a future session.
+                Re-applying now will produce the unmerged split codes.
+              </span>
+            </div>
+          )}
           {hasOverrideChanges && initialized && (
             <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
               <Save className="w-3.5 h-3.5 mr-1.5" />
