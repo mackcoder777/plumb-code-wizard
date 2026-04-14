@@ -272,6 +272,7 @@ export type Database = {
       }
       cost_head_activity_overrides: {
         Row: {
+          building_identifier: string | null
           cost_head: string
           created_at: string | null
           id: string
@@ -279,6 +280,7 @@ export type Database = {
           use_level_activity: boolean
         }
         Insert: {
+          building_identifier?: string | null
           cost_head: string
           created_at?: string | null
           id?: string
@@ -286,6 +288,7 @@ export type Database = {
           use_level_activity?: boolean
         }
         Update: {
+          building_identifier?: string | null
           cost_head?: string
           created_at?: string | null
           id?: string
