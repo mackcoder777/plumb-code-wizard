@@ -810,54 +810,65 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     setInitialized(true);
   }, [costHeadActivityOverrides]);
 
+  // Group by full cost code (SEC ACT HEAD), not just the head token.
+  // Checkbox still toggles the underlying cost head in the overrides table.
   const costHeadSummary = useMemo(() => {
-    const map = new Map<string, { costHead: string; hours: number; description: string }>();
+    const map = new Map<string, { fullCode: string; costHead: string; hours: number }>();
     estimateData.forEach(item => {
-      const code = item.costCode || '';
-      const parts = code.trim().split(/\s+/);
-      const head = parts.length >= 3 ? parts.slice(2).join(' ') : '';
+      const code = (item.costCode || '').trim();
+      if (!code) return;
+      const parts = code.split(/\s+/);
+      const head = parts.length >= 3 ? parts.slice(2).join(' ') : parts[0] || '';
       if (!head || head === 'UNCD') return;
       const hours = item.hours || 0;
-      const existing = map.get(head);
+      const existing = map.get(code);
       if (existing) { existing.hours += hours; }
-      else { map.set(head, { costHead: head, hours, description: '' }); }
+      else { map.set(code, { fullCode: code, costHead: head, hours }); }
     });
     return Array.from(map.values()).sort((a, b) => b.hours - a.hours);
   }, [estimateData]);
 
-  // Per-cost-head level breakdown: maps costHead → projectedACT → { hours, items }
+  // Per-full-code level breakdown: maps fullCode → { actMap, unresolvedFloors }
   const levelBreakdown = useMemo(() => {
-    const result = new Map<string, Map<string, { hours: number; items: number }>>();
+    const result = new Map<string, {
+      actMap: Map<string, { hours: number; items: number }>;
+      unresolvedFloors: Map<string, { hours: number; items: number }>;
+    }>();
     estimateData.forEach(item => {
-      const code = item.costCode || '';
-      const parts = code.trim().split(/\s+/);
-      const head = parts.length >= 3 ? parts.slice(2).join(' ') : '';
+      const code = (item.costCode || '').trim();
+      if (!code) return;
+      const parts = code.split(/\s+/);
+      const head = parts.length >= 3 ? parts.slice(2).join(' ') : parts[0] || '';
       if (!head || head === 'UNCD') return;
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      let projectedAct: string;
+      if (!result.has(code)) result.set(code, { actMap: new Map(), unresolvedFloors: new Map() });
+      const entry = result.get(code)!;
       if (codeFormatMode === 'multitrade') {
-        const buildingId = (localActivityMappings[floor] || '').toUpperCase();
-        const floorActivity = suggestActivity(floor);
+        const buildingId = (localMappings[floor] || '').toUpperCase();
+        const floorActivity = localActivityMappings[floor] || '0000';
         if (buildingId && buildingId !== '0000') {
           const levelPrefix = extractMultitradeLevelPrefix(floorActivity);
-          const buildingSuffix = buildingId.startsWith('00') ? buildingId.slice(2) : buildingId;
-          projectedAct = levelPrefix + buildingSuffix;
+          const buildingSuffix = buildingId.replace(/^00/, '');
+          const projectedAct = levelPrefix + buildingSuffix;
+          const ex = entry.actMap.get(projectedAct);
+          if (ex) { ex.hours += hours; ex.items++; }
+          else { entry.actMap.set(projectedAct, { hours, items: 1 }); }
         } else {
-          projectedAct = '(unresolved)';
+          const floorKey = floor || '(blank floor)';
+          const ex = entry.unresolvedFloors.get(floorKey);
+          if (ex) { ex.hours += hours; ex.items++; }
+          else { entry.unresolvedFloors.set(floorKey, { hours, items: 1 }); }
         }
       } else {
-        projectedAct = normalizeActivityCode(localActivityMappings[floor] || suggestActivity(floor));
+        const projectedAct = normalizeActivityCode(localActivityMappings[floor] || '0000');
+        const ex = entry.actMap.get(projectedAct);
+        if (ex) { ex.hours += hours; ex.items++; }
+        else { entry.actMap.set(projectedAct, { hours, items: 1 }); }
       }
-      if (!result.has(head)) result.set(head, new Map());
-      const headMap = result.get(head)!;
-      if (!headMap.has(projectedAct)) headMap.set(projectedAct, { hours: 0, items: 0 });
-      const entry = headMap.get(projectedAct)!;
-      entry.hours += hours;
-      entry.items++;
     });
     return result;
-  }, [estimateData, localActivityMappings, codeFormatMode]);
+  }, [estimateData, localMappings, localActivityMappings, codeFormatMode]);
 
   if (costHeadSummary.length === 0) return null;
 
@@ -870,15 +881,15 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     return false;
   })();
 
-  const handleToggle = (costHead: string) => {
+  const handleToggle = (costHead: string, fullCode: string) => {
     setLocalOverrides(prev => {
       const next = new Set(prev);
       if (next.has(costHead)) {
         next.delete(costHead);
-        setExpandedHeads(p => { const n = new Set(p); n.delete(costHead); return n; });
+        setExpandedHeads(p => { const n = new Set(p); n.delete(fullCode); return n; });
       } else {
         next.add(costHead);
-        setExpandedHeads(p => new Set([...p, costHead]));
+        setExpandedHeads(p => new Set([...p, fullCode]));
       }
       return next;
     });
@@ -954,63 +965,108 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
           <div className="max-h-96 overflow-y-auto space-y-1 border border-border rounded-md p-2">
             {visibleHeads.map(h => {
               const isChecked = localOverrides.has(h.costHead);
-              const isExpanded2 = expandedHeads.has(h.costHead);
-              const breakdown = levelBreakdown.get(h.costHead);
+              const isExpanded2 = expandedHeads.has(h.fullCode);
+              const breakdown = levelBreakdown.get(h.fullCode);
               const breakdownEntries = breakdown
-                ? Array.from(breakdown.entries()).sort((a, b) => b[1].hours - a[1].hours)
+                ? Array.from(breakdown.actMap.entries()).sort((a, b) => b[1].hours - a[1].hours)
                 : [];
+              const unresolvedEntries = breakdown
+                ? Array.from(breakdown.unresolvedFloors.entries()).sort((a, b) => b[1].hours - a[1].hours)
+                : [];
+              const totalUnresolvedHours = unresolvedEntries.reduce((s, [, d]) => s + d.hours, 0);
+              const totalUnresolvedItems = unresolvedEntries.reduce((s, [, d]) => s + d.items, 0);
 
               return (
-                <div key={h.costHead} className="rounded border border-transparent hover:border-border/50 transition-colors">
+                <div key={h.fullCode} className="rounded border border-transparent hover:border-border/50 transition-colors">
                   <div className="flex items-center gap-3 px-2 py-1.5 text-sm">
                     <Checkbox
                       checked={isChecked}
-                      onCheckedChange={() => handleToggle(h.costHead)}
+                      onCheckedChange={() => handleToggle(h.costHead, h.fullCode)}
                     />
-                    <span className="font-mono font-medium w-16 cursor-pointer" onClick={() => handleToggle(h.costHead)}>{h.costHead}</span>
-                    <span className="text-muted-foreground flex-1 truncate cursor-pointer" onClick={() => handleToggle(h.costHead)}>{h.description || h.costHead}</span>
+                    <span
+                      className="font-mono font-medium flex-1 cursor-pointer truncate"
+                      onClick={() => handleToggle(h.costHead, h.fullCode)}
+                      title={h.fullCode}
+                    >
+                      {h.fullCode}
+                    </span>
                     <span className={cn(
-                      'text-xs tabular-nums font-medium',
-                      h.hours >= 1000 ? 'text-amber-600' : 'text-muted-foreground'
+                      'text-xs tabular-nums font-medium shrink-0',
+                      h.hours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
                     )}>
                       {h.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
                     </span>
                     <button
                       type="button"
-                      onClick={() => toggleExpanded(h.costHead)}
-                      className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => toggleExpanded(h.fullCode)}
+                      className="ml-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
                       title={isExpanded2 ? 'Hide level breakdown' : 'Show projected ACT breakdown'}
                     >
                       {isExpanded2 ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     </button>
                   </div>
 
-                  {isExpanded2 && breakdownEntries.length > 0 && (
-                    <div className="mx-2 mb-2 rounded border bg-muted/30 overflow-hidden">
-                      <div className="grid grid-cols-[1fr_90px_60px] text-xs font-medium text-muted-foreground px-3 py-1.5 border-b bg-muted/50">
-                        <span>{codeFormatMode === 'multitrade' ? 'Projected ACT' : 'Activity Code'}</span>
-                        <span className="text-right">Hours</span>
-                        <span className="text-right">Items</span>
-                      </div>
-                      {breakdownEntries.map(([actCode, data]) => (
-                        <div
-                          key={actCode}
-                          className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b last:border-b-0 text-xs hover:bg-muted/50"
-                        >
-                          <span className="font-mono font-medium text-foreground">{actCode}</span>
-                          <span className="text-right tabular-nums text-muted-foreground">
-                            {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
-                          </span>
-                          <span className="text-right tabular-nums text-muted-foreground">
-                            {data.items.toLocaleString()}
-                          </span>
+                  {isExpanded2 && (
+                    <div className="mx-2 mb-2 space-y-1">
+                      {breakdownEntries.length > 0 && (
+                        <div className="rounded border bg-muted/30 overflow-hidden">
+                          <div className="grid grid-cols-[1fr_90px_60px] text-xs font-medium text-muted-foreground px-3 py-1.5 border-b bg-muted/50">
+                            <span>{codeFormatMode === 'multitrade' ? 'Projected ACT' : 'Activity Code'}</span>
+                            <span className="text-right">Hours</span>
+                            <span className="text-right">Items</span>
+                          </div>
+                          {breakdownEntries.map(([actCode, data]) => (
+                            <div
+                              key={actCode}
+                              className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b last:border-b-0 text-xs hover:bg-muted/50"
+                            >
+                              <span className="font-mono font-medium text-foreground">{actCode}</span>
+                              <span className="text-right tabular-nums text-muted-foreground">
+                                {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                              </span>
+                              <span className="text-right tabular-nums text-muted-foreground">
+                                {data.items.toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                  {isExpanded2 && breakdownEntries.length === 0 && (
-                    <div className="mx-2 mb-2 px-3 py-2 text-xs text-muted-foreground italic">
-                      No floor mapping data — save floor mappings first, then re-open.
+                      )}
+
+                      {unresolvedEntries.length > 0 && (
+                        <div className="rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 overflow-hidden">
+                          <div className="flex items-start gap-2 px-3 py-2 border-b border-amber-200 dark:border-amber-800 bg-amber-100/60 dark:bg-amber-900/30">
+                            <span className="text-amber-600 shrink-0 mt-0.5">⚠</span>
+                            <div className="text-xs text-amber-800 dark:text-amber-300">
+                              <span className="font-semibold">
+                                {totalUnresolvedHours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                                ({totalUnresolvedItems.toLocaleString()} items)
+                              </span>
+                              {' '}on floors with no building mapping.
+                              Save Section Mapping above for these floors, then re-open this panel.
+                            </div>
+                          </div>
+                          {unresolvedEntries.map(([floorName, data]) => (
+                            <div
+                              key={floorName}
+                              className="grid grid-cols-[1fr_90px_60px] px-3 py-1 border-b border-amber-100 dark:border-amber-900 last:border-b-0 text-xs"
+                            >
+                              <span className="font-mono text-amber-700 dark:text-amber-400 truncate" title={floorName}>{floorName}</span>
+                              <span className="text-right tabular-nums text-amber-600 dark:text-amber-500">
+                                {data.hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
+                              </span>
+                              <span className="text-right tabular-nums text-amber-600 dark:text-amber-500">
+                                {data.items.toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {breakdownEntries.length === 0 && unresolvedEntries.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground italic border rounded">
+                          No floor mapping data — save Section Mapping above first, then re-open.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
