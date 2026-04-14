@@ -807,6 +807,50 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
   const [expandedHeads, setExpandedHeads] = useState<Set<string>>(new Set());
+  // levelMerges: "COSTHEAD||BLDGID||projectedAct" → override target ACT (e.g. "01BA")
+  const [levelMerges, setLevelMerges] = useState<Map<string, string>>(new Map());
+
+  const setLevelMerge = (costHead: string, bldgId: string, projectedAct: string, targetAct: string) => {
+    const key = `${costHead}||${bldgId}||${projectedAct}`;
+    setLevelMerges(prev => {
+      const next = new Map(prev);
+      if (!targetAct.trim() || targetAct.trim() === projectedAct) {
+        next.delete(key);
+      } else {
+        next.set(key, targetAct.trim().toUpperCase());
+      }
+      return next;
+    });
+  };
+
+  // For each (costHead, buildingId), compute projected ACT → { hours, items, floors[] }
+  const perBuildingBreakdown = useMemo(() => {
+    const result = new Map<string, Map<string, { hours: number; items: number; floors: string[] }>>();
+    estimateData.forEach(item => {
+      const code = (item.costCode || '').trim();
+      if (!code) return;
+      const parts = code.split(/\s+/);
+      const head = parts.length >= 3 ? parts.slice(2).join(' ') : parts[0] || '';
+      if (!head || head === 'UNCD') return;
+      const floor = (item.floor || '').trim();
+      const hours = item.hours || 0;
+      const bldgId = (localMappings[floor] || '').toUpperCase();
+      if (!bldgId || bldgId === '0000') return;
+      const floorActivity = localActivityMappings[floor] || '0000';
+      const levelPrefix = extractMultitradeLevelPrefix(floorActivity);
+      const buildingSuffix = bldgId.replace(/^00/, '');
+      const projectedAct = levelPrefix + buildingSuffix;
+      const mapKey = `${head}||${bldgId}`;
+      if (!result.has(mapKey)) result.set(mapKey, new Map());
+      const actMap = result.get(mapKey)!;
+      if (!actMap.has(projectedAct)) actMap.set(projectedAct, { hours: 0, items: 0, floors: [] });
+      const entry = actMap.get(projectedAct)!;
+      entry.hours += hours;
+      entry.items++;
+      if (!entry.floors.includes(floor)) entry.floors.push(floor);
+    });
+    return result;
+  }, [estimateData, localMappings, localActivityMappings]);
 
   useEffect(() => {
     const active = new Set(
@@ -985,6 +1029,15 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
               );
             })}
           </div>
+          {levelMerges.size > 0 && (
+            <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span className="shrink-0 mt-0.5">⚠</span>
+              <span>
+                Level merges shown above are a preview. To make them permanent, the merged codes need to be set up as custom activity codes in the Fab Code Library — coming in a future session.
+                Re-applying now will produce the unmerged split codes.
+              </span>
+            </div>
+          )}
           {hasOverrideChanges && initialized && (
             <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
               <Save className="w-3.5 h-3.5 mr-1.5" />
