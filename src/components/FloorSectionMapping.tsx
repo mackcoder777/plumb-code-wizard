@@ -28,7 +28,7 @@ interface FloorSectionMappingPanelProps {
   estimateData: EstimateItem[];
   projectId: string | null;
   onMappingsChange?: (mappings: Record<string, string>) => void;
-  onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>) => void;
+  onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>, overrideSnapshot?: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }>) => void;
   datasetProfile?: DatasetProfile | null;
   onProfileOverride?: (override: PatternOverride | null) => void;
   onReanalyze?: () => void;
@@ -780,9 +780,9 @@ const StandaloneFloorRow: React.FC<StandaloneFloorRowProps> = ({
 interface CostHeadOverrideSectionProps {
   estimateData: EstimateItem[];
   costHeadActivityOverrides: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }>;
-  onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }>) => void;
+  onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }>) => Promise<void> | void;
   onLocalOverridesChange?: (activeHeads: Set<string>) => void;
-  onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>) => void;
+  onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>, overrideSnapshot?: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }>) => void;
   localMappings: Record<string, string>;
   localActivityMappings: Record<string, string>;
   codeFormatMode?: 'standard' | 'multitrade';
@@ -811,6 +811,7 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   const [expandedHeads, setExpandedHeads] = useState<Set<string>>(new Set());
   const [hourThreshold, setHourThreshold] = useState<number | null>(1000);
   const [lastAppliedAt, setLastAppliedAt] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   // levelMerges: "COSTHEAD||BLDGID||projectedAct" → override target ACT (e.g. "01BA")
   const [levelMerges, setLevelMerges] = useState<Map<string, string>>(new Map());
 
@@ -941,22 +942,41 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     });
   };
 
-  const handleSaveAndReapply = () => {
+  const handleSaveAndReapply = async () => {
     if (!onCostHeadOverridesChange) return;
-    const result: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }> = [];
-    localOverrides.forEach(key => {
-      const [costHead, bldgRaw] = key.split('||');
-      const buildingId = bldgRaw === GLOBAL_KEY ? null : bldgRaw;
-      result.push({ costHead, buildingId, useLevelActivity: true });
-    });
-    onCostHeadOverridesChange(result);
-    if (onApplySectionCodes) onApplySectionCodes(localMappings, localActivityMappings);
-    const now = new Date();
-    setLastAppliedAt(now);
-    toast({
-      title: 'Activity overrides saved & re-applied',
-      description: `${result.length} override(s) applied at ${now.toLocaleTimeString()}.`,
-    });
+    setIsSaving(true);
+    try {
+      const result: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }> = [];
+      localOverrides.forEach(key => {
+        const [costHead, bldgRaw] = key.split('||');
+        const buildingId = bldgRaw === GLOBAL_KEY ? null : bldgRaw;
+        result.push({ costHead, buildingId, useLevelActivity: true });
+      });
+
+      // Build snapshot in the shape shouldUseLevelActivity expects
+      const overrideSnapshot: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }> =
+        result.map(r => ({ cost_head: r.costHead, building_identifier: r.buildingId, use_level_activity: true }));
+
+      // Step 1: persist to DB
+      await onCostHeadOverridesChange(result);
+
+      // Step 2: reapply with live snapshot so handleApplySectionCodes doesn't read stale query state
+      let itemsUpdated = 0;
+      if (onApplySectionCodes) {
+        itemsUpdated = (await (onApplySectionCodes(localMappings, localActivityMappings, overrideSnapshot) as any)) ?? 0;
+      }
+
+      const now = new Date();
+      setLastAppliedAt(now);
+      toast({
+        title: 'Overrides saved and section codes re-applied',
+        description: itemsUpdated > 0
+          ? `${itemsUpdated} item(s) updated at ${now.toLocaleTimeString()}.`
+          : `Saved. No items changed — codes may already be correct.`,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // A head is visible if: it has an active override, OR its total meets threshold,
@@ -1229,9 +1249,11 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
             </div>
           )}
           {initialized && (localOverrides.size > 0 || hasOverrideChanges) && (
-            <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
-              <Save className="w-3.5 h-3.5 mr-1.5" />
-              {hasOverrideChanges ? 'Save & Re-apply' : 'Re-apply'}
+            <Button size="sm" onClick={handleSaveAndReapply} disabled={isSaving} className="mt-2">
+              {isSaving
+                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Applying...</>
+                : <><Save className="w-3.5 h-3.5 mr-1.5" />{hasOverrideChanges ? 'Save & Re-apply' : 'Re-apply'}</>
+              }
             </Button>
           )}
         </CollapsibleContent>
