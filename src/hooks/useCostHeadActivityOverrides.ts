@@ -18,7 +18,7 @@ export interface CostHeadActivityOverride {
 export function shouldUseLevelActivity(
   costHead: string,
   buildingId: string | null,
-  overrides: CostHeadActivityOverride[]
+  overrides: Pick<CostHeadActivityOverride, 'cost_head' | 'building_identifier' | 'use_level_activity'>[]
 ): boolean {
   if (buildingId) {
     const specific = overrides.find(

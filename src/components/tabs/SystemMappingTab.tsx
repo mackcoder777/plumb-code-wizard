@@ -599,7 +599,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
   // Handler to apply section codes to all items that already have labor codes
   // Also persists the updated codes to the database
-  const handleApplySectionCodes = useCallback(async (_floorMappingsToApply: Record<string, string>, activityMappingsToApply: Record<string, string>) => {
+  const handleApplySectionCodes = useCallback(async (_floorMappingsToApply: Record<string, string>, activityMappingsToApply: Record<string, string>, overrideSnapshot?: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }>) => {
+    // Use live snapshot when provided (from Save & Re-apply in Per-Head Activity Overrides).
+    // Fall back to saved query state only when called from the standard Re-apply Sections button.
+    const effectiveOverrides = overrideSnapshot ?? costHeadActivityOverrides;
     let itemsUpdated = 0;
     const dbUpdates: Array<{ id: string; cost_code: string }> = [];
     
@@ -632,7 +635,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
         const buildingAct = (resolved.buildingActivity ?? resolved.activity) || '0000';
         const buildingActM = buildingAct;
         const bldgIdM = buildingActM.replace(/^00/, '') || null;
-        const hasLevelOverrideMulti = shouldUseLevelActivity(costHead, bldgIdM, costHeadActivityOverrides);
+        const hasLevelOverrideMulti = shouldUseLevelActivity(costHead, bldgIdM, effectiveOverrides);
         if (hasLevelOverrideMulti && buildingAct.startsWith('00')) {
           // Level override: inject floor-level prefix into building ACT
           // "00L1" + "00BA" → "01BA", "00L2" + "00BA" → "02BA", "00RF" + "00BA" → "0RBA"
@@ -649,7 +652,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
           const floorActivity = resolved.activity || '0000';
           const explicitActivity = resolved.hasExplicitMapping ? resolved.activity : null;
           const bldgIdStd = null; // standard mode has no building-level overrides
-          const hasLevelOverride = shouldUseLevelActivity(costHead, bldgIdStd, costHeadActivityOverrides);
+          const hasLevelOverride = shouldUseLevelActivity(costHead, bldgIdStd, effectiveOverrides);
           if (hasLevelOverride) {
             activityCode = floorActivity;
           } else if (explicitActivity !== null) {
