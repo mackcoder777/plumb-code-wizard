@@ -1394,7 +1394,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [liveOverrideHeads, setLiveOverrideHeads] = useState<Set<string>>(new Set());
+  
 
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
@@ -2175,19 +2175,12 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           estimateData={estimateData}
           costHeadActivityOverrides={costHeadActivityOverrides}
           onCostHeadOverridesChange={onCostHeadOverridesChange}
-          onLocalOverridesChange={setLiveOverrideHeads}
+          
           onApplySectionCodes={onApplySectionCodes}
           localMappings={localMappings}
           localActivityMappings={localActivityMappings}
           codeFormatMode={codeFormatMode}
           buildingMappings={buildingMappings}
-        />
-        <CodeSplittingPreview
-          estimateData={estimateData}
-          activeOverrideHeads={liveOverrideHeads}
-          localMappings={localMappings}
-          localActivityMappings={localActivityMappings}
-          codeFormatMode={codeFormatMode}
         />
 
         {hasChanges && (
