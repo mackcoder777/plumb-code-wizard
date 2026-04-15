@@ -809,6 +809,8 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
   const [expandedHeads, setExpandedHeads] = useState<Set<string>>(new Set());
+  const [hourThreshold, setHourThreshold] = useState<number | null>(1000);
+  const [lastAppliedAt, setLastAppliedAt] = useState<Date | null>(null);
   // levelMerges: "COSTHEAD||BLDGID||projectedAct" → override target ACT (e.g. "01BA")
   const [levelMerges, setLevelMerges] = useState<Map<string, string>>(new Map());
 
@@ -949,11 +951,18 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     });
     onCostHeadOverridesChange(result);
     if (onApplySectionCodes) onApplySectionCodes(localMappings, localActivityMappings);
+    const now = new Date();
+    setLastAppliedAt(now);
     toast({
-      title: 'Activity overrides saved',
-      description: `${result.length} override(s) saved.`,
+      title: 'Activity overrides saved & re-applied',
+      description: `${result.length} override(s) applied at ${now.toLocaleTimeString()}.`,
     });
   };
+
+  const visibleHeads = costHeadSummary.filter(h => {
+    const hasActiveOverride = Array.from(localOverrides).some(k => k.startsWith(`${h.costHead}||`));
+    return hasActiveOverride || hourThreshold === null || h.hours >= hourThreshold;
+  });
 
   const activeCount = localOverrides.size;
 
@@ -973,8 +982,39 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
               ? 'Select specific buildings to split by level. Checking a building under a cost head adds level+building ACT codes (01BA, 02BA…) for that building only — other buildings are unaffected.'
               : 'Checked cost heads will use level-based activity codes (00L1, 00L2, 00RF…) instead of the flat mapping.'}
           </p>
+
+          {lastAppliedAt && (
+            <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-1.5">
+              <span>✓</span>
+              <span>Last applied at {lastAppliedAt.toLocaleTimeString()} — codes updated. Export to verify output.</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium">Show:</span>
+            {([
+              { label: `All (${costHeadSummary.length})`, value: null },
+              { label: `1,000h+ (${costHeadSummary.filter(h => h.hours >= 1000).length})`, value: 1000 },
+              { label: `500h+ (${costHeadSummary.filter(h => h.hours >= 500).length})`, value: 500 },
+            ] as { label: string; value: number | null }[]).map(opt => (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setHourThreshold(opt.value)}
+                className={cn(
+                  'text-xs px-2 py-1 rounded border transition-colors',
+                  hourThreshold === opt.value
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background border-border hover:bg-muted'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <div className="max-h-80 overflow-y-auto space-y-1 border border-border rounded-md p-2">
-            {costHeadSummary.map(({ costHead, hours }) => {
+            {visibleHeads.map(({ costHead, hours }) => {
               const bMap = costHeadBuildingHours.get(costHead) || new Map();
               const isExpanded = expandedHeads.has(costHead);
               const globalKey = makeKey(costHead, null);
@@ -1000,7 +1040,7 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
                     </span>
                     {(globalChecked || checkedBuildings.length > 0) && (
                       <Badge variant="secondary" className="text-xs">
-                        {globalChecked ? 'all bldgs' : `${checkedBuildings.length} bldg${checkedBuildings.length > 1 ? 's' : ''}`}
+                        {globalChecked ? 'all bldgs checked' : `${checkedBuildings.length} checked`}
                       </Badge>
                     )}
                   </div>
