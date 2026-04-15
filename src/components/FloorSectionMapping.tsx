@@ -959,10 +959,36 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     });
   };
 
+  // A head is visible if: it has an active override, OR its total meets threshold,
+  // OR (when threshold set) any individual building under it meets threshold
   const visibleHeads = costHeadSummary.filter(h => {
     const hasActiveOverride = Array.from(localOverrides).some(k => k.startsWith(`${h.costHead}||`));
-    return hasActiveOverride || hourThreshold === null || h.hours >= hourThreshold;
+    if (hasActiveOverride) return true;
+    if (hourThreshold === null) return true;
+    if (h.hours >= hourThreshold) return true;
+    const bMap = costHeadBuildingHours.get(h.costHead);
+    if (bMap) {
+      for (const bHours of bMap.values()) {
+        if (bHours >= hourThreshold) return true;
+      }
+    }
+    return false;
   });
+
+  // Auto-expand heads that have at least one building over threshold when filter is active
+  const autoExpandedHeads = useMemo(() => {
+    if (hourThreshold === null) return new Set<string>();
+    const result = new Set<string>();
+    costHeadSummary.forEach(h => {
+      const bMap = costHeadBuildingHours.get(h.costHead);
+      if (bMap) {
+        for (const bHours of bMap.values()) {
+          if (bHours >= hourThreshold) { result.add(h.costHead); break; }
+        }
+      }
+    });
+    return result;
+  }, [costHeadSummary, costHeadBuildingHours, hourThreshold]);
 
   const activeCount = localOverrides.size;
 
@@ -1016,7 +1042,7 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
           <div className="max-h-80 overflow-y-auto space-y-1 border border-border rounded-md p-2">
             {visibleHeads.map(({ costHead, hours }) => {
               const bMap = costHeadBuildingHours.get(costHead) || new Map();
-              const isExpanded = expandedHeads.has(costHead);
+              const isExpanded = expandedHeads.has(costHead) || autoExpandedHeads.has(costHead);
               const globalKey = makeKey(costHead, null);
               const globalChecked = localOverrides.has(globalKey);
               const checkedBuildings = buildings.filter(b => localOverrides.has(makeKey(costHead, b)));
@@ -1083,12 +1109,18 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
                         });
                         return (
                           <div key={bldgId}>
-                            <label className="flex items-center gap-3 px-3 py-1.5 hover:bg-muted/40 cursor-pointer text-xs">
+                            <label className={cn(
+                              'flex items-center gap-3 px-3 py-1.5 hover:bg-muted/40 cursor-pointer text-xs',
+                              !isChecked && hourThreshold !== null && bldgHours >= hourThreshold && 'bg-amber-50/50'
+                            )}>
                               <Checkbox
                                 checked={isChecked}
                                 onCheckedChange={() => toggleOverride(costHead, bldgId)}
                               />
                               <span className="font-mono font-semibold w-12">{bldgId}</span>
+                              {!isChecked && hourThreshold !== null && bldgHours >= hourThreshold && (
+                                <span className="text-amber-600 text-xs">⚠ over threshold</span>
+                              )}
                               <span className={cn(
                                 'tabular-nums ml-auto',
                                 bldgHours >= 1000 ? 'text-amber-600 font-semibold' : 'text-muted-foreground'
@@ -1196,10 +1228,10 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
               </span>
             </div>
           )}
-          {hasOverrideChanges && initialized && (
+          {initialized && (localOverrides.size > 0 || hasOverrideChanges) && (
             <Button size="sm" onClick={handleSaveAndReapply} className="mt-2">
               <Save className="w-3.5 h-3.5 mr-1.5" />
-              Save & Re-apply
+              {hasOverrideChanges ? 'Save & Re-apply' : 'Re-apply'}
             </Button>
           )}
         </CollapsibleContent>
