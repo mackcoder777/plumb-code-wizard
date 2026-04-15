@@ -781,6 +781,7 @@ interface CostHeadOverrideSectionProps {
   estimateData: EstimateItem[];
   costHeadActivityOverrides: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }>;
   onCostHeadOverridesChange?: (overrides: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }>) => void;
+  onLocalOverridesChange?: (activeHeads: Set<string>) => void;
   onApplySectionCodes?: (mappings: Record<string, string>, activityMappings: Record<string, string>) => void;
   localMappings: Record<string, string>;
   localActivityMappings: Record<string, string>;
@@ -797,6 +798,7 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   estimateData,
   costHeadActivityOverrides,
   onCostHeadOverridesChange,
+  onLocalOverridesChange,
   onApplySectionCodes,
   localMappings,
   localActivityMappings,
@@ -863,6 +865,16 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     setLocalOverrides(active);
     setInitialized(true);
   }, [costHeadActivityOverrides]);
+
+  useEffect(() => {
+    if (!onLocalOverridesChange) return;
+    const activeHeads = new Set<string>();
+    localOverrides.forEach(key => {
+      const costHead = key.split('||')[0];
+      if (costHead) activeHeads.add(costHead);
+    });
+    onLocalOverridesChange(activeHeads);
+  }, [localOverrides, onLocalOverridesChange]);
 
   const buildings = useMemo(() =>
     buildingMappings.map(bm => bm.building_identifier).filter(Boolean),
@@ -1382,6 +1394,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
   const [customDescriptions, setCustomDescriptions] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [liveOverrideHeads, setLiveOverrideHeads] = useState<Set<string>>(new Set());
 
   const { data: dbMappings = [], isLoading } = useFloorSectionMappings(projectId);
   const batchSave = useBatchSaveFloorSectionMappings();
@@ -2162,6 +2175,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           estimateData={estimateData}
           costHeadActivityOverrides={costHeadActivityOverrides}
           onCostHeadOverridesChange={onCostHeadOverridesChange}
+          onLocalOverridesChange={setLiveOverrideHeads}
           onApplySectionCodes={onApplySectionCodes}
           localMappings={localMappings}
           localActivityMappings={localActivityMappings}
@@ -2170,7 +2184,7 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
         />
         <CodeSplittingPreview
           estimateData={estimateData}
-          activeOverrideHeads={new Set(costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => o.cost_head))}
+          activeOverrideHeads={liveOverrideHeads}
           localMappings={localMappings}
           localActivityMappings={localActivityMappings}
           codeFormatMode={codeFormatMode}
