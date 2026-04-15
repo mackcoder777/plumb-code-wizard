@@ -824,6 +824,8 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   };
 
   // For each (costHead, buildingId), compute projected ACT → { hours, items, floors[] }
+  // Uses suggestActivity(floor) to derive the level from the floor NAME, not the current
+  // flat activity code — this shows what the split would produce when level override is active.
   const perBuildingBreakdown = useMemo(() => {
     const result = new Map<string, Map<string, { hours: number; items: number; floors: string[] }>>();
     estimateData.forEach(item => {
@@ -836,9 +838,10 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       const hours = item.hours || 0;
       const bldgId = (localMappings[floor] || '').toUpperCase();
       if (!bldgId || bldgId === '0000') return;
-      const floorActivity = localActivityMappings[floor] || '0000';
-      const levelPrefix = extractMultitradeLevelPrefix(floorActivity);
       const buildingSuffix = bldgId.replace(/^00/, '');
+      // Parse the floor NAME to determine level — not the stored flat activity code.
+      const suggestedFloorActivity = suggestActivity(floor);
+      const levelPrefix = extractMultitradeLevelPrefix(suggestedFloorActivity);
       const projectedAct = levelPrefix + buildingSuffix;
       const mapKey = `${head}||${bldgId}`;
       if (!result.has(mapKey)) result.set(mapKey, new Map());
@@ -850,7 +853,7 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!entry.floors.includes(floor)) entry.floors.push(floor);
     });
     return result;
-  }, [estimateData, localMappings, localActivityMappings]);
+  }, [estimateData, localMappings]);
 
   useEffect(() => {
     const active = new Set(
