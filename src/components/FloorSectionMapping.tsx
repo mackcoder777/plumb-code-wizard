@@ -836,16 +836,13 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!head || head === 'UNCD') return;
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      // Use section from cost code (parts[0]) for consistency with costHeadBuildingHours.
-      // This handles BG, ST, and other non-building sections correctly.
-      const sectionId = (parts.length >= 3 ? parts[0] : '').toUpperCase();
-      if (!sectionId) return;
-      const buildingSuffix = sectionId.replace(/^00/, '');
-      // Parse the floor NAME to determine level prefix.
+      const bldgId = (localMappings[floor] || '').toUpperCase();
+      if (!bldgId || bldgId === '0000') return;
+      const buildingSuffix = bldgId.replace(/^00/, '');
       const suggestedFloorActivity = suggestActivity(floor);
       const levelPrefix = extractMultitradeLevelPrefix(suggestedFloorActivity);
       const projectedAct = levelPrefix + buildingSuffix;
-      const mapKey = `${head}||${sectionId}`;
+      const mapKey = `${head}||${bldgId}`;
       if (!result.has(mapKey)) result.set(mapKey, new Map());
       const actMap = result.get(mapKey)!;
       if (!actMap.has(projectedAct)) actMap.set(projectedAct, { hours: 0, items: 0, floors: [] });
@@ -882,10 +879,7 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!head || head === 'UNCD') return;
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      // Use the section segment from the item's cost code (parts[0]) — more reliable than
-      // localMappings[floor] which returns section codes (BG, ST) not building IDs for BG floors.
-      const sectionFromCode = (parts.length >= 3 ? parts[0] : '').toUpperCase();
-      const bldg = sectionFromCode || GLOBAL_KEY;
+      const bldg = (localMappings[floor] || '').toUpperCase() || GLOBAL_KEY;
       if (!result.has(head)) result.set(head, new Map());
       const bMap = result.get(head)!;
       bMap.set(bldg, (bMap.get(bldg) || 0) + hours);
