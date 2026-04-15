@@ -836,14 +836,16 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!head || head === 'UNCD') return;
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      const bldgId = (localMappings[floor] || '').toUpperCase();
-      if (!bldgId || bldgId === '0000') return;
-      const buildingSuffix = bldgId.replace(/^00/, '');
-      // Parse the floor NAME to determine level — not the stored flat activity code.
+      // Use section from cost code (parts[0]) for consistency with costHeadBuildingHours.
+      // This handles BG, ST, and other non-building sections correctly.
+      const sectionId = (parts.length >= 3 ? parts[0] : '').toUpperCase();
+      if (!sectionId) return;
+      const buildingSuffix = sectionId.replace(/^00/, '');
+      // Parse the floor NAME to determine level prefix.
       const suggestedFloorActivity = suggestActivity(floor);
       const levelPrefix = extractMultitradeLevelPrefix(suggestedFloorActivity);
       const projectedAct = levelPrefix + buildingSuffix;
-      const mapKey = `${head}||${bldgId}`;
+      const mapKey = `${head}||${sectionId}`;
       if (!result.has(mapKey)) result.set(mapKey, new Map());
       const actMap = result.get(mapKey)!;
       if (!actMap.has(projectedAct)) actMap.set(projectedAct, { hours: 0, items: 0, floors: [] });
@@ -880,7 +882,10 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!head || head === 'UNCD') return;
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      const bldg = (localMappings[floor] || '').toUpperCase() || GLOBAL_KEY;
+      // Use the section segment from the item's cost code (parts[0]) — more reliable than
+      // localMappings[floor] which returns section codes (BG, ST) not building IDs for BG floors.
+      const sectionFromCode = (parts.length >= 3 ? parts[0] : '').toUpperCase();
+      const bldg = sectionFromCode || GLOBAL_KEY;
       if (!result.has(head)) result.set(head, new Map());
       const bMap = result.get(head)!;
       bMap.set(bldg, (bMap.get(bldg) || 0) + hours);
@@ -1006,11 +1011,12 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
                           {hours.toLocaleString(undefined, { maximumFractionDigits: 0 })}h
                         </span>
                       </label>
-                      {/* Per-building rows */}
-                      {codeFormatMode === 'multitrade' && buildings.map(bldgId => {
-                        const bldgIdUpper = bldgId.toUpperCase();
-                        const bldgHours = bMap.get(bldgIdUpper) || 0;
-                        if (bldgHours === 0) return null;
+                      {/* Per-building rows — iterate actual keys from bMap so BG, ST, etc. appear */}
+                      {codeFormatMode === 'multitrade' && Array.from(bMap.entries())
+                        .filter(([k]) => k !== GLOBAL_KEY)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([bldgIdUpper, bldgHours]) => {
+                        const bldgId = bldgIdUpper;
                         const bKey = makeKey(costHead, bldgId);
                         const isChecked = localOverrides.has(bKey);
                         const breakdownKey = `${costHead}||${bldgIdUpper}`;
