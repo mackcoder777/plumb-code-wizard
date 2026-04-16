@@ -847,16 +847,23 @@ const EnhancedCostCodeManager = () => {
           activity = '';
         } else {
           const buildingAct = resolvedActivity || '0000';
-          if (buildingAct.startsWith('00')) {
-            const bldgId = buildingAct.replace(/^00/, '') || null;
-            if (bldgId && shouldUseLevelActivity(costHead, bldgId, costHeadActivityOverrides)) {
-              const levelActivity = deriveFloorLevelActivityForSummary(item.floor || '');
-              const levelPrefix = extractLevelPrefixForSummary(levelActivity);
-              activity = levelPrefix + buildingAct.slice(2);
+          // Strip leading zeros to get canonical building suffix: 00BA→BA, 0B12→B12, 0MOD→MOD
+          const bldgSuffix = buildingAct.replace(/^0+/, '');
+          if (
+            bldgSuffix &&
+            bldgSuffix.length <= 2 && // ACT is 4 chars; level prefix is 2 chars, so building suffix must be ≤2
+            shouldUseLevelActivity(costHead, bldgSuffix, costHeadActivityOverrides)
+          ) {
+            // Use floor's canonical activity from user's Section Mapping (00L1, 00L2, 00RF…)
+            // NOT raw floor string parsing — floorMap.activity is already resolved correctly
+            const levelPrefix = extractLevelPrefixForSummary(floorMap.activity || '0000');
+            if (levelPrefix !== '00') {
+              activity = levelPrefix + bldgSuffix;
             } else {
               activity = buildingAct;
             }
           } else {
+            // No override, or 3+ char building ID (B12/B13 can't encode level in 4-char ACT)
             activity = buildingAct;
           }
         }
