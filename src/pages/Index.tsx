@@ -456,6 +456,33 @@ const FLOOR_MAPPING_FALLBACK = {
   'P3': [/level.*p3$/i, /^p3$/i, /parking.*3/i, /basement.*3/i]
 };
 
+// Level activity helpers for memoizedLaborSummary override awareness
+function deriveFloorLevelActivityForSummary(floor: string): string {
+  const lower = (floor || '').toLowerCase();
+  const dashIdx = lower.indexOf(' - ');
+  const floorPart = dashIdx > 0 ? lower.substring(dashIdx + 3).trim() : lower;
+  const clean = floorPart.replace(/\s*\(.*\)\s*$/, '').trim();
+  const levelMatch = clean.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
+  if (levelMatch) return `00L${levelMatch[1]}`;
+  if (/basement|below\s*grade/.test(clean)) return '00LB';
+  if (/mezzanine|mezz/.test(clean)) return '00LM';
+  if (/^roof$/i.test(clean)) return '00RF';
+  if (/^crawl/i.test(clean)) return '00CS';
+  if (/^ug$/i.test(clean)) return '00UG';
+  return '0000';
+}
+
+function extractLevelPrefixForSummary(floorActivity: string): string {
+  const act = (floorActivity || '0000').toUpperCase().trim();
+  const levelMatch = act.match(/^0*L(\d+)$/);
+  if (levelMatch) return String(parseInt(levelMatch[1], 10)).padStart(2, '0');
+  if (/^0*RF$/.test(act)) return '0R';
+  if (/^0*UG$/.test(act)) return '0U';
+  if (/^0*LB$/.test(act)) return '0B';
+  if (/^0*LM$/.test(act)) return '0M';
+  return '00';
+}
+
 const EnhancedCostCodeManager = () => {
   // Auth state
   const { user, loading: authLoading } = useAuth();
@@ -819,14 +846,26 @@ const EnhancedCostCodeManager = () => {
         if (resolvedActivity === null) {
           activity = '';
         } else {
-          activity = resolvedActivity || '0000';
+          const buildingAct = resolvedActivity || '0000';
+          if (buildingAct.startsWith('00')) {
+            const bldgId = buildingAct.replace(/^00/, '') || null;
+            if (bldgId && shouldUseLevelActivity(costHead, bldgId, costHeadActivityOverrides)) {
+              const levelActivity = deriveFloorLevelActivityForSummary(item.floor || '');
+              const levelPrefix = extractLevelPrefixForSummary(levelActivity);
+              activity = levelPrefix + buildingAct.slice(2);
+            } else {
+              activity = buildingAct;
+            }
+          } else {
+            activity = buildingAct;
+          }
         }
       } else {
         section = resolveSectionStatic(item.floor, item.drawing || '', dbFloorMappings, dbBuildingMappings, { zone: item.zone, datasetProfile });
         activity = resolveActivity(item, costHead) || '';
       }
       if (!activity) {
-        activity = '0000'; // No resolved activity — use default so hours enter pipeline
+        activity = '0000';
       }
       const fullCode = `${section} ${activity} ${costHead}`;
       if (!summary[fullCode]) {
@@ -841,7 +880,7 @@ const EnhancedCostCodeManager = () => {
       summary[fullCode].fieldHours += hours;
     });
     return summary;
-  }, [estimateData, codeFormatMode, tradePrefix, dbFloorMappings, dbBuildingMappings, datasetProfile, resolveActivity, bidLaborRate]);
+  }, [estimateData, codeFormatMode, tradePrefix, dbFloorMappings, dbBuildingMappings, datasetProfile, resolveActivity, bidLaborRate, costHeadActivityOverrides]);
 
   // Memoized material summary for BudgetAdjustmentsPanel
   const memoizedMaterialSummary = useMemo(() => {
