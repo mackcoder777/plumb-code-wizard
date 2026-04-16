@@ -18,7 +18,7 @@ import {
   useBatchSaveFloorSectionMappings,
   FloorSectionMapping,
 } from '@/hooks/useFloorSectionMappings';
-import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
+import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 import { supabase } from '@/integrations/supabase/client';
 import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -787,6 +787,8 @@ interface CostHeadOverrideSectionProps {
   localActivityMappings: Record<string, string>;
   codeFormatMode?: 'standard' | 'multitrade';
   buildingMappings?: BuildingSectionMapping[];
+  floorSectionMappings?: FloorSectionMapping[];
+  datasetProfile?: DatasetProfile | null;
 }
 
 // localOverrides key: "COSTHEAD||BLDGID" or "COSTHEAD||__GLOBAL__"
@@ -804,6 +806,8 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
   localActivityMappings,
   codeFormatMode = 'standard',
   buildingMappings = [],
+  floorSectionMappings = [],
+  datasetProfile = null,
 }) => {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [localOverrides, setLocalOverrides] = useState<Set<string>>(new Set());
@@ -894,13 +898,26 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       if (!head || head === 'UNCD') return;
       const floor = (item.floor || '').trim();
       const hours = item.hours || 0;
-      const bldg = (localMappings[floor] || '').toUpperCase() || GLOBAL_KEY;
+      // Use resolveFloorMappingStatic to match exactly what memoizedLaborSummary uses.
+      // localMappings[floor] misses items resolved via zone/drawing fallback, causing
+      // the UI to show different totals than the export pipeline.
+      let bldg: string;
+      if (codeFormatMode === 'multitrade' && floorSectionMappings.length > 0) {
+        const resolved = resolveFloorMappingStatic(
+          floor, item.drawing || '', floorSectionMappings, buildingMappings,
+          { zone: item.zone, datasetProfile }
+        );
+        const buildingAct = (resolved.buildingActivity ?? resolved.activity) || '0000';
+        bldg = buildingAct.replace(/^00/, '') || GLOBAL_KEY;
+      } else {
+        bldg = (localMappings[floor] || '').toUpperCase() || GLOBAL_KEY;
+      }
       if (!result.has(head)) result.set(head, new Map());
       const bMap = result.get(head)!;
       bMap.set(bldg, (bMap.get(bldg) || 0) + hours);
     });
     return result;
-  }, [estimateData, localMappings]);
+  }, [estimateData, localMappings, codeFormatMode, floorSectionMappings, buildingMappings, datasetProfile]);
 
   const costHeadSummary = useMemo(() => {
     const map = new Map<string, number>();
@@ -2269,12 +2286,13 @@ export const FloorSectionMappingPanel: React.FC<FloorSectionMappingPanelProps> =
           estimateData={estimateData}
           costHeadActivityOverrides={costHeadActivityOverrides}
           onCostHeadOverridesChange={onCostHeadOverridesChange}
-          
           onApplySectionCodes={onApplySectionCodes}
           localMappings={localMappings}
           localActivityMappings={localActivityMappings}
           codeFormatMode={codeFormatMode}
           buildingMappings={buildingMappings}
+          floorSectionMappings={dbMappings}
+          datasetProfile={datasetProfile}
         />
 
         {hasChanges && (
