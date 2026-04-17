@@ -230,9 +230,36 @@ const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string 
   return { rate: 7.25, jurisdiction: 'California State Minimum' };
 };
 
-// Material codes that are typically TAXABLE
-const TAXABLE_MATERIAL_CODES = [
-  '9510', '9512', '9514', '9515', '9520', '9521', '9522', '9523', '9524', '9525'
+// Material codes that are NON-TAXABLE by default.
+// California treats tangible construction material as taxable personal property.
+// This list captures narrow exceptions: admin, contingencies, bonds, allowances,
+// subcontract work, services. Everything else defaults to taxable.
+// PM overrides in Material Tax Details always take precedence.
+const NON_TAXABLE_MATERIAL_CODES = [
+  'ACCR',  // Accrual
+  'ALOW',  // Allowance
+  'BCNT',  // Balance of Remainder of Contract
+  'BOND',  // Bonds & Permits
+  'CCIP',  // CCIP Deduct
+  'OCIP',  // OCIP
+  'UCIP',  // UCIP Deduct
+  'COAL',  // CO Allowance
+  'COCN',  // C.O. Contingency
+  'CONT',  // Contingency
+  'LCNT',  // Labor Contingency
+  'MCNT',  // Material Contingency
+  'GCNT',  // GC Labor Contingency
+  'CCNT',  // Company Cost Contingency
+  'HRCN',  // High Rise Factor Contingency
+  'LRCN',  // Labor Rate Contingency
+  'OCTN',  // Overtime Contingency
+  'FCNT',  // Field Bonus Contingency
+  'RET1',  // Retainage
+  'REV1',  // Income
+  'SUB1',  // Sub placeholder
+  'OTR1',  // Other placeholder
+  'MAT1',  // Material placeholder
+  'SUBS',  // Subsistence
 ];
 
 interface LaborCodeSummary {
@@ -1021,9 +1048,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     Object.entries(materialSummary).forEach(([code, data]) => {
       const amount = data.amount || 0;
+      // Default to taxable unless code is in non-taxable list OR is a
+      // 98xx subcontract code (9800-9877 all represent sub work, not material).
+      // PM overrides in Material Tax Details always win.
+      const isSubCode = /^98\d{2}$/.test(code);
+      const defaultTaxable = !NON_TAXABLE_MATERIAL_CODES.includes(code) && !isSubCode;
       const isTaxable = materialTaxOverrides[code] !== undefined
         ? materialTaxOverrides[code]
-        : TAXABLE_MATERIAL_CODES.includes(code);
+        : defaultTaxable;
       const taxAmount = isTaxable ? amount * (taxInfo.rate / 100) : 0;
 
       materialTaxSummary.push({
