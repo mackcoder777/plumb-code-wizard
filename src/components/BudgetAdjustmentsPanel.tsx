@@ -75,7 +75,7 @@ const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string 
       (zip >= 91364 && zip <= 91367) ||
       (zip >= 91401 && zip <= 91499) ||
       (zip >= 91601 && zip <= 91618)) {
-    return { rate: 9.5, jurisdiction: 'Los Angeles' };
+    return { rate: 9.75, jurisdiction: 'Los Angeles' };
   }
   
   // Pasadena: 10.25%
