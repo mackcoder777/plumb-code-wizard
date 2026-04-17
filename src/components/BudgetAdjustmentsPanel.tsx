@@ -20,7 +20,9 @@ import {
   Info,
   DollarSign,
   Undo2,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  Scale
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,7 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { roundHoursPreservingTotal } from '@/utils/budgetExportSystem';
+import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
 
 // Function to get tax rate by ZIP code using ranges
