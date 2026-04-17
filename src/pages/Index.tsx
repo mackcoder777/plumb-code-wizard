@@ -874,13 +874,13 @@ const EnhancedCostCodeManager = () => {
             bldgSuffix.length <= 2 && // ACT is 4 chars; level prefix is 2 chars, so building suffix must be ≤2
             shouldUseLevelActivity(costHead, bldgSuffix, costHeadActivityOverrides)
           ) {
-            // Use floor's canonical activity from user's Section Mapping (00L1, 00L2, 00RF…)
-            // NOT raw floor string parsing — floorMap.activity is already resolved correctly
-            const levelPrefix = extractLevelPrefixForSummary(floorMap.activity || '0000');
+            // Floor mappings store activity_code as building ID only (e.g. "BA"), with no level info.
+            // The level lives in the floor_pattern string ("Bldg A - Level 2"), so parse it from item.floor.
+            const levelPrefix = extractLevelPrefixFromPattern(item.floor || '');
             if (levelPrefix !== '00') {
-              activity = levelPrefix + bldgSuffix;
+              activity = levelPrefix + bldgSuffix; // e.g. "01" + "BA" = "01BA"
             } else {
-              activity = buildingAct;
+              activity = buildingAct; // Floor has no extractable level — keep flat building activity
             }
           } else {
             // No override, or 3+ char building ID (B12/B13 can't encode level in 4-char ACT)
