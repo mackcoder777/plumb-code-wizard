@@ -121,7 +121,9 @@ export function useBatchUpsertCostHeadActivityOverrides() {
       projectId: string;
       overrides: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }>;
     }) => {
-      // Partial unique indexes require manual delete-then-insert per record
+      // Partial unique indexes require manual delete per record.
+      // useLevelActivity=true → delete-then-insert (active override).
+      // useLevelActivity=false → delete only (user unchecked it, remove from DB).
       for (const o of overrides) {
         let delQ = supabase
           .from('cost_head_activity_overrides')
@@ -132,13 +134,16 @@ export function useBatchUpsertCostHeadActivityOverrides() {
           ? delQ.is('building_identifier', null)
           : delQ.eq('building_identifier', o.buildingId);
         await delQ;
+
+        if (!o.useLevelActivity) continue; // unchecked — deletion only
+
         const { error } = await supabase
           .from('cost_head_activity_overrides')
           .insert({
             project_id: projectId,
             cost_head: o.costHead,
             building_identifier: o.buildingId,
-            use_level_activity: o.useLevelActivity,
+            use_level_activity: true,
           });
         if (error) throw error;
       }
