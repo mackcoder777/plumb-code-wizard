@@ -1614,63 +1614,32 @@ export function exportBudgetPacket(
     materialRowIndex++;
   }
 
-  // Add GC 0FAB CONT — unbudgeted shop hour volume contingency
-  // Captures the dollar gap between bid shop hours and budget fab hours produced.
-  // Only written when: LRCN is enabled (bid shop hours entered), fab strip is
-  // producing hours, and bid shop hours exceed budget fab hours (positive gap only).
-  if (budgetAdjustments?.laborRateContingencyEnabled) {
-    const bidShopHours = budgetAdjustments.bidRates?.shop?.hours || 0;
-    const budgetFabHours = budgetAdjustments.totalFabHours || 0;
-    const shopBidRate = budgetAdjustments.shopRate || 0;
-
-    if (bidShopHours > 0 && budgetFabHours > 0 && shopBidRate > 0) {
-      const unbudgetedHours = bidShopHours - budgetFabHours;
-      const gcFabContAmount = unbudgetedHours * shopBidRate;
-
-      if (gcFabContAmount > 0) {
-        const gcFabContRow = MATERIAL_START_ROW + materialRowIndex;
-        ws[`B${gcFabContRow}`] = { t: 's', v: 'GC 0FAB CONT' };
-        ws[`D${gcFabContRow}`] = { t: 's', v: 'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY' };
-        ws[`H${gcFabContRow}`] = { t: 'n', v: Math.round(gcFabContAmount * 100) / 100, z: '#,##0.00' };
-        totalMaterialDollars += gcFabContAmount;
-        materialRowIndex++;
-      }
+  // Add GC 0FAB CONT — unbudgeted shop hour volume contingency.
+  // Math lives in computeGcFabCont() at the bottom of this file (single source of truth).
+  {
+    const gcFabContAmount = computeGcFabCont(budgetAdjustments);
+    if (gcFabContAmount > 0) {
+      const gcFabContRow = MATERIAL_START_ROW + materialRowIndex;
+      ws[`B${gcFabContRow}`] = { t: 's', v: 'GC 0FAB CONT' };
+      ws[`D${gcFabContRow}`] = { t: 's', v: 'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY' };
+      ws[`H${gcFabContRow}`] = { t: 'n', v: gcFabContAmount, z: '#,##0.00' };
+      totalMaterialDollars += gcFabContAmount;
+      materialRowIndex++;
     }
   }
 
-  // Add GC 0FLD CONT — unbudgeted field hour volume contingency
-  // Captures the dollar gap between bid field hours and budget-produced field hours.
-  // LRCN bridges the rate gap on BID hours, but does NOT bridge the volume gap
-  // when AutoBid takeoff produces fewer hours than the bid specifies.
-  //
-  // IMPORTANT: FCNT already strips hours OUT of budget field labor and recognizes
-  // them separately on the material side. To prevent double-counting, we add those
-  // stripped hours back to the budget-produced side of the gap calculation.
-  //
-  // Only written when: LRCN enabled, bid field hours entered, and positive gap.
-  if (budgetAdjustments?.laborRateContingencyEnabled) {
-    const bidFieldHours =
-      (budgetAdjustments.bidRates?.straightTime?.hours || 0) +
-      (budgetAdjustments.bidRates?.shiftTime?.hours || 0) +
-      (budgetAdjustments.bidRates?.overtime?.hours || 0) +
-      (budgetAdjustments.bidRates?.doubleTime?.hours || 0);
-    const budgetFieldHours = budgetAdjustments.totalFieldHours || 0;
-    const foremanHours = budgetAdjustments.foremanBonusHours || 0;
-    const budgetRateVal = budgetAdjustments.budgetRate || 0;
-    const effectiveBudgetFieldHours = budgetFieldHours + foremanHours;
-
-    if (bidFieldHours > 0 && effectiveBudgetFieldHours > 0 && budgetRateVal > 0) {
-      const unbudgetedFieldHours = bidFieldHours - effectiveBudgetFieldHours;
-      const gcFldContAmount = unbudgetedFieldHours * budgetRateVal;
-
-      if (gcFldContAmount > 0) {
-        const gcFldContRow = MATERIAL_START_ROW + materialRowIndex;
-        ws[`B${gcFldContRow}`] = { t: 's', v: 'GC 0FLD CONT' };
-        ws[`D${gcFldContRow}`] = { t: 's', v: 'UNBUDGETED FIELD HOUR VOLUME CONTINGENCY' };
-        ws[`H${gcFldContRow}`] = { t: 'n', v: Math.round(gcFldContAmount * 100) / 100, z: '#,##0.00' };
-        totalMaterialDollars += gcFldContAmount;
-        materialRowIndex++;
-      }
+  // Add GC 0FLD CONT — unbudgeted field hour volume contingency.
+  // Math lives in computeGcFldCont() at the bottom of this file (single source of truth).
+  // Foreman hours are added back to budget side inside the helper to prevent FCNT double-counting.
+  {
+    const gcFldContAmount = computeGcFldCont(budgetAdjustments);
+    if (gcFldContAmount > 0) {
+      const gcFldContRow = MATERIAL_START_ROW + materialRowIndex;
+      ws[`B${gcFldContRow}`] = { t: 's', v: 'GC 0FLD CONT' };
+      ws[`D${gcFldContRow}`] = { t: 's', v: 'UNBUDGETED FIELD HOUR VOLUME CONTINGENCY' };
+      ws[`H${gcFldContRow}`] = { t: 'n', v: gcFldContAmount, z: '#,##0.00' };
+      totalMaterialDollars += gcFldContAmount;
+      materialRowIndex++;
     }
   }
 
