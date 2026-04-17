@@ -2771,8 +2771,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       console.table(exportReconciliationLog.mergeLog);
       console.groupEnd();
     }
+  }, [exportReconciliationLog]);
+
+  // Single source of truth for the BudgetAdjustments object: built once, consumed
+  // by both onAdjustmentsChange (export pipeline) and the bid reconciliation readout.
+  // Guarantees the readout shows exactly what the export receives.
+  const currentAdjustments = useMemo<BudgetAdjustments>(() => {
     const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
-    onAdjustmentsChange({
+    return {
       jobsiteZipCode,
       taxRate: taxInfo.rate,
       taxJurisdiction: taxInfo.jurisdiction,
@@ -2812,8 +2818,37 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: m.redistribute_adjustments as Record<string, number> | null,
         merged_act: m.merged_act,
       })) ?? [],
-    });
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary, savedMergesData, exportReconciliationLog]);
+    };
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, finalLaborSummary, savedMergesData]);
+
+  useEffect(() => {
+    onAdjustmentsChange(currentAdjustments);
+  }, [currentAdjustments, onAdjustmentsChange]);
+
+  // Bid Reconciliation readout — uses the same helpers as the export pipeline,
+  // guaranteeing the displayed values exactly match what gets written to the .xlsx.
+  const bidReconciliation = useMemo(() => {
+    const budgetLabor = Object.values(finalLaborSummary ?? {})
+      .reduce((s, i) => s + (i.dollars || 0), 0);
+    const fcnt = calculations.foremanBonusDollars || 0;
+    const lrcn = lrcnEnabled ? (lrcnCalculations.lrcnAmount || 0) : 0;
+    // Match export gate exactly: fabLrcnEnabled && fabLrcnAmount > 0.
+    // Clamp negative (possible when budget fab rate > bid fab rate) to prevent
+    // drift between readout and export.
+    const fabLrcn = fabLrcnEnabled ? Math.max(0, fabLrcnCalculations.fabLrcnAmount || 0) : 0;
+    const gcFabCont = computeGcFabCont(currentAdjustments);
+    const gcFldCont = computeGcFldCont(currentAdjustments);
+    const exportTotal = budgetLabor + fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+    const bidTotal = lrcnCalculations.bidTotal || 0;
+    const delta = exportTotal - bidTotal;
+    const hasFieldBid =
+      (Number(bidRates.straightTime.hours) || 0) +
+      (Number(bidRates.shiftTime.hours) || 0) +
+      (Number(bidRates.overtime.hours) || 0) +
+      (Number(bidRates.doubleTime.hours) || 0) > 0;
+    return { budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, exportTotal, bidTotal, delta, hasFieldBid };
+  }, [currentAdjustments, finalLaborSummary, calculations.foremanBonusDollars, lrcnCalculations, fabLrcnCalculations, lrcnEnabled, fabLrcnEnabled, bidRates]);
+
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
