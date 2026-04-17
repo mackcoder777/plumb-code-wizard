@@ -20,7 +20,9 @@ import {
   Info,
   DollarSign,
   Undo2,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  Scale
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,7 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { roundHoursPreservingTotal } from '@/utils/budgetExportSystem';
+import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
 
 // Function to get tax rate by ZIP code using ranges
@@ -2768,8 +2771,14 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       console.table(exportReconciliationLog.mergeLog);
       console.groupEnd();
     }
+  }, [exportReconciliationLog]);
+
+  // Single source of truth for the BudgetAdjustments object: built once, consumed
+  // by both onAdjustmentsChange (export pipeline) and the bid reconciliation readout.
+  // Guarantees the readout shows exactly what the export receives.
+  const currentAdjustments = useMemo<BudgetAdjustments>(() => {
     const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
-    onAdjustmentsChange({
+    return {
       jobsiteZipCode,
       taxRate: taxInfo.rate,
       taxJurisdiction: taxInfo.jurisdiction,
@@ -2809,8 +2818,37 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: m.redistribute_adjustments as Record<string, number> | null,
         merged_act: m.merged_act,
       })) ?? [],
-    });
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, onAdjustmentsChange, finalLaborSummary, savedMergesData, exportReconciliationLog]);
+    };
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, finalLaborSummary, savedMergesData]);
+
+  useEffect(() => {
+    onAdjustmentsChange(currentAdjustments);
+  }, [currentAdjustments, onAdjustmentsChange]);
+
+  // Bid Reconciliation readout — uses the same helpers as the export pipeline,
+  // guaranteeing the displayed values exactly match what gets written to the .xlsx.
+  const bidReconciliation = useMemo(() => {
+    const budgetLabor = Object.values(finalLaborSummary ?? {})
+      .reduce((s, i) => s + (i.dollars || 0), 0);
+    const fcnt = calculations.foremanBonusDollars || 0;
+    const lrcn = lrcnEnabled ? (lrcnCalculations.lrcnAmount || 0) : 0;
+    // Match export gate exactly: fabLrcnEnabled && fabLrcnAmount > 0.
+    // Clamp negative (possible when budget fab rate > bid fab rate) to prevent
+    // drift between readout and export.
+    const fabLrcn = fabLrcnEnabled ? Math.max(0, fabLrcnCalculations.fabLrcnAmount || 0) : 0;
+    const gcFabCont = computeGcFabCont(currentAdjustments);
+    const gcFldCont = computeGcFldCont(currentAdjustments);
+    const exportTotal = budgetLabor + fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+    const bidTotal = lrcnCalculations.bidTotal || 0;
+    const delta = exportTotal - bidTotal;
+    const hasFieldBid =
+      (Number(bidRates.straightTime.hours) || 0) +
+      (Number(bidRates.shiftTime.hours) || 0) +
+      (Number(bidRates.overtime.hours) || 0) +
+      (Number(bidRates.doubleTime.hours) || 0) > 0;
+    return { budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, exportTotal, bidTotal, delta, hasFieldBid };
+  }, [currentAdjustments, finalLaborSummary, calculations.foremanBonusDollars, lrcnCalculations, fabLrcnCalculations, lrcnEnabled, fabLrcnEnabled, bidRates]);
+
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({
@@ -2847,8 +2885,70 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     }));
   };
 
+  const formatUSD = (n: number) =>
+    n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const absDelta = Math.abs(bidReconciliation.delta);
+  const deltaColor =
+    absDelta < 5_000 ? 'text-green-600'
+    : absDelta < 25_000 ? 'text-amber-600'
+    : 'text-red-600';
+  const showReconciliation = lrcnEnabled && bidReconciliation.hasFieldBid;
+
   return (
     <div className="space-y-6">
+      {/* Bid Reconciliation Readout */}
+      {showReconciliation && (
+        <Card className="border-2 border-primary/40">
+          <Collapsible defaultOpen>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Scale className="h-5 w-5 text-primary" />
+                  Bid Reconciliation
+                </CardTitle>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1">
+                    <ChevronDown className="h-4 w-4 transition-transform data-[state=closed]:-rotate-90" />
+                    Breakdown
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <div className="grid grid-cols-3 gap-4 pt-2">
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Bid Total</div>
+                  <div className="text-xl font-semibold tabular-nums">{formatUSD(bidReconciliation.bidTotal)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Export Total</div>
+                  <div className="text-xl font-semibold tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Delta</div>
+                  <div className={`text-xl font-semibold tabular-nums ${deltaColor}`}>
+                    {bidReconciliation.delta >= 0 ? '+' : ''}{formatUSD(bidReconciliation.delta)}
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="pt-0">
+                <Separator className="mb-3" />
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Budget labor (field + fab)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetLabor)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Foreman bonus (FCNT)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fcnt)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.lrcn)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Fab LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.fabLrcn)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FAB CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFabCont)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FLD CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFldCont)}</span></div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between font-semibold"><span>Export Total</span><span className="tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</span></div>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
+      )}
+
       {/* Project Location & Sales Tax */}
       <Card>
         <CardHeader className="pb-3">
