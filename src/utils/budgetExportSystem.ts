@@ -1638,6 +1638,42 @@ export function exportBudgetPacket(
     }
   }
 
+  // Add GC 0FLD CONT — unbudgeted field hour volume contingency
+  // Captures the dollar gap between bid field hours and budget-produced field hours.
+  // LRCN bridges the rate gap on BID hours, but does NOT bridge the volume gap
+  // when AutoBid takeoff produces fewer hours than the bid specifies.
+  //
+  // IMPORTANT: FCNT already strips hours OUT of budget field labor and recognizes
+  // them separately on the material side. To prevent double-counting, we add those
+  // stripped hours back to the budget-produced side of the gap calculation.
+  //
+  // Only written when: LRCN enabled, bid field hours entered, and positive gap.
+  if (budgetAdjustments?.laborRateContingencyEnabled) {
+    const bidFieldHours =
+      (budgetAdjustments.bidRates?.straightTime?.hours || 0) +
+      (budgetAdjustments.bidRates?.shiftTime?.hours || 0) +
+      (budgetAdjustments.bidRates?.overtime?.hours || 0) +
+      (budgetAdjustments.bidRates?.doubleTime?.hours || 0);
+    const budgetFieldHours = budgetAdjustments.totalFieldHours || 0;
+    const foremanHours = budgetAdjustments.foremanBonusHours || 0;
+    const budgetRateVal = budgetAdjustments.budgetRate || 0;
+    const effectiveBudgetFieldHours = budgetFieldHours + foremanHours;
+
+    if (bidFieldHours > 0 && effectiveBudgetFieldHours > 0 && budgetRateVal > 0) {
+      const unbudgetedFieldHours = bidFieldHours - effectiveBudgetFieldHours;
+      const gcFldContAmount = unbudgetedFieldHours * budgetRateVal;
+
+      if (gcFldContAmount > 0) {
+        const gcFldContRow = MATERIAL_START_ROW + materialRowIndex;
+        ws[`B${gcFldContRow}`] = { t: 's', v: 'GC 0FLD CONT' };
+        ws[`D${gcFldContRow}`] = { t: 's', v: 'UNBUDGETED FIELD HOUR VOLUME CONTINGENCY' };
+        ws[`H${gcFldContRow}`] = { t: 'n', v: Math.round(gcFldContAmount * 100) / 100, z: '#,##0.00' };
+        totalMaterialDollars += gcFldContAmount;
+        materialRowIndex++;
+      }
+    }
+  }
+
   const grandTotal = totalLaborDollars + totalMaterialDollars;
   const SUMMARY_BOX_ROW = MATERIAL_START_ROW + 2;
   ws[`J${SUMMARY_BOX_ROW}`] = { t: 's', v: 'TOTAL COST' };
@@ -2075,6 +2111,28 @@ export function exportAuditReport(
           'GC 0FAB CONT',
           'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY',
           Math.round(gcFabContAmount * 100) / 100,
+        ]);
+      }
+    }
+  }
+
+  if (budgetAdjustments?.laborRateContingencyEnabled) {
+    const bidFieldHours =
+      (budgetAdjustments.bidRates?.straightTime?.hours || 0) +
+      (budgetAdjustments.bidRates?.shiftTime?.hours || 0) +
+      (budgetAdjustments.bidRates?.overtime?.hours || 0) +
+      (budgetAdjustments.bidRates?.doubleTime?.hours || 0);
+    const budgetFieldHours = budgetAdjustments.totalFieldHours || 0;
+    const foremanHours = budgetAdjustments.foremanBonusHours || 0;
+    const budgetRateVal = budgetAdjustments.budgetRate || 0;
+    const effectiveBudgetFieldHours = budgetFieldHours + foremanHours;
+    if (bidFieldHours > 0 && effectiveBudgetFieldHours > 0 && budgetRateVal > 0) {
+      const gcFldContAmount = (bidFieldHours - effectiveBudgetFieldHours) * budgetRateVal;
+      if (gcFldContAmount > 0) {
+        contingencyLines.push([
+          'GC 0FLD CONT',
+          'UNBUDGETED FIELD HOUR VOLUME CONTINGENCY',
+          Math.round(gcFldContAmount * 100) / 100,
         ]);
       }
     }
