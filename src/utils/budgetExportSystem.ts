@@ -2239,3 +2239,47 @@ export function exportAuditReport(
     totalItems: items.length
   };
 }
+
+// ============================================================================
+// CONTINGENCY HELPERS — single source of truth shared by export + UI readout
+// ============================================================================
+
+/**
+ * Compute GC 0FAB CONT dollar amount — unbudgeted shop hour volume contingency.
+ * Returns 0 if LRCN is disabled, inputs are missing, or the gap is non-positive.
+ * SINGLE SOURCE OF TRUTH used by both Budget Packet, Audit Report, and the
+ * Bid Reconciliation readout in BudgetAdjustmentsPanel. Do not duplicate this math.
+ */
+export function computeGcFabCont(ba: BudgetAdjustments | null | undefined): number {
+  if (!ba?.laborRateContingencyEnabled) return 0;
+  const bidShopHours = ba.bidRates?.shop?.hours || 0;
+  const budgetFabHours = ba.totalFabHours || 0;
+  const shopBidRate = ba.shopRate || 0;
+  if (bidShopHours <= 0 || budgetFabHours <= 0 || shopBidRate <= 0) return 0;
+  const amount = (bidShopHours - budgetFabHours) * shopBidRate;
+  return amount > 0 ? Math.round(amount * 100) / 100 : 0;
+}
+
+/**
+ * Compute GC 0FLD CONT dollar amount — unbudgeted field hour volume contingency.
+ * Foreman hours are added back to the budget side to prevent double-counting
+ * with FCNT (which already strips those hours and recognizes them on the material side).
+ * Returns 0 if LRCN is disabled, inputs are missing, or the gap is non-positive.
+ * SINGLE SOURCE OF TRUTH used by both Budget Packet, Audit Report, and the
+ * Bid Reconciliation readout in BudgetAdjustmentsPanel. Do not duplicate this math.
+ */
+export function computeGcFldCont(ba: BudgetAdjustments | null | undefined): number {
+  if (!ba?.laborRateContingencyEnabled) return 0;
+  const bidFieldHours =
+    (ba.bidRates?.straightTime?.hours || 0) +
+    (ba.bidRates?.shiftTime?.hours || 0) +
+    (ba.bidRates?.overtime?.hours || 0) +
+    (ba.bidRates?.doubleTime?.hours || 0);
+  const budgetFieldHours = ba.totalFieldHours || 0;
+  const foremanHours = ba.foremanBonusHours || 0;
+  const budgetRateVal = ba.budgetRate || 0;
+  const effectiveBudgetFieldHours = budgetFieldHours + foremanHours;
+  if (bidFieldHours <= 0 || effectiveBudgetFieldHours <= 0 || budgetRateVal <= 0) return 0;
+  const amount = (bidFieldHours - effectiveBudgetFieldHours) * budgetRateVal;
+  return amount > 0 ? Math.round(amount * 100) / 100 : 0;
+}
