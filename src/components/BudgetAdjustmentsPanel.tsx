@@ -58,7 +58,9 @@ const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string 
     return { rate: 10.25, jurisdiction: 'Long Beach' };
   }
   
-  // Los Angeles City: 9.5%
+  // Los Angeles City: 9.75% (state 7.25% + county/district add-ons)
+  // Rate last verified 2026-04. CDTFA publishes quarterly updates at
+  // https://www.cdtfa.ca.gov/taxes-and-fees/sales-use-tax-rates.htm
   if ((zip >= 90001 && zip <= 90089) ||
       (zip >= 90091 && zip <= 90099) ||
       (zip >= 90101 && zip <= 90189) ||
@@ -73,7 +75,7 @@ const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string 
       (zip >= 91364 && zip <= 91367) ||
       (zip >= 91401 && zip <= 91499) ||
       (zip >= 91601 && zip <= 91618)) {
-    return { rate: 9.5, jurisdiction: 'Los Angeles' };
+    return { rate: 9.75, jurisdiction: 'Los Angeles' };
   }
   
   // Pasadena: 10.25%
