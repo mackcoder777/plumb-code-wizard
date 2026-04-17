@@ -483,6 +483,26 @@ function extractLevelPrefixForSummary(floorActivity: string): string {
   return '00';
 }
 
+// Parses level prefix from a floor_pattern string like "Bldg A - Level 2"
+// Used when floor_section_mappings store activity_code as building ID only (no level info),
+// so the only source of level is the pattern text itself.
+function extractLevelPrefixFromPattern(floorPattern: string): string {
+  const s = (floorPattern || '').toLowerCase();
+  const parts = s.split(' - ');
+  const tail = (parts.length > 1 ? parts.slice(1).join(' - ') : s).trim();
+  // Strip parentheticals: "Level 1 (High Roof)" → "level 1"
+  const clean = tail.replace(/\s*\([^)]*\)\s*/g, '').trim();
+  const levelMatch = clean.match(/(?:level|lvl|floor|l)\s*(\d+)/i);
+  if (levelMatch) {
+    return String(parseInt(levelMatch[1], 10)).padStart(2, '0');
+  }
+  if (/^high\s*roof$|^roof$/i.test(clean)) return '0R';
+  if (/^basement$|below\s*grade/i.test(clean)) return '0B';
+  if (/^mezzanine$|^mezz$/i.test(clean)) return '0M';
+  if (/^crawl/i.test(clean)) return '0C';
+  return '00';
+}
+
 const EnhancedCostCodeManager = () => {
   // Auth state
   const { user, loading: authLoading } = useAuth();
@@ -854,13 +874,13 @@ const EnhancedCostCodeManager = () => {
             bldgSuffix.length <= 2 && // ACT is 4 chars; level prefix is 2 chars, so building suffix must be ≤2
             shouldUseLevelActivity(costHead, bldgSuffix, costHeadActivityOverrides)
           ) {
-            // Use floor's canonical activity from user's Section Mapping (00L1, 00L2, 00RF…)
-            // NOT raw floor string parsing — floorMap.activity is already resolved correctly
-            const levelPrefix = extractLevelPrefixForSummary(floorMap.activity || '0000');
+            // Floor mappings store activity_code as building ID only (e.g. "BA"), with no level info.
+            // The level lives in the floor_pattern string ("Bldg A - Level 2"), so parse it from item.floor.
+            const levelPrefix = extractLevelPrefixFromPattern(item.floor || '');
             if (levelPrefix !== '00') {
-              activity = levelPrefix + bldgSuffix;
+              activity = levelPrefix + bldgSuffix; // e.g. "01" + "BA" = "01BA"
             } else {
-              activity = buildingAct;
+              activity = buildingAct; // Floor has no extractable level — keep flat building activity
             }
           } else {
             // No override, or 3+ char building ID (B12/B13 can't encode level in 4-char ACT)
