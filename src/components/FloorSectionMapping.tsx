@@ -963,19 +963,30 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     if (!onCostHeadOverridesChange) return;
     setIsSaving(true);
     try {
-      const result: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }> = [];
+      // Build the full "what the user wants now" set from localOverrides
+      const desired: Array<{ costHead: string; buildingId: string | null; useLevelActivity: boolean }> = [];
       localOverrides.forEach(key => {
         const [costHead, bldgRaw] = key.split('||');
         const buildingId = bldgRaw === GLOBAL_KEY ? null : bldgRaw;
-        result.push({ costHead, buildingId, useLevelActivity: true });
+        desired.push({ costHead, buildingId, useLevelActivity: true });
       });
 
-      // Build snapshot in the shape shouldUseLevelActivity expects
-      const overrideSnapshot: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }> =
-        result.map(r => ({ cost_head: r.costHead, building_identifier: r.buildingId, use_level_activity: true }));
+      // Compute what was there before — anything in the DB that's NOT in desired = user unchecked it.
+      // Send it with useLevelActivity:false so the parent hook deletes it.
+      const desiredKeys = new Set(desired.map(d => makeKey(d.costHead, d.buildingId)));
+      const toRemove = costHeadActivityOverrides
+        .filter(o => o.use_level_activity)
+        .filter(o => !desiredKeys.has(makeKey(o.cost_head, o.building_identifier)))
+        .map(o => ({ costHead: o.cost_head, buildingId: o.building_identifier, useLevelActivity: false }));
 
-      // Step 1: persist to DB
-      await onCostHeadOverridesChange(result);
+      const fullPayload = [...desired, ...toRemove];
+
+      // Snapshot reflects only the rows that will be active AFTER the save (desired only).
+      const overrideSnapshot: Array<{ cost_head: string; building_identifier: string | null; use_level_activity: boolean }> =
+        desired.map(r => ({ cost_head: r.costHead, building_identifier: r.buildingId, use_level_activity: true }));
+
+      // Step 1: persist to DB (parent hook handles insert for true, delete for false)
+      await onCostHeadOverridesChange(fullPayload);
 
       // Step 2: reapply with live snapshot so handleApplySectionCodes doesn't read stale query state
       let itemsUpdated = 0;
