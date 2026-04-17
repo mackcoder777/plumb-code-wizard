@@ -2885,8 +2885,70 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     }));
   };
 
+  const formatUSD = (n: number) =>
+    n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const absDelta = Math.abs(bidReconciliation.delta);
+  const deltaColor =
+    absDelta < 5_000 ? 'text-green-600'
+    : absDelta < 25_000 ? 'text-amber-600'
+    : 'text-red-600';
+  const showReconciliation = lrcnEnabled && bidReconciliation.hasFieldBid;
+
   return (
     <div className="space-y-6">
+      {/* Bid Reconciliation Readout */}
+      {showReconciliation && (
+        <Card className="border-2 border-primary/40">
+          <Collapsible defaultOpen>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Scale className="h-5 w-5 text-primary" />
+                  Bid Reconciliation
+                </CardTitle>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1">
+                    <ChevronDown className="h-4 w-4 transition-transform data-[state=closed]:-rotate-90" />
+                    Breakdown
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <div className="grid grid-cols-3 gap-4 pt-2">
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Bid Total</div>
+                  <div className="text-xl font-semibold tabular-nums">{formatUSD(bidReconciliation.bidTotal)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Export Total</div>
+                  <div className="text-xl font-semibold tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Delta</div>
+                  <div className={`text-xl font-semibold tabular-nums ${deltaColor}`}>
+                    {bidReconciliation.delta >= 0 ? '+' : ''}{formatUSD(bidReconciliation.delta)}
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="pt-0">
+                <Separator className="mb-3" />
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Budget labor (field + fab)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetLabor)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Foreman bonus (FCNT)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fcnt)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.lrcn)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Fab LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.fabLrcn)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FAB CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFabCont)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FLD CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFldCont)}</span></div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between font-semibold"><span>Export Total</span><span className="tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</span></div>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
+      )}
+
       {/* Project Location & Sales Tax */}
       <Card>
         <CardHeader className="pb-3">
