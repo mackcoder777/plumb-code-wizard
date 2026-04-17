@@ -2069,41 +2069,27 @@ export function exportAuditReport(
     ]);
   }
 
-  if (budgetAdjustments?.laborRateContingencyEnabled) {
-    const bidShopHours = budgetAdjustments.bidRates?.shop?.hours || 0;
-    const budgetFabHours = budgetAdjustments.totalFabHours || 0;
-    const shopBidRate = budgetAdjustments.shopRate || 0;
-    if (bidShopHours > 0 && budgetFabHours > 0 && shopBidRate > 0) {
-      const gcFabContAmount = (bidShopHours - budgetFabHours) * shopBidRate;
-      if (gcFabContAmount > 0) {
-        contingencyLines.push([
-          'GC 0FAB CONT',
-          'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY',
-          Math.round(gcFabContAmount * 100) / 100,
-        ]);
-      }
+  // GC 0FAB CONT — math lives in computeGcFabCont() (single source of truth).
+  {
+    const gcFabContAmount = computeGcFabCont(budgetAdjustments);
+    if (gcFabContAmount > 0) {
+      contingencyLines.push([
+        'GC 0FAB CONT',
+        'UNBUDGETED SHOP HOUR VOLUME CONTINGENCY',
+        gcFabContAmount,
+      ]);
     }
   }
 
-  if (budgetAdjustments?.laborRateContingencyEnabled) {
-    const bidFieldHours =
-      (budgetAdjustments.bidRates?.straightTime?.hours || 0) +
-      (budgetAdjustments.bidRates?.shiftTime?.hours || 0) +
-      (budgetAdjustments.bidRates?.overtime?.hours || 0) +
-      (budgetAdjustments.bidRates?.doubleTime?.hours || 0);
-    const budgetFieldHours = budgetAdjustments.totalFieldHours || 0;
-    const foremanHours = budgetAdjustments.foremanBonusHours || 0;
-    const budgetRateVal = budgetAdjustments.budgetRate || 0;
-    const effectiveBudgetFieldHours = budgetFieldHours + foremanHours;
-    if (bidFieldHours > 0 && effectiveBudgetFieldHours > 0 && budgetRateVal > 0) {
-      const gcFldContAmount = (bidFieldHours - effectiveBudgetFieldHours) * budgetRateVal;
-      if (gcFldContAmount > 0) {
-        contingencyLines.push([
-          'GC 0FLD CONT',
-          'UNBUDGETED FIELD HOUR VOLUME CONTINGENCY',
-          Math.round(gcFldContAmount * 100) / 100,
-        ]);
-      }
+  // GC 0FLD CONT — math lives in computeGcFldCont() (single source of truth).
+  {
+    const gcFldContAmount = computeGcFldCont(budgetAdjustments);
+    if (gcFldContAmount > 0) {
+      contingencyLines.push([
+        'GC 0FLD CONT',
+        'UNBUDGETED FIELD HOUR VOLUME CONTINGENCY',
+        gcFldContAmount,
+      ]);
     }
   }
 
