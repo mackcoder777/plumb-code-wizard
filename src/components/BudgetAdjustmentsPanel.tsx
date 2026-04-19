@@ -2988,14 +2988,21 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               <CardContent className="pt-0">
                 <Separator className="mb-3" />
                 <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Budget labor (field + fab)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetLabor)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Foreman bonus (FCNT)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fcnt)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.lrcn)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Fab LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.fabLrcn)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FAB CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFabCont)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FLD CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFldCont)}</span></div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Budget Labor</div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">Field (AutoBid produced)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetField)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">Fab (AutoBid produced)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetFab)}</span></div>
+                  <div className="flex justify-between pl-3 text-muted-foreground border-t pt-1"><span>Subtotal budget labor</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetLabor)}</span></div>
+
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3">Contingencies</div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">FCNT (foreman bonus, bid blended rate)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fcnt)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">LRCN (field rate arbitrage)</span><span className="tabular-nums">{formatUSD(bidReconciliation.lrcn)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">Fab LRCN (shop rate arbitrage)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fabLrcn)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">GC 0FAB CONT (unbudgeted shop volume)</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFabCont)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">GC 0FLD CONT (unbudgeted field volume)</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFldCont)}</span></div>
+                  <div className="flex justify-between pl-3 text-muted-foreground border-t pt-1"><span>Subtotal contingencies</span><span className="tabular-nums">{formatUSD(bidReconciliation.contingencies)}</span></div>
+
                   <Separator className="my-2" />
-                  <div className="flex justify-between font-semibold"><span>Export Total</span><span className="tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</span></div>
+                  <div className="flex justify-between font-semibold text-base"><span>TOTAL LABOR DOLLARS</span><span className="tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</span></div>
                 </div>
               </CardContent>
             </CollapsibleContent>
