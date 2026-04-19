@@ -1,3 +1,44 @@
+## 0. Authoritative references
+
+Load these at the start of every session. They are Tier 1, verified against live files.
+
+- **`PLUMBING_RECAP_MAP.md`** — v1.0 structural reference for Murray plumbing
+  BRCAP workbooks. Every sheet, every cell, every formula flow, and the full
+  bid-assembly waterfall from AutoBid raw to $16.2M Grand Total on Hamilton High.
+- **`PLUMBING_RECAP_MAP_v1.1_PATCH.md`** — v1.1 additions covering MLSHT line
+  classification, the two-dimensional routing matrix, Building Classification
+  schema (§15), and the MLSHT Guided Review Flow (§16) with Hamilton
+  gold-standard routing log (Appendix D). When v1.0 and v1.1 conflict, v1.1
+  wins. Both docs must be loaded at session start.
+- **`NEXT_PHASE_SPEC_FULL_RECAP.md`** — phase 1 spec (data model, import flow,
+  UI, export helpers, reconciliation). Pre-MLSHT-walkthrough. v1.1 PATCH
+  supersedes specific sections — see supersession map below.
+
+### Spec supersession map (v1.1 PATCH wins)
+
+- **§5.1 Data model** — spec has 7 tables. v1.1 adds 3 more:
+  `project_building_classification` (v1.1 §15),
+  `mlsheet_review_sessions` (v1.1 §16.3),
+  `mlsheet_routing_decisions` (v1.1 §16.3).
+  Sprint 1 creates all **10 tables**, not 7.
+- **§5.3 Recap tab UI** — spec says "8 sections, CRUD for each." v1.1 §16
+  upgrades the M&L Sheet Adjustments section to a **guided review flow**
+  (session-based wizard, not flat CRUD). Other 7 sections remain CRUD.
+- **§6 Sprint timeline** — spec says Sprint 2 = 2 weeks. v1.1 §16 expands
+  Sprint 2 to **3 weeks**. Total Phase 1 = **9 weeks**, not 8.
+- **§9 Open questions** — Q2, Q6, Q7 answered during the live MLSHT
+  walkthrough. Q1, Q3, Q4, Q5, Q8, Q9, Q10, Q11, Q12 remain open.
+  See `PLUMBING_RECAP_MAP_v1.1_PATCH.md` §9 routing tables + Appendix D
+  Hamilton gold-standard log for the answers.
+
+### Reference workbook
+
+`reference/hamilton-hs-rebid-brcap.xlsm` (gitignored). Future sessions must
+download from Murray local storage and place at this path before Phase 2
+work. Used as live arbiter for verifying formulas against the spec.
+
+---
+
 Murray Company Budget Manager — Complete
 Reference Document
 Merged from: AutoBid raw data analysis + Lovable app reference + session history Last
