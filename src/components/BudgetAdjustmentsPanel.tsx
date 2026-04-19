@@ -2862,8 +2862,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Bid Reconciliation readout — uses the same helpers as the export pipeline,
   // guaranteeing the displayed values exactly match what gets written to the .xlsx.
   const bidReconciliation = useMemo(() => {
-    const budgetLabor = Object.values(finalLaborSummary ?? {})
-      .reduce((s, i) => s + (i.dollars || 0), 0);
+    // Split budget labor into field vs fab for breakdown clarity.
+    // Source: finalLaborSummary entries carry `type: 'field' | 'fab'` set in calculations memo.
+    let budgetField = 0;
+    let budgetFab = 0;
+    Object.values(finalLaborSummary ?? {}).forEach((i: any) => {
+      const dollars = i?.dollars || 0;
+      if (i?.type === 'fab') budgetFab += dollars;
+      else budgetField += dollars;
+    });
+    const budgetLabor = budgetField + budgetFab;
     const fcnt = calculations.foremanBonusDollars || 0;
     const lrcn = lrcnEnabled ? (lrcnCalculations.lrcnAmount || 0) : 0;
     // Match export gate exactly: fabLrcnEnabled && fabLrcnAmount > 0.
@@ -2872,7 +2880,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const fabLrcn = fabLrcnEnabled ? Math.max(0, fabLrcnCalculations.fabLrcnAmount || 0) : 0;
     const gcFabCont = computeGcFabCont(currentAdjustments);
     const gcFldCont = computeGcFldCont(currentAdjustments);
-    const exportTotal = budgetLabor + fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+    const contingencies = fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+    const exportTotal = budgetLabor + contingencies;
     const bidTotal = lrcnCalculations.bidTotal || 0;
     const delta = exportTotal - bidTotal;
     const hasFieldBid =
@@ -2880,7 +2889,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       (Number(bidRates.shiftTime.hours) || 0) +
       (Number(bidRates.overtime.hours) || 0) +
       (Number(bidRates.doubleTime.hours) || 0) > 0;
-    return { budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, exportTotal, bidTotal, delta, hasFieldBid };
+
+    // Dev-only invariant: breakdown line items must sum to exportTotal.
+    // Catches drift if a new contingency is added to the export but not the readout.
+    if (import.meta.env.DEV) {
+      const lineSum = budgetField + budgetFab + fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+      if (Math.abs(lineSum - exportTotal) > 1) {
+        // eslint-disable-next-line no-console
+        console.warn('[BidReconciliation] Breakdown drift', { lineSum, exportTotal, diff: lineSum - exportTotal });
+      }
+    }
+
+    return { budgetField, budgetFab, budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, contingencies, exportTotal, bidTotal, delta, hasFieldBid };
   }, [currentAdjustments, finalLaborSummary, calculations.foremanBonusDollars, lrcnCalculations, fabLrcnCalculations, lrcnEnabled, fabLrcnEnabled, bidRates]);
 
 
