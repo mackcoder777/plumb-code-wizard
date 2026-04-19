@@ -2862,8 +2862,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Bid Reconciliation readout — uses the same helpers as the export pipeline,
   // guaranteeing the displayed values exactly match what gets written to the .xlsx.
   const bidReconciliation = useMemo(() => {
-    const budgetLabor = Object.values(finalLaborSummary ?? {})
-      .reduce((s, i) => s + (i.dollars || 0), 0);
+    // Split budget labor into field vs fab for breakdown clarity.
+    // Source: finalLaborSummary entries carry `type: 'field' | 'fab'` set in calculations memo.
+    let budgetField = 0;
+    let budgetFab = 0;
+    Object.values(finalLaborSummary ?? {}).forEach((i: any) => {
+      const dollars = i?.dollars || 0;
+      if (i?.type === 'fab') budgetFab += dollars;
+      else budgetField += dollars;
+    });
+    const budgetLabor = budgetField + budgetFab;
     const fcnt = calculations.foremanBonusDollars || 0;
     const lrcn = lrcnEnabled ? (lrcnCalculations.lrcnAmount || 0) : 0;
     // Match export gate exactly: fabLrcnEnabled && fabLrcnAmount > 0.
@@ -2872,7 +2880,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const fabLrcn = fabLrcnEnabled ? Math.max(0, fabLrcnCalculations.fabLrcnAmount || 0) : 0;
     const gcFabCont = computeGcFabCont(currentAdjustments);
     const gcFldCont = computeGcFldCont(currentAdjustments);
-    const exportTotal = budgetLabor + fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+    const contingencies = fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+    const exportTotal = budgetLabor + contingencies;
     const bidTotal = lrcnCalculations.bidTotal || 0;
     const delta = exportTotal - bidTotal;
     const hasFieldBid =
@@ -2880,7 +2889,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       (Number(bidRates.shiftTime.hours) || 0) +
       (Number(bidRates.overtime.hours) || 0) +
       (Number(bidRates.doubleTime.hours) || 0) > 0;
-    return { budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, exportTotal, bidTotal, delta, hasFieldBid };
+
+    // Dev-only invariant: breakdown line items must sum to exportTotal.
+    // Catches drift if a new contingency is added to the export but not the readout.
+    if (import.meta.env.DEV) {
+      const lineSum = budgetField + budgetFab + fcnt + lrcn + fabLrcn + gcFabCont + gcFldCont;
+      if (Math.abs(lineSum - exportTotal) > 1) {
+        // eslint-disable-next-line no-console
+        console.warn('[BidReconciliation] Breakdown drift', { lineSum, exportTotal, diff: lineSum - exportTotal });
+      }
+    }
+
+    return { budgetField, budgetFab, budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, contingencies, exportTotal, bidTotal, delta, hasFieldBid };
   }, [currentAdjustments, finalLaborSummary, calculations.foremanBonusDollars, lrcnCalculations, fabLrcnCalculations, lrcnEnabled, fabLrcnEnabled, bidRates]);
 
 
@@ -2968,14 +2988,21 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
               <CardContent className="pt-0">
                 <Separator className="mb-3" />
                 <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Budget labor (field + fab)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetLabor)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Foreman bonus (FCNT)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fcnt)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.lrcn)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Fab LRCN</span><span className="tabular-nums">{formatUSD(bidReconciliation.fabLrcn)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FAB CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFabCont)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">GC 0FLD CONT</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFldCont)}</span></div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Budget Labor</div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">Field (AutoBid produced)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetField)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">Fab (AutoBid produced)</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetFab)}</span></div>
+                  <div className="flex justify-between pl-3 text-muted-foreground border-t pt-1"><span>Subtotal budget labor</span><span className="tabular-nums">{formatUSD(bidReconciliation.budgetLabor)}</span></div>
+
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3">Contingencies</div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">FCNT (foreman bonus, bid blended rate)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fcnt)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">LRCN (field rate arbitrage)</span><span className="tabular-nums">{formatUSD(bidReconciliation.lrcn)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">Fab LRCN (shop rate arbitrage)</span><span className="tabular-nums">{formatUSD(bidReconciliation.fabLrcn)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">GC 0FAB CONT (unbudgeted shop volume)</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFabCont)}</span></div>
+                  <div className="flex justify-between pl-3"><span className="text-muted-foreground">GC 0FLD CONT (unbudgeted field volume)</span><span className="tabular-nums">{formatUSD(bidReconciliation.gcFldCont)}</span></div>
+                  <div className="flex justify-between pl-3 text-muted-foreground border-t pt-1"><span>Subtotal contingencies</span><span className="tabular-nums">{formatUSD(bidReconciliation.contingencies)}</span></div>
+
                   <Separator className="my-2" />
-                  <div className="flex justify-between font-semibold"><span>Export Total</span><span className="tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</span></div>
+                  <div className="flex justify-between font-semibold text-base"><span>TOTAL LABOR DOLLARS</span><span className="tabular-nums">{formatUSD(bidReconciliation.exportTotal)}</span></div>
                 </div>
               </CardContent>
             </CollapsibleContent>
