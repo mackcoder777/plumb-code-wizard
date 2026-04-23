@@ -39,15 +39,26 @@ export function exportFabAuditReport(
   // Sheet 2 needs "original hours" per cost head BEFORE any strip. This is
   // the same aggregation the UI fab strip table uses — group raw items by
   // the last segment of their labor cost code.
+  //
+  // CRITICAL: extract the last segment. item.costCode holds FULL codes
+  // (e.g. "PL 00BA WATR"), and fabricationConfigs is keyed by cost head
+  // (e.g. "WATR"). Using the full code as the group key makes every fab
+  // config lookup miss and every fab column render as 0 / "—".
+  const extractCostHead = (raw: string): string => {
+    const parts = raw.trim().split(/\s+/);
+    return parts[parts.length - 1];
+  };
+
   const originalByCostHead: Record<string, { hours: number; description: string }> = {};
   items.forEach(item => {
     const hours = parseFloat(String(item.hours)) || 0;
     if (hours <= 0) return;
-    const costHead =
+    const rawCode =
       item.laborCostHead ||
       item.costCode ||
       item.suggestedCode?.costHead ||
       'UNCD';
+    const costHead = extractCostHead(rawCode);
     const description =
       item.laborDescription ||
       item.suggestedCode?.description ||
