@@ -366,6 +366,28 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
               </button>
             </div>
 
+              {/* Divider */}
+              <div className="my-1 border-t border-gray-100" />
+
+              {/* Fab & Foreman Audit Option */}
+              <button
+                onClick={handleExportFabAudit}
+                className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-amber-50 rounded-lg transition-colors group"
+              >
+                <div className="mt-0.5 p-2 bg-amber-100 rounded-lg group-hover:bg-amber-200 transition-colors">
+                  <ClipboardList className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">Fab & Foreman Audit</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Trace every hour: raw → foreman strip → fab strip → final
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Summary + Strip Trail + Fab Routing + Inputs
+                  </div>
+                </div>
+              </button>
+
             {/* Footer */}
             <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
               <p className="text-xs text-gray-400">
