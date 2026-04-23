@@ -163,6 +163,38 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
     setIsOpen(false);
   };
 
+  const handleExportFabAudit = () => {
+    if (!budgetAdjustments) {
+      toast({
+        title: "Fab Audit Unavailable",
+        description: "Budget Adjustments must be configured before running the Fab & Foreman Audit.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = exportFabAuditReport(items, projectInfo, budgetAdjustments);
+      toast({
+        title: result.reconciliationPass
+          ? "Fab & Foreman Audit Exported"
+          : "Fab & Foreman Audit Exported — Reconciliation Failed",
+        description: result.reconciliationPass
+          ? `${result.filename} ready for approver review.`
+          : `Delta of ${result.reconciliationDelta.toFixed(1)}h — review Sheet 1 before sharing.`,
+        variant: result.reconciliationPass ? "default" : "destructive",
+        duration: result.reconciliationPass ? 5000 : 12000,
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export Fab & Foreman Audit. Please try again.",
+        variant: "destructive",
+      });
+    }
+    setIsOpen(false);
+  };
+
   // Count items with codes assigned
   const laborCodedCount = items.filter(i => i.laborCostHead || i.costCode || i.suggestedCode?.costHead).length;
   const materialCodedCount = items.filter(i => i.materialCode || i.materialCostCode).length;
