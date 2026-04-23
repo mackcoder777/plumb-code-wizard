@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Download, ChevronDown, FileSpreadsheet, FileText, Check, X, Settings2, AlertTriangle } from 'lucide-react';
+import { Download, ChevronDown, FileSpreadsheet, FileText, Check, X, Settings2, AlertTriangle, ClipboardList } from 'lucide-react';
 import { 
   exportBudgetPacket, 
   exportAuditReport, 
@@ -8,6 +8,7 @@ import {
   FloorSectionMap,
   CategoryLaborMap
 } from '@/utils/budgetExportSystem';
+import { exportFabAuditReport } from '@/utils/fabAuditExport';
 import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
 import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { toast } from '@/components/ui/use-toast';
