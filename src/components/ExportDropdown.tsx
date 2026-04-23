@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Download, ChevronDown, FileSpreadsheet, FileText, Check, X, Settings2, AlertTriangle } from 'lucide-react';
+import { Download, ChevronDown, FileSpreadsheet, FileText, Check, X, Settings2, AlertTriangle, ClipboardList } from 'lucide-react';
 import { 
   exportBudgetPacket, 
   exportAuditReport, 
@@ -8,6 +8,7 @@ import {
   FloorSectionMap,
   CategoryLaborMap
 } from '@/utils/budgetExportSystem';
+import { exportFabAuditReport } from '@/utils/fabAuditExport';
 import { BuildingSectionMapping } from '@/hooks/useBuildingSectionMappings';
 import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { toast } from '@/components/ui/use-toast';
@@ -157,6 +158,38 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
         title: "Export Failed",
         description: "Failed to export Audit Report. Please try again.",
         variant: "destructive"
+      });
+    }
+    setIsOpen(false);
+  };
+
+  const handleExportFabAudit = () => {
+    if (!budgetAdjustments) {
+      toast({
+        title: "Fab Audit Unavailable",
+        description: "Budget Adjustments must be configured before running the Fab & Foreman Audit.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const result = exportFabAuditReport(items, projectInfo, budgetAdjustments);
+      toast({
+        title: result.reconciliationPass
+          ? "Fab & Foreman Audit Exported"
+          : "Fab & Foreman Audit Exported — Reconciliation Failed",
+        description: result.reconciliationPass
+          ? `${result.filename} ready for approver review.`
+          : `Delta of ${result.reconciliationDelta.toFixed(1)}h — review Sheet 1 before sharing.`,
+        variant: result.reconciliationPass ? "default" : "destructive",
+        duration: result.reconciliationPass ? 5000 : 12000,
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export Fab & Foreman Audit. Please try again.",
+        variant: "destructive",
       });
     }
     setIsOpen(false);
@@ -328,6 +361,28 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
                     Includes Labor Report + Material Report + Summary tabs
+                  </div>
+                </div>
+              </button>
+
+              {/* Divider */}
+              <div className="my-1 border-t border-gray-100" />
+
+              {/* Fab & Foreman Audit Option */}
+              <button
+                onClick={handleExportFabAudit}
+                className="w-full flex items-start gap-3 px-3 py-3 text-left hover:bg-amber-50 rounded-lg transition-colors group"
+              >
+                <div className="mt-0.5 p-2 bg-amber-100 rounded-lg group-hover:bg-amber-200 transition-colors">
+                  <ClipboardList className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">Fab & Foreman Audit</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Trace every hour: raw → foreman strip → fab strip → final
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Summary + Strip Trail + Fab Routing + Inputs
                   </div>
                 </div>
               </button>

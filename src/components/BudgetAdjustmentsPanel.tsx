@@ -988,12 +988,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           type: 'field'
         };
 
-        // Accumulate into material fab bucket using the routing map
+        // Accumulate into material fab bucket using the routing map.
+        // Only count hours toward totalFabHours if they actually route to a
+        // fab code — unrouted stripped hours would otherwise inflate the
+        // aggregate and make computeGcFabCont underestimate the volume gap.
         const fabCostHead = fabCodeMap[costHead];
         if (fabCostHead) {
           fabAccumulator[fabCostHead] = {
             hours: (fabAccumulator[fabCostHead]?.hours || 0) + fabHours,
           };
+          totalFabHours += fabHours;
         } else {
           if (import.meta.env.DEV) console.warn(`No fab material mapping defined for cost head: ${costHead}`);
         }
@@ -1007,7 +1011,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         });
 
         totalFieldHours += fieldHours;
-        totalFabHours += fabHours;
       } else {
         adjustedLaborSummary[code] = {
           code,
