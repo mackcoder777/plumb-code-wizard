@@ -356,7 +356,24 @@ export interface BudgetAdjustments {
     redistribute_adjustments?: Record<string, number> | null;
     merged_act: string;
   }>;
+  // Unified consolidation thresholds — single source of truth for Code Health
+  // Dashboard, Job-Wide Consolidation, and Small Code Review small-line floor.
+  consolidationThresholds: ConsolidationThresholds;
 }
+
+export interface ConsolidationThresholds {
+  smallLine: number;       // single line < this is flagged in Small Code Review (default 8)
+  sectionRollup: number;   // sec|act bucket total < this is a Section Rollup candidate (default 80)
+  sectionWarning: number;  // section total < this gets a ⚠ in Code Health (default 200)
+  jobWide: number;         // head across 2+ sections totalling < this is a Job-Wide candidate (default 160)
+}
+
+const DEFAULT_THRESHOLDS: ConsolidationThresholds = {
+  smallLine: 8,
+  sectionRollup: 80,
+  sectionWarning: 200,
+  jobWide: 160,
+};
 
 interface BudgetAdjustmentsPanelProps {
   laborSummary: Record<string, LaborCodeSummary>;
