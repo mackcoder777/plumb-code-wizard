@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +54,24 @@ export const JobWideConsolidation: React.FC<JobWideConsolidationProps> = ({
   const [previewHead, setPreviewHead] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dismissedHeads, setDismissedHeads] = useState<Set<string>>(new Set());
+
+  // Local draft for the threshold input so the user can freely edit digits
+  // (delete, retype) without the parent's clamp snapping intermediate values
+  // back. Commit to parent on blur or Enter.
+  const [thresholdDraft, setThresholdDraft] = useState<string>(String(threshold));
+  useEffect(() => {
+    setThresholdDraft(String(threshold));
+  }, [threshold]);
+
+  const commitThreshold = useCallback(() => {
+    const parsed = parseInt(thresholdDraft, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      onThresholdChange(parsed);
+    } else {
+      // Invalid/empty — revert draft to current prop value
+      setThresholdDraft(String(threshold));
+    }
+  }, [thresholdDraft, threshold, onThresholdChange]);
 
   // Find existing job-wide merges
   const existingJobWideMerges = useMemo(() => {
@@ -195,8 +213,14 @@ export const JobWideConsolidation: React.FC<JobWideConsolidationProps> = ({
           <Label className="text-xs text-muted-foreground whitespace-nowrap">Job-wide threshold:</Label>
           <Input
             type="number"
-            value={threshold}
-            onChange={e => onThresholdChange(parseInt(e.target.value) || 160)}
+            value={thresholdDraft}
+            onChange={e => setThresholdDraft(e.target.value)}
+            onBlur={commitThreshold}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              }
+            }}
             className="w-20 h-7 text-xs"
           />
           <span className="text-muted-foreground">hrs</span>
