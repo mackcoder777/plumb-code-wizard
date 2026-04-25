@@ -1061,6 +1061,13 @@ const EnhancedCostCodeManager = () => {
     }
   }, [currentProject?.id]);
 
+  // Reset auto-apply runKey when any mapping input changes mid-session.
+  // Belt-and-suspenders for the runKey fingerprint: even if two states hash the same,
+  // a mapping change always invalidates the dedup so legitimate re-resolutions can persist.
+  useEffect(() => {
+    autoApplyRunKeyRef.current = '';
+  }, [dbFloorMappings, dbBuildingMappings, savedMappings, dbCategoryMappings]);
+
   // Load saved items when project changes - apply category AND system mappings during load, then persist
   useEffect(() => {
     if (savedItems.length > 0 && currentProject?.id) {
