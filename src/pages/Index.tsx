@@ -8,7 +8,8 @@ import { PdfImportTab } from '@/components/tabs/PdfImportTab';
 import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo, FloorSectionMap } from '@/utils/budgetExportSystem';
-import BudgetAdjustmentsPanel, { BudgetAdjustments } from '@/components/BudgetAdjustmentsPanel';
+import BudgetAdjustmentsPanel, { BudgetAdjustments, ConsolidationThresholds, DEFAULT_THRESHOLDS } from '@/components/BudgetAdjustmentsPanel';
+import { useBudgetSettings } from '@/hooks/useBudgetSettings';
 import SourceFileSummary from '@/components/SourceFileSummary';
 import { 
   useSystemMappings, 
@@ -640,6 +641,94 @@ const EnhancedCostCodeManager = () => {
 
   // Database hooks for persistence
   const activeProjectId = currentProject?.id || pendingProjectId;
+
+  // ── Consolidation thresholds: single owner ──────────────────────────
+  // Lifted out of BudgetAdjustmentsPanel to fix dual-ownership stale-state bug
+  // where the panel's internal copy could overwrite dashboard edits via the
+  // currentAdjustments round-trip. Index.tsx now owns the load/save lifecycle;
+  // the panel + dashboards consume via props.
+  //
+  // useBudgetSettings is a React-Query-backed hook keyed on projectId, so
+  // calling it both here and inside BudgetAdjustmentsPanel hits the same
+  // cache — no duplicate network requests.
+  const {
+    dbSettings: thresholdDbSettings,
+    isLoading: thresholdSettingsLoading,
+    saveSetting: saveThresholdSetting,
+    getSetting: getThresholdSetting,
+  } = useBudgetSettings(activeProjectId || undefined);
+
+  const [consolidationThresholds, setConsolidationThresholds] =
+    useState<ConsolidationThresholds>(DEFAULT_THRESHOLDS);
+  const thresholdsLoadedForRef = useRef<string | null>(null);
+  const thresholdsInitializedRef = useRef<boolean>(false);
+
+  // Validation clamps — minimum scope per shipping rules:
+  //  smallLine ≥ 1, sectionRollup > smallLine, jobWide > sectionRollup,
+  //  sectionWarning > sectionRollup. Clamp on input, no toasts.
+  const clampThresholds = useCallback((t: ConsolidationThresholds): ConsolidationThresholds => {
+    const smallLine = Math.max(1, Math.floor(t.smallLine || DEFAULT_THRESHOLDS.smallLine));
+    const sectionRollup = Math.max(smallLine + 1, Math.floor(t.sectionRollup || DEFAULT_THRESHOLDS.sectionRollup));
+    const sectionWarning = Math.max(sectionRollup + 1, Math.floor(t.sectionWarning || DEFAULT_THRESHOLDS.sectionWarning));
+    const jobWide = Math.max(sectionRollup + 1, Math.floor(t.jobWide || DEFAULT_THRESHOLDS.jobWide));
+    return { smallLine, sectionRollup, sectionWarning, jobWide };
+  }, []);
+
+  // Load effect: hydrate thresholds from DB once per projectId, then run the
+  // one-shot localStorage seed migration if the DB had no record. Mirrors the
+  // shape of BudgetAdjustmentsPanel's load effect for the rest of the settings.
+  useEffect(() => {
+    if (thresholdSettingsLoading) return;
+    if (!activeProjectId || activeProjectId === 'default') return;
+    if (thresholdsLoadedForRef.current === activeProjectId) return;
+    thresholdsLoadedForRef.current = activeProjectId;
+
+    const loaded = getThresholdSetting<ConsolidationThresholds>('consolidation_thresholds', DEFAULT_THRESHOLDS);
+    setConsolidationThresholds(clampThresholds(loaded));
+
+    // Defer the initialized flag so the save effect below does NOT fire on
+    // the load-triggered re-render.
+    setTimeout(() => { thresholdsInitializedRef.current = true; }, 0);
+
+    // One-shot seed migration: if DB has no consolidation_thresholds record,
+    // pull legacy `smallCodeMinHours` from localStorage (project-agnostic)
+    // and persist as the seeded threshold object. Then clear the legacy key.
+    const dbHasThresholds = thresholdDbSettings && 'consolidation_thresholds' in thresholdDbSettings;
+    if (!dbHasThresholds) {
+      const lsSmall = localStorage.getItem('smallCodeMinHours');
+      const seeded: ConsolidationThresholds = clampThresholds({
+        ...DEFAULT_THRESHOLDS,
+        ...(lsSmall ? { smallLine: parseInt(lsSmall, 10) || DEFAULT_THRESHOLDS.smallLine } : {}),
+      });
+      saveThresholdSetting('consolidation_thresholds', seeded);
+      if (lsSmall) localStorage.removeItem('smallCodeMinHours');
+    }
+  }, [thresholdSettingsLoading, activeProjectId, thresholdDbSettings, getThresholdSetting, saveThresholdSetting, clampThresholds]);
+
+  // Reset load gate on project change so a new project re-hydrates.
+  useEffect(() => {
+    thresholdsInitializedRef.current = false;
+  }, [activeProjectId]);
+
+  // Save effect (Option A): mirrors zip_code/fab_rates pattern — separate
+  // useEffect keyed on the state, debounced internally by useBudgetSettings's
+  // saveSetting (500ms). Setter only updates state; save fires from the effect.
+  useEffect(() => {
+    if (!thresholdsInitializedRef.current) return;
+    if (!activeProjectId || activeProjectId === 'default') return;
+    saveThresholdSetting('consolidation_thresholds', consolidationThresholds);
+  }, [consolidationThresholds, activeProjectId, saveThresholdSetting]);
+
+  // Wrapped setter passed to children — clamps on every update so invalid
+  // intermediate values can never reach state or DB.
+  const updateConsolidationThresholds = useCallback((next: ConsolidationThresholds) => {
+    setConsolidationThresholds(prev => {
+      const merged = clampThresholds({ ...prev, ...next });
+      return merged;
+    });
+  }, [clampThresholds]);
+  // ────────────────────────────────────────────────────────────────────
+
   const { data: savedMappings = [], isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
   const { data: savedItems = [], isLoading: itemsLoading, isFetched: itemsFetched } = useEstimateItems(activeProjectId || null);
   const saveMapping = useSaveMapping();
