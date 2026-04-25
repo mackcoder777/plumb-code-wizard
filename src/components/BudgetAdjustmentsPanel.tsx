@@ -871,10 +871,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     saveSetting('custom_fab_codes', customFabCodes);
   }, [customFabCodes]);
 
-  useEffect(() => {
-    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
-    saveSetting('consolidation_thresholds', consolidationThresholds);
-  }, [consolidationThresholds]);
+  // Save effect for consolidation_thresholds removed: threshold persistence
+  // is owned by Index.tsx now. Do not re-add here — that would recreate the
+  // dual-ownership stale-state bug.
 
   // Aggregate laborSummary by cost head (last segment of full code)
   const groupedByCostHead = useMemo(() => {
