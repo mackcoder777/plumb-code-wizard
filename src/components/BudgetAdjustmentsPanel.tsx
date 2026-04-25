@@ -553,13 +553,16 @@ function getDominantFabCode(
 
 const FAB_COST_HEAD_DESCRIPTIONS: Record<string, string> = {
   COPR: 'FABRICATION - COPPER',
-  CSTF: 'FABRICATION - CAST IRON',
+  CSTI: 'FABRICATION - CAST IRON',
+  CSTF: 'FABRICATION - CARBON STEEL TEFLON LINED',
   CRBN: 'FABRICATION - CARBON STEEL',
   SSTL: 'FABRICATION - STAINLESS STEEL',
   SS10: 'FABRICATION - STAINLESS 10GA',
   PLST: 'FABRICATION - PLASTIC / CPVC',
   BRAZ: 'FABRICATION - BRAZED',
   HFBS: 'FABRICATION - HANGER FAB SHEETS',
+  HNGS: 'FABRICATION - HANGERS & SUPPORTS',
+  FNSH: 'FABRICATION - FINISH',
 };
 
 const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
@@ -3654,13 +3657,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                               >
                                 <option value="">-- No Fab Code --</option>
                                 <option value="COPR">FP 0000 COPR — Copper</option>
-                                <option value="CSTF">FP 0000 CSTF — Cast Iron</option>
+                                <option value="CSTI">FP 0000 CSTI — Cast Iron</option>
+                                <option value="CSTF">FP 0000 CSTF — Carbon Steel Teflon Lined</option>
                                 <option value="CRBN">FP 0000 CRBN — Carbon Steel</option>
                                 <option value="SSTL">FP 0000 SSTL — Stainless Steel</option>
                                 <option value="SS10">FP 0000 SS10 — Stainless 10GA</option>
                                 <option value="PLST">FP 0000 PLST — Plastic / CPVC</option>
                                 <option value="BRAZ">FP 0000 BRAZ — Brazed</option>
                                 <option value="HFBS">FP 0000 HFBS — Hanger Fab Sheets</option>
+                                <option value="HNGS">FP 0000 HNGS — Hangers & Supports</option>
+                                <option value="FNSH">FP 0000 FNSH — Finish</option>
                                 {Object.entries(customFabCodes).map(([code, desc]) => (
                                   <option key={code} value={code}>FP 0000 {code} — {desc}</option>
                                 ))}
