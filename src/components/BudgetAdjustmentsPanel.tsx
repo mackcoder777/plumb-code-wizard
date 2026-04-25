@@ -877,6 +877,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     saveSetting('custom_fab_codes', customFabCodes);
   }, [customFabCodes]);
 
+  useEffect(() => {
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('consolidation_thresholds', consolidationThresholds);
+  }, [consolidationThresholds]);
+
   // Aggregate laborSummary by cost head (last segment of full code)
   const groupedByCostHead = useMemo(() => {
     const grouped: Record<string, {
