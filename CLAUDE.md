@@ -556,6 +556,16 @@ In Export view uses ieRow.combinedHours from finalLaborSummary
 Stale accepted DB records cleaned up on load
 accepted no longer used in auto-suggestions
 Peer-merge target must be above threshold
+Multitrade ACT format flipped to building-first (BA01) — was level-first (01BA),
+which fragmented buildings on Excel sort. Single helper composeMultitradeActivity
+in src/lib/utils.ts is the only ACT assembler for multitrade level-split. All five
+assembly sites (Index.tsx memoizedLaborSummary, SystemMappingTab buildFullLaborCode
++ handleApplySectionCodes, FloorSectionMapping perBuildingBreakdown + the second
+projection useMemo) gate on bldgSuffix.length ≤ 2 and route through the helper.
+Helper throws on length > 2 as a regression alarm. FloorSectionMapping preview
+sites previously composed level-split ACTs without a length gate, producing 5-char
+strings like "01B12" for 3-char building IDs — fixed in the same patch by aligning
+the gate with memoizedLaborSummary.
 OPEN BUGS (priority order)
 1. Hour drift +16h: finalLaborSummary output=27633 vs input=27617. Needs step-by-step
 logging after EACH pipeline stage to pinpoint which step creates hours.
@@ -565,6 +575,18 @@ import.meta.env.DEV guard
 assigns DWTR before user mappings
 4. BudgetAdjustmentsPanel conditional render: Index.tsx ~line 2816 only renders when
 estimateData.length > 0
+5. Three copies of the level-prefix extractor exist (FloorSectionMapping
+   extractMultitradeLevelPrefix, SystemMappingTab extractMultitradeLevelPrefix,
+   Index.tsx extractLevelPrefixForSummary). Bodies are textually identical for the
+   two extractMultitradeLevelPrefix copies; Index.tsx's variant adds 0B/0M cases.
+   A separate extractLevelPrefixFromPattern in Index.tsx parses floor pattern text
+   (different input domain). Consolidate the three activity-code extractors after
+   verifying identical output for known inputs; rename for clarity:
+   extractLevelFromActivityCode (act → prefix) vs extractLevelFromFloorPattern
+   (pattern text → prefix).
+6. Format logging during export: emit the composed ACT format (building-first vs
+   legacy) in the export audit log so any future regression is visible in
+   shipped packets.
 QC Checklist (run before AND after any change)
 sum(finalLaborSummary hours) == sum(adjustedLaborSummary hours) – check drift log
 No keys in result containing “__” (sentinels never become cost codes)
