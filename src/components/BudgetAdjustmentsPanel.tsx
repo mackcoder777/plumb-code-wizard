@@ -368,7 +368,7 @@ export interface ConsolidationThresholds {
   jobWide: number;         // head across 2+ sections totalling < this is a Job-Wide candidate (default 160)
 }
 
-const DEFAULT_THRESHOLDS: ConsolidationThresholds = {
+export const DEFAULT_THRESHOLDS: ConsolidationThresholds = {
   smallLine: 8,
   sectionRollup: 80,
   sectionWarning: 200,
