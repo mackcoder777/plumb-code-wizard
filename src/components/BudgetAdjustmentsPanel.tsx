@@ -2894,7 +2894,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: m.redistribute_adjustments as Record<string, number> | null,
         merged_act: m.merged_act,
       })) ?? [],
-      consolidationThresholds,
+      // consolidationThresholds intentionally NOT included here. Index.tsx
+      // owns this state; emitting it back through onAdjustmentsChange would
+      // create a round-trip that overwrites dashboard edits with the panel's
+      // (now prop-derived but still) snapshot value.
+      consolidationThresholds,  // pass-through copy of prop for downstream consumers
     };
   }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, finalLaborSummary, savedMergesData, consolidationThresholds]);
 
