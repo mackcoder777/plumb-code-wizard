@@ -1,81 +1,98 @@
+## Root cause confirmed
 
+The DB query proves the bug AND its eventual workaround:
 
-## Read-Only Investigation: ACT Code Format (Building-First vs Level-First)
+- Floor mapping `UG-3 → BG` saved at **14:53:18**
+- Items NOT updated for ~51 minutes despite the auto-apply effect's dep array including `dbFloorMappings`
+- At **15:44:17**, a project reload triggered a fresh `savedItems` fetch, the effect re-fired with a new `runKey`, and 1,556 items got persisted in one shot
 
-Trace every site where the ACT segment is assembled in multitrade level-split mode, plus check for any persisted data in the old format. **No code changes this loop** — output is a precise patch surface map and a data-migration risk assessment.
+So the resolver works, the matcher works, the persist path works — but only on **project load**, not on **mapping save**. The screenshot you took was during the 51-minute window where DB and mappings were out of sync.
 
-### What I'll trace
+## Why the mid-session re-fire fails
 
-**Code sites — find every place ACT is assembled with `levelPrefix + bldgSuffix`:**
+The auto-apply effect (`Index.tsx:1065-1310`) depends on both `savedItems` and `dbFloorMappings`. When you save a mapping, `dbFloorMappings` invalidates and refetches; `savedItems` does NOT. The effect re-fires, but one of two things blocks the persist:
 
-1. `src/pages/Index.tsx` — `memoizedLaborSummary` (~line 728). Confirmed format: `levelPrefix + bldgSuffix` → `01BA`.
-2. `src/pages/Index.tsx` — `generateCostCode` multitrade branch (~lines 1070-1085).
-3. `src/pages/Index.tsx` — `executeApplyDualCodes` activity assembly (~line 1620+).
-4. `src/pages/Index.tsx` — material desc override recalc effect.
-5. `src/pages/Index.tsx` — item name override recalc effect.
-6. `src/hooks/useBuildingSectionMappings.ts` — `resolveFloorMappingStatic` `buildingActivity` return value. Does it return the raw building suffix (e.g., `BA`) or a pre-assembled value?
-7. `src/hooks/useCostHeadActivityOverrides.ts` + `useCategoryItemTypeOverrides.ts` + `useCategoryItemNameOverrides.ts` — any internal ACT assembly?
-8. `grep -rn 'levelPrefix' src/` — catch any utility I haven't named.
-9. `grep -rn 'extractLevelPrefixFromPattern' src/` — confirm consumer count.
-10. `src/utils/budgetExportSystem.ts` — confirm export reads pre-assembled codes from `adjustedLaborSummary` (read-only consumer, should require no change).
+**Path A — runKey dedup blocks it.** If the effect ran earlier with the OLD `dbFloorMappings`, it computed a smaller `itemsNeedingPersist` (or empty). The runKey was set. Now with the new mapping, it computes the correct diff — but if for any reason the diff hashes the same, line 1281 `[AutoApply] Skipping — same run key` swallows it.
 
-**Memory + spec cross-check:**
+**Path B — early-return gates eat the re-fire.** Lines 1069–1087 have three deferral guards:
+- `floorMappingsLoaded` (line 1069)
+- `systemMappingsLoaded` (line 1077)
+- `materialDescOverridesFetched` (line 1084)
 
-11. `mem://features/multitrade-level-indicators` — current documented behavior (says ACT is "composite code assembly e.g., 01BA" — confirms level-first is the documented spec, not just a code accident).
-12. `mem://architecture/multitrade-act-resolution-integrity` — strict resolver-only sourcing rule.
-13. `mem://data/cost-code-formatting-constraints` — the "4-char padStart leading zeros" rule.
-14. `mem://architecture/building-id-normalization` — single-digit normalization rules.
+Each guard does an unconditional `return` without setting any tracking state. If any guard fires, the effect exits silently and only re-runs when one of its deps changes again. There's no retry loop tied to the guard that failed.
 
-**Data sites — check for persisted old-format ACT values that would break on a runtime flip:**
+The combination means: save a mapping → `dbFloorMappings` updates → effect re-fires → if a guard trips OR if runKey matches, **silent no-op**. The next persist only happens when the user reloads the project (fresh `savedItems`).
 
-15. `cost_head_activity_overrides` — schema shows `building_identifier`, no ACT column, so likely safe. Confirm no full ACT strings stored.
-16. `floor_section_mappings.activity_code` — defaults to `0000`. Are any rows storing pre-assembled level-split values like `01BA`?
-17. `building_section_mappings.section_code` — should store raw building IDs (`BA`, `B12`). Hamilton PL evidence already confirms raw storage. Re-verify.
-18. `project_small_code_merges` — `merged_act` and `redistribute_adjustments` jsonb. **Critical:** Hamilton PL has saved merges referencing specific ACT codes. If those are stored as `01BA`, flipping runtime to `BA01` orphans every saved merge.
-19. `category_item_name_overrides.labor_code` + `category_item_type_overrides.labor_code` + `category_material_desc_overrides.labor_code` — full code strings. Do any contain level-split ACTs?
+## Patch (3 changes, 1 file: `src/pages/Index.tsx`)
 
-For items 15-19 I'll run targeted `supabase--read_query` SELECTs scoped to Hamilton PL (`79aeb1d0-5c88-48a6-8485-74bc792abae5`) and Hamilton MP (`7aa11e70-0781-495d-82a6-53d486d747da`) to see actual stored values, not assumed schema.
+### Change 1 — Make runKey reflect mapping state, not just item diff (line 1279)
 
-### Deliverable
+Current:
+```ts
+const runKey = `${currentProject.id}|${JSON.stringify(itemsNeedingPersist.map(...))}`;
+```
 
-A single document with three sections:
+Change to include a hash of the mapping inputs that drove resolution:
+```ts
+const mappingFingerprint = `${dbFloorMappings.length}:${dbBuildingMappings.length}:${savedMappings.length}:${dbCategoryMappings.length}`;
+const runKey = `${currentProject.id}|${mappingFingerprint}|${JSON.stringify(itemsNeedingPersist.map(u => `${u.row_number}:${u.cost_code}`))}`;
+```
 
-**A. Patch surface map**
-- Every file:line where ACT is assembled
-- Whether each site uses a shared helper or inlines the concatenation
-- Recommended single-helper location (likely `src/lib/utils.ts` next to `normalizeActivityCode`)
-- List of consumers that would need to switch from inline `levelPrefix + bldgSuffix` to `assembleActivityCode(buildingId, levelPrefix)`
+This forces a fresh runKey whenever upstream mappings change, even if the computed diff happens to look the same. Cheap, defensive, fixes Path A.
 
-**B. Data migration risk assessment**
-- For each of the 5 DB sites (15-19): exact count of rows containing level-split ACT codes on Hamilton PL and Hamilton MP
-- Whether flipping runtime format orphans any saved merges, overrides, or floor mappings
-- If yes → recommended approach: (a) per-project format flag on `estimate_projects` (legacy stays level-first, new projects go building-first), (b) one-shot data migration, or (c) leave Hamilton PL alone and apply new format to MP only via a code-format-mode variant
+### Change 2 — Add diagnostic logging to the deferral guards (lines 1069–1087)
 
-**C. Hamilton PL impact statement**
-- Whether PMs have any exported budgets quoting `PL 01BA WATR` that downstream Murray accounting depends on
-- This is a question for **you**, not something I can answer from the code — but I'll flag it explicitly so it's not skipped
+Each `return` should log which guard fired and what state it was in. We already log "Deferring auto-apply: floor mappings not yet loaded" but don't log when the guard releases. Add a one-line summary at effect entry:
 
-**D. Spec/memory updates required**
-- `mem://features/multitrade-level-indicators` says level-first is the format. If we flip, this memory is wrong and must be updated in the same patch.
-- `mem://data/cost-code-formatting-constraints` — the `padStart` rule is correct for the leading-zero case but doesn't address building-first ordering. Needs a clarifying line.
-- CLAUDE.md `data/cost-code-formatting-constraints` reference — same.
+```ts
+console.log('[AutoApply] Effect fired', {
+  savedItems: savedItems.length,
+  floorMappingsFetched, mappingsFetched, materialDescOverridesFetched,
+  dbFloorMappings: dbFloorMappings.length, savedMappings: savedMappings.length,
+});
+```
 
-### Hard out-of-scope
+This makes the next debugging loop trivial — we'll see exactly which gate the mid-session save is hitting.
 
-- ❌ No code edits this loop
-- ❌ No DB migrations this loop
-- ❌ No `mem://` writes this loop
-- ❌ No proposed patch — only the patch surface map. Patch design happens after you decide on per-project flag vs global flip vs MP-only.
-- ❌ No re-derivation of Q3 / multitrade SEC overwrite (settled)
-- ❌ No touching `datasetProfiler.ts`
+### Change 3 — Reset runKey when mapping inputs change (new effect)
 
-### Stop conditions
+Add a small effect that resets `autoApplyRunKeyRef.current` when any mapping input reference changes. This belt-and-suspenders the runKey behavior so even if Change 1 misses an edge case, the dedup can't silently block a legitimate re-resolution:
 
-- If item 18 (`project_small_code_merges` on Hamilton PL) shows level-split ACT values like `01BA` in `merged_act` or `redistribute_adjustments` keys → **stop, report, do not propose flip without your explicit decision on Hamilton PL re-export vs per-project versioning**
-- If any code site assembles ACT in a way that *can't* be expressed by a single `assembleActivityCode(buildingId, levelPrefix)` helper → stop, report the exception, ask whether to special-case or refactor
-- If `mem://features/multitrade-level-indicators` documents specific PM-facing behavior we'd be changing (not just internal format) → stop, report
+```ts
+useEffect(() => {
+  autoApplyRunKeyRef.current = '';
+}, [dbFloorMappings, dbBuildingMappings, savedMappings, dbCategoryMappings]);
+```
 
-### Time
+This is cheap — it just clears a string. The next auto-apply effect run will recompute and write a fresh key.
 
-~10 minutes: 5 file reads, 2 greps, 5 scoped DB queries, 3 memory file reads. Approve and I'll return the three-section document.
+## What this does NOT change
 
+- Resolver logic (`resolveSectionStatic`, `resolveFloorMappingStatic`) — confirmed working by the DB data.
+- Matcher logic in `useFloorSectionMappings.ts` — confirmed working by the floor panel item counts in your screenshot.
+- The `01` fallback at line 274 of `useFloorSectionMappings.ts` — that's the correct default when no mapping exists; it's not the bug.
+- The deferral guards themselves — they're necessary to prevent a half-loaded resolution from clobbering correct codes with `01`. Don't touch them.
+
+## Test plan
+
+1. **Mid-session save, single mapping.** Open Pasadena. Change one floor mapping (e.g., `UG-21` from `BG` to `LL`). Watch console:
+   - Should see `[AutoApply] Effect fired ...` with all gates true
+   - Should see `[AutoApply] Persisting N labor codes to database...`
+   - Should see `[AutoApply] Successfully saved N labor codes to database`
+   - Re-query DB: items with `floor = 'UG-21'` should have `cost_code` starting with `LL ...`
+
+2. **Mid-session save, revert.** Change `UG-21` back to `BG`. Same console sequence, items revert in DB.
+
+3. **Project load idempotency.** Reload Pasadena. Should see `[Load] ... 0 newly applied from mappings` since DB is already in sync.
+
+4. **Cold-start with deferred guards.** Switch to a different project, then back to Pasadena. Confirm the deferral guards log when they trip and that the effect eventually completes successfully once all queries resolve.
+
+## Out of scope (filed for follow-up)
+
+- The deferral guards have no retry mechanism beyond dep-array re-fires. If a guard trips and the user never triggers another mapping change or reload, the effect never completes. This is a latent reliability issue but not what we're fixing here.
+- `[BatchUpdate]` does not surface failures to the user (CLAUDE.md §16 violation). Already tracked as Open Item 7.
+- The three extractor consolidation (Open Item 5) and export format logging (Open Item 6) remain follow-ups.
+
+## Time estimate
+
+~15 min: 3 small edits in one file, no new dependencies, no schema changes.

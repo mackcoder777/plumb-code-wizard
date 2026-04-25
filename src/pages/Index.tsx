@@ -1064,6 +1064,14 @@ const EnhancedCostCodeManager = () => {
   // Load saved items when project changes - apply category AND system mappings during load, then persist
   useEffect(() => {
     if (savedItems.length > 0 && currentProject?.id) {
+      console.log('[AutoApply] Effect fired', {
+        savedItems: savedItems.length,
+        floorMappingsFetched,
+        mappingsFetched,
+        materialDescOverridesFetched,
+        dbFloorMappings: dbFloorMappings.length,
+        savedMappings: savedMappings.length,
+      });
       // GUARD: If project likely has floor mappings but they haven't loaded yet, wait
       // We check if dbFloorMappings is still empty — the query may not have resolved yet
       const floorMappingsLoaded = floorMappingsFetched;
@@ -1276,7 +1284,10 @@ const EnhancedCostCodeManager = () => {
       // Guard: diff-based — re-resolved items only persist when section actually changed
       if (newlyApplied > 0) {
         // Run-key dedup: skip if we already persisted this exact state
-        const runKey = `${currentProject.id}|${JSON.stringify(itemsNeedingPersist.map(u => `${u.row_number}:${u.cost_code}`))}`;
+        // Include a fingerprint of upstream mapping inputs so changes to mappings always
+        // produce a fresh runKey, even when the diff hash happens to match a prior run.
+        const mappingFingerprint = `${dbFloorMappings.length}:${dbBuildingMappings.length}:${savedMappings.length}:${dbCategoryMappings.length}`;
+        const runKey = `${currentProject.id}|${mappingFingerprint}|${JSON.stringify(itemsNeedingPersist.map(u => `${u.row_number}:${u.cost_code}`))}`;
         if (runKey === autoApplyRunKeyRef.current) {
           console.log('[AutoApply] Skipping — same run key');
         } else {
