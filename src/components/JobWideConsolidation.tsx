@@ -24,6 +24,10 @@ interface JobWideConsolidationProps {
     reassign_to_head?: string | null;
     merged_act: string;
   }>;
+  // Threshold owned by BudgetAdjustmentsPanel via useBudgetSettings.
+  // Replaces the prior local useState(160).
+  threshold: number;
+  onThresholdChange: (next: number) => void;
 }
 
 interface ConsolidationCandidate {
@@ -44,8 +48,9 @@ export const JobWideConsolidation: React.FC<JobWideConsolidationProps> = ({
   codeFormatMode,
   onMergesChanged,
   savedMerges,
+  threshold,
+  onThresholdChange,
 }) => {
-  const [threshold, setThreshold] = useState(160);
   const [previewHead, setPreviewHead] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dismissedHeads, setDismissedHeads] = useState<Set<string>>(new Set());
