@@ -598,6 +598,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   onAdjustmentsChange,
   estimateData = [],
   systemMappings = [],
+  consolidationThresholds,
+  onConsolidationThresholdsChange,
 }) => {
   // ── Budget settings persistence (DB-backed with localStorage cache) ──
   const { dbSettings, isLoading: settingsLoading, saveSetting, getSetting } = useBudgetSettings(projectId);
