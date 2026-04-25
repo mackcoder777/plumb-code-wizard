@@ -96,3 +96,38 @@ This is cheap — it just clears a string. The next auto-apply effect run will r
 ## Time estimate
 
 ~15 min: 3 small edits in one file, no new dependencies, no schema changes.
+
+---
+
+## Loop closure (2026-04-25)
+
+**Status: VERIFIED.** Patch shipped, DB evidence confirms mid-session persistence works.
+
+### Verification evidence
+
+- Console logs: `[AutoApply] Effect fired` → `Persisting 700 labor codes` → `[BatchUpdate] Bulk-updated 700 items via 9 grouped calls` → `Successfully saved 700 labor codes`. No deferral guard tripped, no runKey skip.
+- DB JOIN (Pasadena, project `66ba29b2-f8de-4bdd-a098-0c13264eefa8`):
+  - `Lower LVL` mapping saved at 18:03:23, 700 items rewrote at 18:03:24 — one second, no project reload. **This is the mid-session test, and it passed.**
+  - 1,556/1,559 mappable items match their floor mapping section_code.
+  - 3 stragglers verified: all `system='Specialties'`, `material_spec='No Matl Spec'`, empty `cost_code`. PM-authority correct (no silent fallback for unmapped systems). Not a regression.
+- Mass-rewrite cause confirmed: `useBatchSaveFloorSectionMappings` is only invoked from the Save All button (`FloorSectionMapping.tsx:1871`). No load-effect path. The 18:03:23 batch was a manual click, not a patch side effect.
+
+### Memory entry
+
+`mem://architecture/auto-apply-runkey-dual-mechanism` — documents that the fingerprint and the ref-reset effect must coexist. Removing either reintroduces the Pasadena bug.
+
+## Open Item 7 — Surface BatchUpdate failures (deferred, NOT shipped)
+
+The success path of `batchUpdateSilent` logs prominently (`[BatchUpdate] Bulk-updated N items`). The failure path is `console.error` only — no user-visible signal. CLAUDE.md §16 explicitly forbids silent failure in mutations of this size.
+
+**Proposed fix (deferred to next loop):**
+1. Wrap `batchUpdateSilent` `.then`/`.catch` and surface failures via `toast({ variant: 'destructive' })`.
+2. On project load, after the auto-apply effect completes, compare persisted `cost_code` for a sample of items against the re-resolved value; if any diverge, render a banner offering one-click re-persist.
+
+Same shape as the existing `CorruptCodeBanner.tsx` pattern.
+
+## Out of remaining scope (filed)
+
+- Three-extractor consolidation (Open Item 5).
+- Format-logging during export (Open Item 6).
+- Hamilton MP fresh-load test for the format-flip work — separate session, separate verification.
