@@ -18,6 +18,7 @@ const SETTINGS_KEYS = [
   'fab_code_map',
   'fab_rates',
   'custom_fab_codes',
+  'consolidation_thresholds',
 ] as const;
 
 export type SettingsKey = typeof SETTINGS_KEYS[number];
