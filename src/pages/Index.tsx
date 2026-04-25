@@ -3444,8 +3444,8 @@ const EnhancedCostCodeManager = () => {
                 <div className="px-6 pt-6 space-y-4">
                   <CodeHealthDashboard
                     finalLaborSummary={budgetAdjustments.adjustedLaborSummary}
-                    thresholds={budgetAdjustments.consolidationThresholds}
-                    onThresholdsChange={(next) => setBudgetAdjustments(prev => prev ? { ...prev, consolidationThresholds: next } : prev)}
+                    thresholds={consolidationThresholds}
+                    onThresholdsChange={updateConsolidationThresholds}
                   />
                   <DuplicateScopeDetection
                     adjustedLaborSummary={budgetAdjustments.adjustedLaborSummary}
@@ -3461,8 +3461,8 @@ const EnhancedCostCodeManager = () => {
                     codeFormatMode={codeFormatMode}
                     onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
                     savedMerges={budgetAdjustments.savedMerges?.map((m, i) => ({ id: String(i), ...m })) || []}
-                    threshold={budgetAdjustments.consolidationThresholds.jobWide}
-                    onThresholdChange={(next) => setBudgetAdjustments(prev => prev ? { ...prev, consolidationThresholds: { ...prev.consolidationThresholds, jobWide: next } } : prev)}
+                    threshold={consolidationThresholds.jobWide}
+                    onThresholdChange={(next) => updateConsolidationThresholds({ ...consolidationThresholds, jobWide: next })}
                   />
                 </div>
               )}
