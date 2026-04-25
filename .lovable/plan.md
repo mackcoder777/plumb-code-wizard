@@ -131,3 +131,33 @@ Same shape as the existing `CorruptCodeBanner.tsx` pattern.
 - Three-extractor consolidation (Open Item 5).
 - Format-logging during export (Open Item 6).
 - Hamilton MP fresh-load test for the format-flip work — separate session, separate verification.
+
+---
+
+## Open Item 8 — Fab code dropdown CSTF/CSTI swap (PATCHED 2026-04-25)
+
+**Status:** Patches applied. Post-deployment data review required.
+
+### Patches shipped
+1. `BudgetAdjustmentsPanel.tsx` — `FAB_COST_HEAD_DESCRIPTIONS`: corrected CSTF label to "Carbon Steel Teflon Lined", added CSTI/HNGS/FNSH entries.
+2. `BudgetAdjustmentsPanel.tsx` — Fab routing dropdown: split CSTF↔CSTI options, added HNGS/FNSH options.
+3. `budgetExportSystem.ts` — `getLaborCostHeadDescription`: added all fab material codes (CSTI, CSTF, COPR, CRBN, SSTL, SS10, PLST, BRAZ, HFBS) so Budget Packet labor rows show real descriptions instead of bare 4-char codes.
+
+### Root cause
+The auto-suggest engine (`getFabCodeFromSpec`, `FIXED_FAB_ROUTING`) correctly wrote CSTI/HNGS/FNSH into `fabCodeMap`. The dropdown's local lookup tables were authored before those codes were canonical, so the `<option>` for CSTI was missing and CSTF was mislabeled "Cast Iron". Result: dropdown rendered blank for engine-assigned codes, and any PM who manually picked the mislabeled "CSTF — Cast Iron" option persisted the wrong code.
+
+### Post-deployment data review (REQUIRED)
+DB scan found **2 projects** with `CSTF` in `fab_code_map` where it likely meant cast iron:
+
+- **`79aeb1d0-...`** — `25053 - HAMILTON HIGH PLUMBING`
+- **`304d1e53-...`** — `HAMILTON HIGH - PLUMBING`
+
+Both have entries like `CSTI:CSTF`, `BGSD:CSTF`, `SNWV:CSTF`, `STRM:CSTF` — strongly suggesting cast-iron-routed work was persisted under the carbon-steel-teflon code. PM (Jonathan) must review each entry and decide:
+- Re-map to `CSTI` if intent was cast iron (almost certainly the case for SNWV/STRM/BGSD/CSTI source heads)
+- Leave as `CSTF` if actually carbon steel teflon (rare in plumbing)
+
+Any Budget Packets exported from these two projects before this patch shipped have wrong fab codes for cast-iron lines and should be re-issued after PM confirms the corrected routing.
+
+### Verification
+- Auto-suggest engine path unchanged — Hamilton's freshly auto-suggested values land correctly.
+- Export description bug confirmed via source: `getLaborCostHeadDescription('CSTI')` previously returned `'CSTI'` (truthy fallback), short-circuiting the OR-chain in `exportBudgetPacket` line 1456 and never reaching `item.description`. Now returns the canonical Murray description.

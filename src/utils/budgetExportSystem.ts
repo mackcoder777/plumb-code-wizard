@@ -1810,6 +1810,16 @@ function getLaborCostHeadDescription(costHead: string): string {
     'SZMC': 'SEISMIC',
     'TRAP': 'TRAP PRIMERS',
     'GRAY': 'GRAY WATER',
+    // Fab material codes (match COST_CODE_LOOKUP descriptions)
+    'CSTI': 'CAST IRON FAB',
+    'CSTF': 'CARBON STEEL TEFLON LINED',
+    'COPR': 'FAB - COPPER',
+    'CRBN': 'CARBON STEEL PIPING',
+    'SSTL': 'STAINLESS STEEL PIPING',
+    'SS10': 'STAINLESS STEEL SCH 10',
+    'PLST': 'PLASTIC PIPING',
+    'BRAZ': 'BRAZED COPPER',
+    'HFBS': 'HANGERS FAB SHEETS',
   };
   return descriptions[costHead] || costHead;
 }
