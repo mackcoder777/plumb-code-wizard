@@ -668,7 +668,6 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setFabCodeMap({ ...DEFAULT_FAB_CODE_MAP, ...savedFabCodeMap });
     setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
     setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
-    setConsolidationThresholds(getSetting<ConsolidationThresholds>('consolidation_thresholds', DEFAULT_THRESHOLDS));
 
     // All setState calls complete — defer setting initialized=true until AFTER
     // React processes the re-render so save effects skip the load-triggered updates
@@ -705,17 +704,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       if (lsFR) saveSetting('fab_rates', JSON.parse(lsFR));
       const lsCFC = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
       if (lsCFC) saveSetting('custom_fab_codes', JSON.parse(lsCFC));
-      // Seed consolidation_thresholds from legacy `smallCodeMinHours` localStorage
-      // (project-agnostic, was the only piece of the threshold object stored client-side
-      // before this patch). Other threshold fields default to DEFAULT_THRESHOLDS.
-      const lsSmall = localStorage.getItem('smallCodeMinHours');
-      const seeded: ConsolidationThresholds = {
-        ...DEFAULT_THRESHOLDS,
-        ...(lsSmall ? { smallLine: parseInt(lsSmall, 10) || DEFAULT_THRESHOLDS.smallLine } : {}),
-      };
-      saveSetting('consolidation_thresholds', seeded);
-      // Clear the legacy key so subsequent loads use the DB value exclusively.
-      if (lsSmall) localStorage.removeItem('smallCodeMinHours');
+      // NOTE: consolidation_thresholds load + seed migration moved to
+      // Index.tsx (single owner). Do not re-add here.
     }
   }, [settingsLoading, projectId, dbSettings, getSetting, saveSetting]);
 
