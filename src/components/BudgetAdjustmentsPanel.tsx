@@ -709,9 +709,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   
   const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
-  const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
-    return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
-  });
+  // Unified consolidation thresholds (DB-backed via useBudgetSettings).
+  // Hydrated by the load effect below; minHoursThreshold is derived from
+  // consolidationThresholds.smallLine for compatibility with existing call sites.
+  const [consolidationThresholds, setConsolidationThresholds] =
+    useState<ConsolidationThresholds>(DEFAULT_THRESHOLDS);
+  const minHoursThreshold = consolidationThresholds.smallLine;
+  const setMinHoursThreshold = useCallback((next: number | ((prev: number) => number)) => {
+    setConsolidationThresholds(prev => {
+      const value = typeof next === 'function' ? (next as (n: number) => number)(prev.smallLine) : next;
+      return { ...prev, smallLine: value };
+    });
+  }, []);
   const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
