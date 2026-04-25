@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,26 @@ export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({
   const setSmallThreshold = (n: number) => onThresholdsChange({ ...thresholds, smallLine: n });
   const setJobWideThreshold = (n: number) => onThresholdsChange({ ...thresholds, jobWide: n });
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['overview']));
+
+  // Local drafts so users can freely delete/retype digits without the parent's
+  // clamp (e.g. jobWide > sectionRollup) snapping intermediate values back.
+  // Commit on blur or Enter.
+  const [smallDraft, setSmallDraft] = useState<string>(String(smallThreshold));
+  const [jobWideDraft, setJobWideDraft] = useState<string>(String(jobWideThreshold));
+  useEffect(() => { setSmallDraft(String(smallThreshold)); }, [smallThreshold]);
+  useEffect(() => { setJobWideDraft(String(jobWideThreshold)); }, [jobWideThreshold]);
+
+  const commitSmall = useCallback(() => {
+    const parsed = parseInt(smallDraft, 10);
+    if (Number.isFinite(parsed) && parsed > 0) setSmallThreshold(parsed);
+    else setSmallDraft(String(smallThreshold));
+  }, [smallDraft, smallThreshold]);
+
+  const commitJobWide = useCallback(() => {
+    const parsed = parseInt(jobWideDraft, 10);
+    if (Number.isFinite(parsed) && parsed > 0) setJobWideThreshold(parsed);
+    else setJobWideDraft(String(jobWideThreshold));
+  }, [jobWideDraft, jobWideThreshold]);
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => {
@@ -118,8 +138,10 @@ export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Small code threshold:</Label>
             <Input
               type="number"
-              value={smallThreshold}
-              onChange={e => setSmallThreshold(parseInt(e.target.value) || 40)}
+              value={smallDraft}
+              onChange={e => setSmallDraft(e.target.value)}
+              onBlur={commitSmall}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
               className="w-16 h-7 text-xs"
             />
             <span className="text-muted-foreground">hrs</span>
@@ -128,8 +150,10 @@ export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Job-wide threshold:</Label>
             <Input
               type="number"
-              value={jobWideThreshold}
-              onChange={e => setJobWideThreshold(parseInt(e.target.value) || 160)}
+              value={jobWideDraft}
+              onChange={e => setJobWideDraft(e.target.value)}
+              onBlur={commitJobWide}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
               className="w-16 h-7 text-xs"
             />
             <span className="text-muted-foreground">hrs</span>
