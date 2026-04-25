@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { cn, normalizeActivityCode } from '@/lib/utils';
+import { cn, normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
 import { Search, Check, X, AlertCircle, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity, Building2 } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
@@ -569,19 +569,23 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     const resolved = resolveFloorMappingStatic(item.floor || '', item.drawing || '', floorSectionMappings, buildingSectionMappings, { zone: item.zone, datasetProfile });
     const floorActivity = resolved.activity || '0000';
     const buildingActRaw = (resolved.buildingActivity ?? resolved.activity) || '0000';
+    // Strip ALL leading zeros (matches Index.tsx site 1 derivation): 00BA→BA, 0B12→B12, 0MOD→MOD.
+    const bldgSuffix = codeFormatMode === 'multitrade'
+      ? buildingActRaw.replace(/^0+/, '')
+      : '';
     const bldgIdForOverride = codeFormatMode === 'multitrade'
-      ? (buildingActRaw.replace(/^00/, '') || null)
+      ? (bldgSuffix || null)
       : null;
     const hasLevelOverride = shouldUseLevelActivity(costHead, bldgIdForOverride, costHeadActivityOverrides);
     let activity: string;
     if (codeFormatMode === 'multitrade') {
       const buildingAct = buildingActRaw;
-      if (hasLevelOverride && buildingAct.startsWith('00')) {
-        // Combine level prefix from floor activity with building suffix
-        // e.g. floor "Level 1" (activity "00L1") + building act "00BA" → "01BA"
-        activity = extractMultitradeLevelPrefix(floorActivity) + buildingAct.slice(2);
+      // Gate: building suffix must be ≤2 chars to fit in 4-char ACT alongside 2-char level prefix.
+      if (hasLevelOverride && bldgSuffix && bldgSuffix.length <= 2) {
+        // Building-first ACT: "BA" + "01" = "BA01" (was "01BA" in legacy level-first format).
+        activity = composeMultitradeActivity(bldgSuffix, extractMultitradeLevelPrefix(floorActivity));
       } else {
-        // Non-level or non-standard building code (e.g. "0MOD") — use flat building act
+        // No override, or 3+ char building ID (B12/B13/MOD can't encode level in 4-char ACT).
         activity = buildingAct;
       }
     } else {
@@ -633,15 +637,16 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let activityCode: string;
       if (codeFormatMode === 'multitrade') {
         const buildingAct = (resolved.buildingActivity ?? resolved.activity) || '0000';
-        const buildingActM = buildingAct;
-        const bldgIdM = buildingActM.replace(/^00/, '') || null;
+        // Strip ALL leading zeros (matches Index.tsx site 1 derivation): 00BA→BA, 0B12→B12, 0MOD→MOD.
+        const bldgSuffix = buildingAct.replace(/^0+/, '');
+        const bldgIdM = bldgSuffix || null;
         const hasLevelOverrideMulti = shouldUseLevelActivity(costHead, bldgIdM, effectiveOverrides);
-        if (hasLevelOverrideMulti && buildingAct.startsWith('00')) {
-          // Level override: inject floor-level prefix into building ACT
-          // "00L1" + "00BA" → "01BA", "00L2" + "00BA" → "02BA", "00RF" + "00BA" → "0RBA"
-          activityCode = extractMultitradeLevelPrefix(resolved.activity || '0000') + buildingAct.slice(2);
+        // Gate: building suffix must be ≤2 chars to fit in 4-char ACT alongside 2-char level prefix.
+        if (hasLevelOverrideMulti && bldgSuffix && bldgSuffix.length <= 2) {
+          // Building-first ACT: "BA" + "01" = "BA01" (was "01BA" in legacy level-first format).
+          activityCode = composeMultitradeActivity(bldgSuffix, extractMultitradeLevelPrefix(resolved.activity || '0000'));
         } else {
-          // Flat or non-standard building code — use building act unchanged
+          // Flat or non-standard building code — use building act unchanged.
           activityCode = buildingAct;
         }
       } else {

@@ -29,7 +29,7 @@ import {
 import { useFloorSectionMappings, getFloorMapping } from '@/hooks/useFloorSectionMappings';
 import { resolveFloorMappingStatic, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
 import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
-import { normalizeActivityCode } from '@/lib/utils';
+import { normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
 import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride } from '@/utils/datasetProfiler';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
@@ -880,11 +880,8 @@ const EnhancedCostCodeManager = () => {
             // Floor mappings store activity_code as building ID only (e.g. "BA"), with no level info.
             // The level lives in the floor_pattern string ("Bldg A - Level 2"), so parse it from item.floor.
             const levelPrefix = extractLevelPrefixFromPattern(item.floor || '');
-            if (levelPrefix !== '00') {
-              activity = levelPrefix + bldgSuffix; // e.g. "01" + "BA" = "01BA"
-            } else {
-              activity = buildingAct; // Floor has no extractable level — keep flat building activity
-            }
+            // Building-first ACT (e.g. "BA01"). Falls back to flat "00BA" when no level extractable.
+            activity = composeMultitradeActivity(bldgSuffix, levelPrefix);
           } else {
             // No override, or 3+ char building ID (B12/B13 can't encode level in 4-char ACT)
             activity = buildingAct;

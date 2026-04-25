@@ -12,7 +12,7 @@ import { Layers, Save, RotateCcw, Loader2, ChevronsUpDown, Check, Plus, RefreshC
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
-import { cn, normalizeActivityCode } from '@/lib/utils';
+import { cn, normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
 import {
   useFloorSectionMappings,
   useBatchSaveFloorSectionMappings,
@@ -847,10 +847,14 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       const hours = item.hours || 0;
       const bldgId = (localMappings[floor] || '').toUpperCase();
       if (!bldgId || bldgId === '0000') return;
-      const buildingSuffix = bldgId.replace(/^00/, '');
+      // Strip ALL leading zeros (matches Index.tsx site 1 derivation): 00BA→BA, 0B12→B12.
+      const bldgSuffix = bldgId.replace(/^0+/, '');
       const suggestedFloorActivity = suggestActivity(floor);
       const levelPrefix = extractMultitradeLevelPrefix(suggestedFloorActivity);
-      const projectedAct = levelPrefix + buildingSuffix;
+      // Gate: 3+ char building IDs (B12/B13/MOD) can't encode level in 4-char ACT — fall back to flat.
+      const projectedAct = (bldgSuffix && bldgSuffix.length <= 2)
+        ? composeMultitradeActivity(bldgSuffix, levelPrefix)
+        : bldgId.padStart(4, '0');
       const mapKey = `${head}||${bldgId}`;
       if (!result.has(mapKey)) result.set(mapKey, new Map());
       const actMap = result.get(mapKey)!;
@@ -1340,9 +1344,13 @@ const CodeSplittingPreview: React.FC<CodeSplittingPreviewProps> = ({
         const buildingId = (localMappings[floor] || '').toUpperCase();
         const floorActivity = localActivityMappings[floor] || '0000';
         if (buildingId && buildingId !== '0000') {
+          // Strip ALL leading zeros (matches Index.tsx site 1 derivation): 00BA→BA, 0B12→B12.
+          const bldgSuffix = buildingId.replace(/^0+/, '');
           const levelPrefix = extractMultitradeLevelPrefix(floorActivity);
-          const buildingSuffix = buildingId.replace(/^00/, '');
-          const projectedAct = levelPrefix + buildingSuffix;
+          // Gate: 3+ char building IDs (B12/B13/MOD) can't encode level in 4-char ACT — fall back to flat.
+          const projectedAct = (bldgSuffix && bldgSuffix.length <= 2)
+            ? composeMultitradeActivity(bldgSuffix, levelPrefix)
+            : buildingId.padStart(4, '0');
           const ex = entry.actMap.get(projectedAct);
           if (ex) { ex.hours += hours; ex.items++; }
           else { entry.actMap.set(projectedAct, { hours, items: 1 }); }
