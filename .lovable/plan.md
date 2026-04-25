@@ -74,3 +74,28 @@ Auto-resolve handler updated to surface "Section Rollup available for this bucke
 
 - **Phase 5** (unify Job-Wide and Section Rollup engines): merge-record schema differences make this a regression risk on already-saved consolidations. Both detectors will read from the unified threshold object so thresholds don't drift, but the detectors remain parallel implementations.
 - **Open Item 7** (silent batchUpdateSilent failures): tracked separately.
+
+---
+
+## Loop closure (partial — 2026-04-25 session 2)
+
+### Shipped
+- **Task 4 (threshold unification)** — `ConsolidationThresholds` interface added to `BudgetAdjustmentsPanel`. `CodeHealthDashboard` and `JobWideConsolidation` now read thresholds from props (passed from `Index.tsx` via `budgetAdjustments.consolidationThresholds`). Hardcoded `200`/`40`/`160` removed; `useState` thresholds in dashboards eliminated.
+- **Task 5 (seed migration)** — Legacy `localStorage.smallCodeMinHours` reads on first auto-migration cycle, seeds DB `consolidation_thresholds` setting, removes the localStorage key. Subsequent loads use DB exclusively.
+- `useBudgetSettings.SETTINGS_KEYS` extended with `'consolidation_thresholds'`.
+- DB save effect added (debounced 500ms, same pattern as other settings).
+
+### Not yet implemented (deferred to next loop)
+- **Task 1 (Section Rollup detector + UI)** — design locked: useMemo keyed by `sec|act`, target dropdown constrained to bucket heads (Rule E preserved, no act filter). UI adds new tab in Small Code Review.
+- **Task 2 (Standalone overlap)** — Section Rollup save will write the same reassign records as individual Standalone reassigns; no new persistence path needed. Visualization layer only.
+- **Task 3 (Job-Wide skip)** — detector filters out any sec|head with an existing `__JOBWIDE__` merge record.
+
+### Architectural notes for next loop
+- The Stage 3 reassign branch at `BudgetAdjustmentsPanel.tsx:1567-1604` is verified safe to reuse: line 1572's target match ignores act, line 1593's hardcoded `0000` fall-through is unreachable when target dropdown is constrained to existing bucket heads.
+- `currentAdjustments` in `BudgetAdjustmentsPanel` now exposes `consolidationThresholds` to `Index.tsx`; passing them down to dashboards is wired via callback props that mutate `budgetAdjustments` state. The panel's own DB load/save effect handles persistence.
+
+### Open Items still pending
+- **Open Item 7** — silent batchUpdateSilent failures (toast + banner pattern).
+- **Open Item 5** — three-extractor consolidation (`extractMultitradeLevelPrefix` × 2 + `extractLevelPrefixForSummary`).
+- **Open Item 6** — format-logging during export.
+- **Phase 5** — unify Job-Wide and Section Rollup engines (deferred to separate loop, schema reconciliation risk).
