@@ -842,20 +842,23 @@ const EnhancedCostCodeManager = () => {
       const rawCostHead = item.costCode || item.laborCostCode;
       const hours = item.hours || 0;
       if (hours === 0) return;
+      // Uncoded items must NOT enter laborSummary. Synthesizing an 'UNCD' bucket
+      // here flowed into adjustedLaborSummary and produced phantom export hours
+      // (e.g. "01 0000 UNCD") in HourReconciliationBar and the Audit Report —
+      // silent data fabrication that violates the PM authority rule (CLAUDE.md
+      // §20) and the no-hardcoded-fallback rule (§16 #7). Uncoded items already
+      // surface correctly via the Coded delta on the reconciliation bar.
+      if (!rawCostHead) return;
       let costHead: string;
-      if (!rawCostHead) {
-        costHead = 'UNCD';
+      const parts = rawCostHead.trim().split(/\s+/);
+      if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
+        costHead = parts.slice(4).join(' ');
+      } else if (parts.length >= 3) {
+        costHead = codeFormatMode === 'multitrade'
+          ? parts[parts.length - 1]  // Last token only — prevents prefix/section leaks
+          : parts.slice(2).join(' ');
       } else {
-        const parts = rawCostHead.trim().split(/\s+/);
-        if (parts.length >= 5 && parts[0] === parts[2] && parts[1] === parts[3]) {
-          costHead = parts.slice(4).join(' ');
-        } else if (parts.length >= 3) {
-          costHead = codeFormatMode === 'multitrade'
-            ? parts[parts.length - 1]  // Last token only — prevents prefix/section leaks
-            : parts.slice(2).join(' ');
-        } else {
-          costHead = rawCostHead;
-        }
+        costHead = rawCostHead;
       }
       let section: string;
       let activity: string;
@@ -899,7 +902,7 @@ const EnhancedCostCodeManager = () => {
         const codeInfo = COST_CODES.find(c => c.code === costHead);
         summary[fullCode] = {
           code: fullCode,
-          description: costHead === 'UNCD' ? 'UNCODED ITEMS' : (codeInfo?.description || costHead),
+          description: codeInfo?.description || costHead,
           fieldHours: 0,
           rate: bidLaborRate
         };
