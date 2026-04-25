@@ -3525,6 +3525,8 @@ const EnhancedCostCodeManager = () => {
                   onAdjustmentsChange={setBudgetAdjustments}
                   estimateData={estimateData}
                   systemMappings={savedMappings.map(m => ({ system: m.system_name, laborCode: (m.cost_head || '').split('|')[1] || (m.cost_head || '') }))}
+                  consolidationThresholds={consolidationThresholds}
+                  onConsolidationThresholdsChange={updateConsolidationThresholds}
                 />
               </div>
           </div>
