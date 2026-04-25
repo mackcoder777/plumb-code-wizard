@@ -721,18 +721,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   
   const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
-  // Unified consolidation thresholds (DB-backed via useBudgetSettings).
-  // Hydrated by the load effect below; minHoursThreshold is derived from
-  // consolidationThresholds.smallLine for compatibility with existing call sites.
-  const [consolidationThresholds, setConsolidationThresholds] =
-    useState<ConsolidationThresholds>(DEFAULT_THRESHOLDS);
+  // Consolidation thresholds are owned by Index.tsx (single source of truth)
+  // and arrive as props. minHoursThreshold remains a derived alias so existing
+  // call sites (filters, threshold comparisons, label text) compile unchanged.
+  // Threshold edits flow through onConsolidationThresholdsChange; there is no
+  // local state, no load effect, no save effect for thresholds in this panel.
   const minHoursThreshold = consolidationThresholds.smallLine;
-  const setMinHoursThreshold = useCallback((next: number | ((prev: number) => number)) => {
-    setConsolidationThresholds(prev => {
-      const value = typeof next === 'function' ? (next as (n: number) => number)(prev.smallLine) : next;
-      return { ...prev, smallLine: value };
-    });
-  }, []);
   const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
