@@ -383,6 +383,14 @@ interface BudgetAdjustmentsPanelProps {
   onAdjustmentsChange: (adjustments: BudgetAdjustments) => void;
   estimateData?: EstimateItem[];
   systemMappings?: Array<{ system: string; laborCode?: string }>;
+  // Consolidation thresholds owned by Index.tsx (single source of truth).
+  // Panel reads these via props and emits changes via the callback. The panel
+  // no longer holds its own consolidation_thresholds state, load effect, or
+  // save effect — those moved to Index.tsx to fix the dual-ownership bug
+  // where dashboard edits could be silently overwritten by the panel's stale
+  // copy via the currentAdjustments round-trip.
+  consolidationThresholds: ConsolidationThresholds;
+  onConsolidationThresholdsChange: (next: ConsolidationThresholds) => void;
 }
 
 const FAB_SECTION = 'FP';
@@ -590,6 +598,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   onAdjustmentsChange,
   estimateData = [],
   systemMappings = [],
+  consolidationThresholds,
+  onConsolidationThresholdsChange,
 }) => {
   // ── Budget settings persistence (DB-backed with localStorage cache) ──
   const { dbSettings, isLoading: settingsLoading, saveSetting, getSetting } = useBudgetSettings(projectId);
@@ -658,7 +668,6 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setFabCodeMap({ ...DEFAULT_FAB_CODE_MAP, ...savedFabCodeMap });
     setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
     setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
-    setConsolidationThresholds(getSetting<ConsolidationThresholds>('consolidation_thresholds', DEFAULT_THRESHOLDS));
 
     // All setState calls complete — defer setting initialized=true until AFTER
     // React processes the re-render so save effects skip the load-triggered updates
@@ -695,17 +704,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       if (lsFR) saveSetting('fab_rates', JSON.parse(lsFR));
       const lsCFC = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
       if (lsCFC) saveSetting('custom_fab_codes', JSON.parse(lsCFC));
-      // Seed consolidation_thresholds from legacy `smallCodeMinHours` localStorage
-      // (project-agnostic, was the only piece of the threshold object stored client-side
-      // before this patch). Other threshold fields default to DEFAULT_THRESHOLDS.
-      const lsSmall = localStorage.getItem('smallCodeMinHours');
-      const seeded: ConsolidationThresholds = {
-        ...DEFAULT_THRESHOLDS,
-        ...(lsSmall ? { smallLine: parseInt(lsSmall, 10) || DEFAULT_THRESHOLDS.smallLine } : {}),
-      };
-      saveSetting('consolidation_thresholds', seeded);
-      // Clear the legacy key so subsequent loads use the DB value exclusively.
-      if (lsSmall) localStorage.removeItem('smallCodeMinHours');
+      // NOTE: consolidation_thresholds load + seed migration moved to
+      // Index.tsx (single owner). Do not re-add here.
     }
   }, [settingsLoading, projectId, dbSettings, getSetting, saveSetting]);
 
@@ -721,18 +721,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   
   const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
-  // Unified consolidation thresholds (DB-backed via useBudgetSettings).
-  // Hydrated by the load effect below; minHoursThreshold is derived from
-  // consolidationThresholds.smallLine for compatibility with existing call sites.
-  const [consolidationThresholds, setConsolidationThresholds] =
-    useState<ConsolidationThresholds>(DEFAULT_THRESHOLDS);
+  // Consolidation thresholds are owned by Index.tsx (single source of truth)
+  // and arrive as props. minHoursThreshold remains a derived alias so existing
+  // call sites (filters, threshold comparisons, label text) compile unchanged.
+  // Threshold edits flow through onConsolidationThresholdsChange; there is no
+  // local state, no load effect, no save effect for thresholds in this panel.
   const minHoursThreshold = consolidationThresholds.smallLine;
-  const setMinHoursThreshold = useCallback((next: number | ((prev: number) => number)) => {
-    setConsolidationThresholds(prev => {
-      const value = typeof next === 'function' ? (next as (n: number) => number)(prev.smallLine) : next;
-      return { ...prev, smallLine: value };
-    });
-  }, []);
   const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
@@ -877,10 +871,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     saveSetting('custom_fab_codes', customFabCodes);
   }, [customFabCodes]);
 
-  useEffect(() => {
-    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
-    saveSetting('consolidation_thresholds', consolidationThresholds);
-  }, [consolidationThresholds]);
+  // Save effect for consolidation_thresholds removed: threshold persistence
+  // is owned by Index.tsx now. Do not re-add here — that would recreate the
+  // dual-ownership stale-state bug.
 
   // Aggregate laborSummary by cost head (last segment of full code)
   const groupedByCostHead = useMemo(() => {
@@ -2901,7 +2894,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: m.redistribute_adjustments as Record<string, number> | null,
         merged_act: m.merged_act,
       })) ?? [],
-      consolidationThresholds,
+      // consolidationThresholds intentionally NOT included here. Index.tsx
+      // owns this state; emitting it back through onAdjustmentsChange would
+      // create a round-trip that overwrites dashboard edits with the panel's
+      // (now prop-derived but still) snapshot value.
+      consolidationThresholds,  // pass-through copy of prop for downstream consumers
     };
   }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, finalLaborSummary, savedMergesData, consolidationThresholds]);
 
@@ -4760,8 +4757,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 onChange={(e) => {
                                   const val = parseInt(e.target.value) || 8;
                                   const clamped = Math.max(1, Math.min(40, val));
-                                  setMinHoursThreshold(clamped);
-                                  localStorage.setItem('smallCodeMinHours', String(clamped));
+                                  // Route through prop callback — Index.tsx is the
+                                  // single owner of consolidationThresholds. The
+                                  // legacy `smallCodeMinHours` localStorage write
+                                  // is intentionally gone; the seed migration in
+                                  // Index.tsx already drained it on first load.
+                                  onConsolidationThresholdsChange({
+                                    ...consolidationThresholds,
+                                    smallLine: clamped,
+                                  });
                                 }}
                                 className="h-7 w-14 text-xs font-mono"
                               />
