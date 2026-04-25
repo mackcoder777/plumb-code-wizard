@@ -383,6 +383,14 @@ interface BudgetAdjustmentsPanelProps {
   onAdjustmentsChange: (adjustments: BudgetAdjustments) => void;
   estimateData?: EstimateItem[];
   systemMappings?: Array<{ system: string; laborCode?: string }>;
+  // Consolidation thresholds owned by Index.tsx (single source of truth).
+  // Panel reads these via props and emits changes via the callback. The panel
+  // no longer holds its own consolidation_thresholds state, load effect, or
+  // save effect — those moved to Index.tsx to fix the dual-ownership bug
+  // where dashboard edits could be silently overwritten by the panel's stale
+  // copy via the currentAdjustments round-trip.
+  consolidationThresholds: ConsolidationThresholds;
+  onConsolidationThresholdsChange: (next: ConsolidationThresholds) => void;
 }
 
 const FAB_SECTION = 'FP';
