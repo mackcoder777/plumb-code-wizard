@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { cn, normalizeActivityCode } from '@/lib/utils';
+import { cn, normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
 import { Search, Check, X, AlertCircle, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity, Building2 } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';

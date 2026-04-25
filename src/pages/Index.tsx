@@ -29,7 +29,7 @@ import {
 import { useFloorSectionMappings, getFloorMapping } from '@/hooks/useFloorSectionMappings';
 import { resolveFloorMappingStatic, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
 import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
-import { normalizeActivityCode } from '@/lib/utils';
+import { normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
 import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride } from '@/utils/datasetProfiler';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
