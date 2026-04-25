@@ -356,7 +356,24 @@ export interface BudgetAdjustments {
     redistribute_adjustments?: Record<string, number> | null;
     merged_act: string;
   }>;
+  // Unified consolidation thresholds — single source of truth for Code Health
+  // Dashboard, Job-Wide Consolidation, and Small Code Review small-line floor.
+  consolidationThresholds: ConsolidationThresholds;
 }
+
+export interface ConsolidationThresholds {
+  smallLine: number;       // single line < this is flagged in Small Code Review (default 8)
+  sectionRollup: number;   // sec|act bucket total < this is a Section Rollup candidate (default 80)
+  sectionWarning: number;  // section total < this gets a ⚠ in Code Health (default 200)
+  jobWide: number;         // head across 2+ sections totalling < this is a Job-Wide candidate (default 160)
+}
+
+export const DEFAULT_THRESHOLDS: ConsolidationThresholds = {
+  smallLine: 8,
+  sectionRollup: 80,
+  sectionWarning: 200,
+  jobWide: 160,
+};
 
 interface BudgetAdjustmentsPanelProps {
   laborSummary: Record<string, LaborCodeSummary>;
@@ -641,6 +658,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setFabCodeMap({ ...DEFAULT_FAB_CODE_MAP, ...savedFabCodeMap });
     setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
     setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
+    setConsolidationThresholds(getSetting<ConsolidationThresholds>('consolidation_thresholds', DEFAULT_THRESHOLDS));
 
     // All setState calls complete — defer setting initialized=true until AFTER
     // React processes the re-render so save effects skip the load-triggered updates
@@ -677,6 +695,17 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
       if (lsFR) saveSetting('fab_rates', JSON.parse(lsFR));
       const lsCFC = localStorage.getItem(`budget_custom_fab_codes_${projectId}`);
       if (lsCFC) saveSetting('custom_fab_codes', JSON.parse(lsCFC));
+      // Seed consolidation_thresholds from legacy `smallCodeMinHours` localStorage
+      // (project-agnostic, was the only piece of the threshold object stored client-side
+      // before this patch). Other threshold fields default to DEFAULT_THRESHOLDS.
+      const lsSmall = localStorage.getItem('smallCodeMinHours');
+      const seeded: ConsolidationThresholds = {
+        ...DEFAULT_THRESHOLDS,
+        ...(lsSmall ? { smallLine: parseInt(lsSmall, 10) || DEFAULT_THRESHOLDS.smallLine } : {}),
+      };
+      saveSetting('consolidation_thresholds', seeded);
+      // Clear the legacy key so subsequent loads use the DB value exclusively.
+      if (lsSmall) localStorage.removeItem('smallCodeMinHours');
     }
   }, [settingsLoading, projectId, dbSettings, getSetting, saveSetting]);
 
@@ -692,9 +721,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   const [manuallyOverridden, setManuallyOverridden] = useState<Set<string>>(new Set());
   
   const [standaloneMaxHours, setStandaloneMaxHours] = useState<number>(8);
-  const [minHoursThreshold, setMinHoursThreshold] = useState(() => {
-    return parseInt(localStorage.getItem('smallCodeMinHours') ?? '8', 10);
-  });
+  // Unified consolidation thresholds (DB-backed via useBudgetSettings).
+  // Hydrated by the load effect below; minHoursThreshold is derived from
+  // consolidationThresholds.smallLine for compatibility with existing call sites.
+  const [consolidationThresholds, setConsolidationThresholds] =
+    useState<ConsolidationThresholds>(DEFAULT_THRESHOLDS);
+  const minHoursThreshold = consolidationThresholds.smallLine;
+  const setMinHoursThreshold = useCallback((next: number | ((prev: number) => number)) => {
+    setConsolidationThresholds(prev => {
+      const value = typeof next === 'function' ? (next as (n: number) => number)(prev.smallLine) : next;
+      return { ...prev, smallLine: value };
+    });
+  }, []);
   const [standaloneFilter, setStandaloneFilter] = useState<'all' | 'open' | 'saved' | 'residual' | 'in-export'>('all');
 
   // Supabase: load saved merges for this project
@@ -838,6 +876,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
     saveSetting('custom_fab_codes', customFabCodes);
   }, [customFabCodes]);
+
+  useEffect(() => {
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('consolidation_thresholds', consolidationThresholds);
+  }, [consolidationThresholds]);
 
   // Aggregate laborSummary by cost head (last segment of full code)
   const groupedByCostHead = useMemo(() => {
@@ -2858,8 +2901,9 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         redistribute_adjustments: m.redistribute_adjustments as Record<string, number> | null,
         merged_act: m.merged_act,
       })) ?? [],
+      consolidationThresholds,
     };
-  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, finalLaborSummary, savedMergesData]);
+  }, [calculations, lrcnCalculations, fabLrcnCalculations, jobsiteZipCode, taxInfo, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, lrcnEnabled, bidRates, budgetRate, computedBidLaborRate, shopRate, fabRates, fabLrcnEnabled, finalLaborSummary, savedMergesData, consolidationThresholds]);
 
   useEffect(() => {
     onAdjustmentsChange(currentAdjustments);

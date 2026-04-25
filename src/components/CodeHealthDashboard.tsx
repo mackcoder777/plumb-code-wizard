@@ -7,14 +7,28 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { AlertTriangle, ChevronDown, ChevronRight, Zap, BarChart3, Layers } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import type { ConsolidationThresholds } from './BudgetAdjustmentsPanel';
 
 interface CodeHealthDashboardProps {
   finalLaborSummary: Record<string, { code: string; hours: number; dollars: number; description?: string }> | null;
+  thresholds: ConsolidationThresholds;
+  onThresholdsChange: (next: ConsolidationThresholds) => void;
+  onJumpToSectionRollup?: (secAct: string) => void;
 }
 
-export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({ finalLaborSummary }) => {
-  const [smallThreshold, setSmallThreshold] = useState(40);
-  const [jobWideThreshold, setJobWideThreshold] = useState(160);
+export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({
+  finalLaborSummary,
+  thresholds,
+  onThresholdsChange,
+  onJumpToSectionRollup,
+}) => {
+  // Read all thresholds from the unified settings object owned by the parent.
+  // "smallThreshold" here = small-line floor (Code Health uses it for the "Under N hrs" count).
+  const smallThreshold = thresholds.smallLine;
+  const jobWideThreshold = thresholds.jobWide;
+  const sectionWarningThreshold = thresholds.sectionWarning;
+  const setSmallThreshold = (n: number) => onThresholdsChange({ ...thresholds, smallLine: n });
+  const setJobWideThreshold = (n: number) => onThresholdsChange({ ...thresholds, jobWide: n });
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['overview']));
 
   const toggleSection = (section: string) => {
@@ -222,10 +236,19 @@ export const CodeHealthDashboard: React.FC<CodeHealthDashboardProps> = ({ finalL
                 </TableHeader>
                 <TableBody>
                   {analysis.sections.map(s => (
-                    <TableRow key={s.name} className={s.totalHours < 200 ? 'bg-amber-500/5' : undefined}>
+                    <TableRow
+                      key={s.name}
+                      className={cn(
+                        s.totalHours < sectionWarningThreshold ? 'bg-amber-500/5' : undefined,
+                        onJumpToSectionRollup && s.totalHours < sectionWarningThreshold ? 'cursor-pointer hover:bg-amber-500/10' : undefined,
+                      )}
+                      onClick={() => {
+                        if (onJumpToSectionRollup && s.totalHours < sectionWarningThreshold) onJumpToSectionRollup(s.name);
+                      }}
+                    >
                       <TableCell className="font-mono text-xs py-1.5">
                         {s.name}
-                        {s.totalHours < 200 && <span className="ml-1 text-amber-500">⚠</span>}
+                        {s.totalHours < sectionWarningThreshold && <span className="ml-1 text-amber-500">⚠</span>}
                       </TableCell>
                       <TableCell className="text-xs text-right py-1.5">{s.codeCount}</TableCell>
                       <TableCell className="text-xs text-right font-mono py-1.5">{s.totalHours.toLocaleString()}</TableCell>
