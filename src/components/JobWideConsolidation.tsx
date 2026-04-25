@@ -196,7 +196,7 @@ export const JobWideConsolidation: React.FC<JobWideConsolidationProps> = ({
           <Input
             type="number"
             value={threshold}
-            onChange={e => setThreshold(parseInt(e.target.value) || 160)}
+            onChange={e => onThresholdChange(parseInt(e.target.value) || 160)}
             className="w-20 h-7 text-xs"
           />
           <span className="text-muted-foreground">hrs</span>
