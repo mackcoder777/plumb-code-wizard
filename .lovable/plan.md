@@ -1,163 +1,76 @@
-## Root cause confirmed
+# Section Rollup + Threshold Unification — Corrected Plan
 
-The DB query proves the bug AND its eventual workaround:
-
-- Floor mapping `UG-3 → BG` saved at **14:53:18**
-- Items NOT updated for ~51 minutes despite the auto-apply effect's dep array including `dbFloorMappings`
-- At **15:44:17**, a project reload triggered a fresh `savedItems` fetch, the effect re-fired with a new `runKey`, and 1,556 items got persisted in one shot
-
-So the resolver works, the matcher works, the persist path works — but only on **project load**, not on **mapping save**. The screenshot you took was during the 51-minute window where DB and mappings were out of sync.
-
-## Why the mid-session re-fire fails
-
-The auto-apply effect (`Index.tsx:1065-1310`) depends on both `savedItems` and `dbFloorMappings`. When you save a mapping, `dbFloorMappings` invalidates and refetches; `savedItems` does NOT. The effect re-fires, but one of two things blocks the persist:
-
-**Path A — runKey dedup blocks it.** If the effect ran earlier with the OLD `dbFloorMappings`, it computed a smaller `itemsNeedingPersist` (or empty). The runKey was set. Now with the new mapping, it computes the correct diff — but if for any reason the diff hashes the same, line 1281 `[AutoApply] Skipping — same run key` swallows it.
-
-**Path B — early-return gates eat the re-fire.** Lines 1069–1087 have three deferral guards:
-- `floorMappingsLoaded` (line 1069)
-- `systemMappingsLoaded` (line 1077)
-- `materialDescOverridesFetched` (line 1084)
-
-Each guard does an unconditional `return` without setting any tracking state. If any guard fires, the effect exits silently and only re-runs when one of its deps changes again. There's no retry loop tied to the guard that failed.
-
-The combination means: save a mapping → `dbFloorMappings` updates → effect re-fires → if a guard trips OR if runKey matches, **silent no-op**. The next persist only happens when the user reloads the project (fresh `savedItems`).
-
-## Patch (3 changes, 1 file: `src/pages/Index.tsx`)
-
-### Change 1 — Make runKey reflect mapping state, not just item diff (line 1279)
-
-Current:
-```ts
-const runKey = `${currentProject.id}|${JSON.stringify(itemsNeedingPersist.map(...))}`;
-```
-
-Change to include a hash of the mapping inputs that drove resolution:
-```ts
-const mappingFingerprint = `${dbFloorMappings.length}:${dbBuildingMappings.length}:${savedMappings.length}:${dbCategoryMappings.length}`;
-const runKey = `${currentProject.id}|${mappingFingerprint}|${JSON.stringify(itemsNeedingPersist.map(u => `${u.row_number}:${u.cost_code}`))}`;
-```
-
-This forces a fresh runKey whenever upstream mappings change, even if the computed diff happens to look the same. Cheap, defensive, fixes Path A.
-
-### Change 2 — Add diagnostic logging to the deferral guards (lines 1069–1087)
-
-Each `return` should log which guard fired and what state it was in. We already log "Deferring auto-apply: floor mappings not yet loaded" but don't log when the guard releases. Add a one-line summary at effect entry:
-
-```ts
-console.log('[AutoApply] Effect fired', {
-  savedItems: savedItems.length,
-  floorMappingsFetched, mappingsFetched, materialDescOverridesFetched,
-  dbFloorMappings: dbFloorMappings.length, savedMappings: savedMappings.length,
-});
-```
-
-This makes the next debugging loop trivial — we'll see exactly which gate the mid-session save is hitting.
-
-### Change 3 — Reset runKey when mapping inputs change (new effect)
-
-Add a small effect that resets `autoApplyRunKeyRef.current` when any mapping input reference changes. This belt-and-suspenders the runKey behavior so even if Change 1 misses an edge case, the dedup can't silently block a legitimate re-resolution:
-
-```ts
-useEffect(() => {
-  autoApplyRunKeyRef.current = '';
-}, [dbFloorMappings, dbBuildingMappings, savedMappings, dbCategoryMappings]);
-```
-
-This is cheap — it just clears a string. The next auto-apply effect run will recompute and write a fresh key.
-
-## What this does NOT change
-
-- Resolver logic (`resolveSectionStatic`, `resolveFloorMappingStatic`) — confirmed working by the DB data.
-- Matcher logic in `useFloorSectionMappings.ts` — confirmed working by the floor panel item counts in your screenshot.
-- The `01` fallback at line 274 of `useFloorSectionMappings.ts` — that's the correct default when no mapping exists; it's not the bug.
-- The deferral guards themselves — they're necessary to prevent a half-loaded resolution from clobbering correct codes with `01`. Don't touch them.
-
-## Test plan
-
-1. **Mid-session save, single mapping.** Open Pasadena. Change one floor mapping (e.g., `UG-21` from `BG` to `LL`). Watch console:
-   - Should see `[AutoApply] Effect fired ...` with all gates true
-   - Should see `[AutoApply] Persisting N labor codes to database...`
-   - Should see `[AutoApply] Successfully saved N labor codes to database`
-   - Re-query DB: items with `floor = 'UG-21'` should have `cost_code` starting with `LL ...`
-
-2. **Mid-session save, revert.** Change `UG-21` back to `BG`. Same console sequence, items revert in DB.
-
-3. **Project load idempotency.** Reload Pasadena. Should see `[Load] ... 0 newly applied from mappings` since DB is already in sync.
-
-4. **Cold-start with deferred guards.** Switch to a different project, then back to Pasadena. Confirm the deferral guards log when they trip and that the effect eventually completes successfully once all queries resolve.
-
-## Out of scope (filed for follow-up)
-
-- The deferral guards have no retry mechanism beyond dep-array re-fires. If a guard trips and the user never triggers another mapping change or reload, the effect never completes. This is a latent reliability issue but not what we're fixing here.
-- `[BatchUpdate]` does not surface failures to the user (CLAUDE.md §16 violation). Already tracked as Open Item 7.
-- The three extractor consolidation (Open Item 5) and export format logging (Open Item 6) remain follow-ups.
-
-## Time estimate
-
-~15 min: 3 small edits in one file, no new dependencies, no schema changes.
+**Correction from prior plan:** Task 1 has been reworded. The previous "Add section-act guard" framing implied an `act === '0000'` filter on the detector. That violates Rule E (universal applicability) — it works for Pasadena (whose small buckets happen to be `0000`) but breaks level-split projects (`1M 01BA`, `2M 02BA`) the moment they produce multi-head small buckets. The correct invariant is at the **target dropdown**, not the detector.
 
 ---
 
-## Loop closure (2026-04-25)
+## Verified source citations (re-confirmed this turn)
 
-**Status: VERIFIED.** Patch shipped, DB evidence confirms mid-session persistence works.
+**`src/components/BudgetAdjustmentsPanel.tsx:1567–1604`** — Stage 3 reassign branch:
+- Line 1572: `Object.keys(result).find` matches by `sec` + `head` only — **activity code is not part of the match key**.
+- Line 1580: if any key in the section has the target head (any ACT), source keys collapse into it.
+- Line 1593: hardcoded `${sec} 0000 ${effectiveTargetHead}` fall-through — only fires when no key in the section has that head.
 
-### Verification evidence
-
-- Console logs: `[AutoApply] Effect fired` → `Persisting 700 labor codes` → `[BatchUpdate] Bulk-updated 700 items via 9 grouped calls` → `Successfully saved 700 labor codes`. No deferral guard tripped, no runKey skip.
-- DB JOIN (Pasadena, project `66ba29b2-f8de-4bdd-a098-0c13264eefa8`):
-  - `Lower LVL` mapping saved at 18:03:23, 700 items rewrote at 18:03:24 — one second, no project reload. **This is the mid-session test, and it passed.**
-  - 1,556/1,559 mappable items match their floor mapping section_code.
-  - 3 stragglers verified: all `system='Specialties'`, `material_spec='No Matl Spec'`, empty `cost_code`. PM-authority correct (no silent fallback for unmapped systems). Not a regression.
-- Mass-rewrite cause confirmed: `useBatchSaveFloorSectionMappings` is only invoked from the Save All button (`FloorSectionMapping.tsx:1871`). No load-effect path. The 18:03:23 batch was a manual click, not a patch side effect.
-
-### Memory entry
-
-`mem://architecture/auto-apply-runkey-dual-mechanism` — documents that the fingerprint and the ref-reset effect must coexist. Removing either reintroduces the Pasadena bug.
-
-## Open Item 7 — Surface BatchUpdate failures (deferred, NOT shipped)
-
-The success path of `batchUpdateSilent` logs prominently (`[BatchUpdate] Bulk-updated N items`). The failure path is `console.error` only — no user-visible signal. CLAUDE.md §16 explicitly forbids silent failure in mutations of this size.
-
-**Proposed fix (deferred to next loop):**
-1. Wrap `batchUpdateSilent` `.then`/`.catch` and surface failures via `toast({ variant: 'destructive' })`.
-2. On project load, after the auto-apply effect completes, compare persisted `cost_code` for a sample of items against the re-resolved value; if any diverge, render a banner offering one-click re-persist.
-
-Same shape as the existing `CorruptCodeBanner.tsx` pattern.
-
-## Out of remaining scope (filed)
-
-- Three-extractor consolidation (Open Item 5).
-- Format-logging during export (Open Item 6).
-- Hamilton MP fresh-load test for the format-flip work — separate session, separate verification.
+**Implication:** If the Section Rollup target dropdown is constrained to heads already present in the bucket, line 1572 always matches → line 1593 is unreachable → no act filter needed. Same-act preservation is automatic because the matched target key is the existing bucket member.
 
 ---
 
-## Open Item 8 — Fab code dropdown CSTF/CSTI swap (PATCHED 2026-04-25)
+## Tasks (5 total — Task 1 corrected, others unchanged)
 
-**Status:** Patches applied. Post-deployment data review required.
+### Task 1 (CORRECTED): Constrain Section Rollup target to bucket heads
 
-### Patches shipped
-1. `BudgetAdjustmentsPanel.tsx` — `FAB_COST_HEAD_DESCRIPTIONS`: corrected CSTF label to "Carbon Steel Teflon Lined", added CSTI/HNGS/FNSH entries.
-2. `BudgetAdjustmentsPanel.tsx` — Fab routing dropdown: split CSTF↔CSTI options, added HNGS/FNSH options.
-3. `budgetExportSystem.ts` — `getLaborCostHeadDescription`: added all fab material codes (CSTI, CSTF, COPR, CRBN, SSTL, SS10, PLST, BRAZ, HFBS) so Budget Packet labor rows show real descriptions instead of bare 4-char codes.
+**Invariant:** The target-head dropdown for any Section Rollup card must be populated **only from the cost heads already present in that `sec|act` bucket**. No free-text input. No heads from other buckets. No heads from other sections.
 
-### Root cause
-The auto-suggest engine (`getFabCodeFromSpec`, `FIXED_FAB_ROUTING`) correctly wrote CSTI/HNGS/FNSH into `fabCodeMap`. The dropdown's local lookup tables were authored before those codes were canonical, so the `<option>` for CSTI was missing and CSTF was mislabeled "Cast Iron". Result: dropdown rendered blank for engine-assigned codes, and any PM who manually picked the mislabeled "CSTF — Cast Iron" option persisted the wrong code.
+**Why this is the right invariant:**
+- With this constraint, `Object.keys(result).find` at line 1572 always succeeds — the target key is, by construction, an existing bucket member.
+- Line 1593's hardcoded-`0000` fall-through becomes unreachable for Section Rollup writes.
+- Works universally for any `sec|act` bucket: `1M 0000`, `1M 01BA`, `B2 00L3`, etc. No activity-code restriction.
+- Preserves the source bucket's ACT automatically because the target lives in the same bucket.
 
-### Post-deployment data review (REQUIRED)
-DB scan found **2 projects** with `CSTF` in `fab_code_map` where it likely meant cast iron:
+**Do NOT implement:** Any `act === '0000'` filter on the detector. Any `act` parameter in the reassign payload. Any "both for safety" combination of dropdown constraint + act filter — the dropdown constraint alone is sufficient and correct.
 
-- **`79aeb1d0-...`** — `25053 - HAMILTON HIGH PLUMBING`
-- **`304d1e53-...`** — `HAMILTON HIGH - PLUMBING`
+**UI implementation:**
+- Section Rollup card lists heads in the bucket sorted by hours descending.
+- Dominant head pre-selected as default target.
+- Dropdown options = the other N-1 heads in the same bucket. The dominant head is the implicit target; the dropdown picks an alternate if the PM disagrees.
+- Save writes N-1 reassign records to `project_small_code_merges`, each with `sec_code = bucket sec`, `cost_head = source head`, `reassign_to_head = target head`. No `act` field needed in the payload.
 
-Both have entries like `CSTI:CSTF`, `BGSD:CSTF`, `SNWV:CSTF`, `STRM:CSTF` — strongly suggesting cast-iron-routed work was persisted under the carbon-steel-teflon code. PM (Jonathan) must review each entry and decide:
-- Re-map to `CSTI` if intent was cast iron (almost certainly the case for SNWV/STRM/BGSD/CSTI source heads)
-- Leave as `CSTF` if actually carbon steel teflon (rare in plumbing)
+### Task 2: Resolve Standalone overlap — Section Rollup as visualization layer
 
-Any Budget Packets exported from these two projects before this patch shipped have wrong fab codes for cast-iron lines and should be re-issued after PM confirms the corrected routing.
+Section Rollup card displays the bucket grouping. The underlying Standalone rows for those heads remain visible in the Standalone tab. Saving a Section Rollup proposal writes the same reassign records that an individual Standalone reassign would write — there is exactly one persistence path. PMs see both the grouped view and the per-row view; only one of them needs to be acted on (whichever is more convenient).
 
-### Verification
-- Auto-suggest engine path unchanged — Hamilton's freshly auto-suggested values land correctly.
-- Export description bug confirmed via source: `getLaborCostHeadDescription('CSTI')` previously returned `'CSTI'` (truthy fallback), short-circuiting the OR-chain in `exportBudgetPacket` line 1456 and never reaching `item.description`. Now returns the canonical Murray description.
+### Task 3: Prevent Job-Wide double-saves
+
+Section Rollup detector skips any `sec|head` already saved as a Job-Wide merge (records where `merged_act === '__JOBWIDE__'`). Prevents proposing a section-level fold for a head that's already been folded job-wide.
+
+### Task 4: Unify dashboard thresholds
+
+Fold the hardcoded `200` in `CodeHealthDashboard.tsx:225` into a `sectionWarningThreshold` field. All thresholds (line floor, section bucket, section warning, job-wide) live in a single object passed as props from the Budget tab parent. No per-component `useState`.
+
+### Task 5: Seed thresholds on first load
+
+Silent one-shot migration: on first load post-deployment, if `consolidation_thresholds` is null in `project_budget_settings`, read existing localStorage values (if any) and write them to the DB, then clear the localStorage entry. After this loop, all reads/writes go through `useBudgetSettings`. No PM-visible toast.
+
+---
+
+## Phase 4 (auto-resolve copy update) — unchanged
+
+Auto-resolve handler updated to surface "Section Rollup available for this bucket" hint when a code with no deterministic fallback chain is part of a multi-head small bucket. Does not auto-write — surfaces the option in the inline hint, PM clicks through to the Section Rollup card.
+
+---
+
+## Acceptance criteria
+
+1. Pasadena: `1M 0000` (5 heads, 18h) appears as a single Section Rollup card with the dominant head pre-selected. Saving produces 4 reassign records, all heads collapse into the dominant target, line 1593 fall-through is **not** triggered (verifiable via `import.meta.env.DEV` log).
+2. Hypothetical level-split project with `1M 01BA` (4 heads, 22h): same card structure, same save behavior, target ACT = `01BA` (preserved automatically), line 1593 not triggered.
+3. `CodeHealthDashboard` reads `sectionWarningThreshold` from props; no hardcoded `200`.
+4. Both `JobWideConsolidation` and `BudgetAdjustmentsPanel` read thresholds from `useBudgetSettings.consolidation_thresholds`. Changing a threshold in one updates the other.
+5. localStorage `minHoursThreshold` key absent after first load; DB row present.
+6. No `sec|head` appears in both a Section Rollup card and an active Job-Wide merge.
+
+---
+
+## Out of scope (deferred to separate loops)
+
+- **Phase 5** (unify Job-Wide and Section Rollup engines): merge-record schema differences make this a regression risk on already-saved consolidations. Both detectors will read from the unified threshold object so thresholds don't drift, but the detectors remain parallel implementations.
+- **Open Item 7** (silent batchUpdateSilent failures): tracked separately.
