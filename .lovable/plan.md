@@ -1,58 +1,81 @@
 
 
-## Scoped Investigation: Section Mapping vs Building Mapping (Multitrade MP)
+## Read-Only Investigation: ACT Code Format (Building-First vs Level-First)
 
-Read-only diagnostic. No code changes. Returns a five-line paragraph.
+Trace every site where the ACT segment is assembled in multitrade level-split mode, plus check for any persisted data in the old format. **No code changes this loop** — output is a precise patch surface map and a data-migration risk assessment.
 
-### Three verifications
+### What I'll trace
 
-**1. `building_section_mappings` project scoping**
-- File: `src/hooks/useBuildingSectionMappings.ts`
-- Confirm `.eq('project_id', projectId)` on **both** `.select()` and `.insert()` paths
-- Confirm Hamilton MP project ID is distinct from Hamilton PL (`79aeb1d0-5c88-48a6-8485-74bc792abae5`) — visual check via project selector / URL
-- **Failure mode being checked:** stale rows from prior project loaded under wrong project_id, not "global by mistake"
+**Code sites — find every place ACT is assembled with `levelPrefix + bldgSuffix`:**
 
-**2. `floorMap.buildingActivity` padding — paste the exact line**
-- File: `src/hooks/useBuildingSectionMappings.ts` `resolveFloorMappingStatic`
-- Hamilton PL evidence: stored `BA` → returned `00BA`. That proves padding happens in the resolver, but doesn't prove direction without reading.
-- **Specific deliverable:** paste the exact padding line. Must be `padStart(4, '0')`. If `padEnd`, that's a bug masked by alpha inputs (`BA → BA00` would still display 4 chars and slip QA).
-- Per CLAUDE.md: "ACT codes are always 4 characters, padded with leading zeros (padStart, not padEnd)."
+1. `src/pages/Index.tsx` — `memoizedLaborSummary` (~line 728). Confirmed format: `levelPrefix + bldgSuffix` → `01BA`.
+2. `src/pages/Index.tsx` — `generateCostCode` multitrade branch (~lines 1070-1085).
+3. `src/pages/Index.tsx` — `executeApplyDualCodes` activity assembly (~line 1620+).
+4. `src/pages/Index.tsx` — material desc override recalc effect.
+5. `src/pages/Index.tsx` — item name override recalc effect.
+6. `src/hooks/useBuildingSectionMappings.ts` — `resolveFloorMappingStatic` `buildingActivity` return value. Does it return the raw building suffix (e.g., `BA`) or a pre-assembled value?
+7. `src/hooks/useCostHeadActivityOverrides.ts` + `useCategoryItemTypeOverrides.ts` + `useCategoryItemNameOverrides.ts` — any internal ACT assembly?
+8. `grep -rn 'levelPrefix' src/` — catch any utility I haven't named.
+9. `grep -rn 'extractLevelPrefixFromPattern' src/` — confirm consumer count.
+10. `src/utils/budgetExportSystem.ts` — confirm export reads pre-assembled codes from `adjustedLaborSummary` (read-only consumer, should require no change).
 
-**3. Confidence value behavior in `resolveFloorMappingStatic`**
-- Files: `src/utils/datasetProfiler.ts` (already in context — confidence is a number on the profile object) + consumers in `src/pages/Index.tsx` / `useBuildingSectionMappings.ts`
-- Question: when `datasetProfile.confidence = 0.3`, does the resolver:
-  - **(a) Gate** — uses confidence to pick which column to read (drawing vs floor vs zone). Low confidence could route to the wrong field, partially explaining the 13/14 slip-through.
-  - **(b) Display-only** — confidence is shown in the UI but resolution logic always uses `buildingSource` / `floorSource` regardless of value.
-- Search: `grep -rn 'confidence' src/pages/Index.tsx src/hooks/useBuildingSectionMappings.ts src/components/FloorSectionMapping.tsx src/components/BuildingSectionMapping.tsx`
+**Memory + spec cross-check:**
 
-### Plain-language answers (Q1 + Q2) to compose at the end
+11. `mem://features/multitrade-level-indicators` — current documented behavior (says ACT is "composite code assembly e.g., 01BA" — confirms level-first is the documented spec, not just a code accident).
+12. `mem://architecture/multitrade-act-resolution-integrity` — strict resolver-only sourcing rule.
+13. `mem://data/cost-code-formatting-constraints` — the "4-char padStart leading zeros" rule.
+14. `mem://architecture/building-id-normalization` — single-digit normalization rules.
 
-- **Q1 — Why 13/14 missing from Section Mapping:** Section Mapping derives rows from `unique(item.floor)`. If estimator left Floor blank for buildings 13/14 (encoded only in Drawing column), they produce no Floor row → no Section Mapping entry. Building Section Mapping derives from drawing names, so it sees them.
-- **Q2 — Architectural difference:** Section Mapping = per-floor granular (Floor → SEC + ACT). Building Section Mapping = drawing-derived coarse fallback (Building → SEC, feeds ACT building suffix via `buildingActivity`). Complementary, not redundant.
-- **Q3 — Multitrade overwrite risk:** None. Already settled by `Index.tsx` lines ~715-720: `section = tradePrefix || 'PL'` is hardcoded in multitrade mode. Building Mapping `section_code` flows into ACT, never SEC. Hamilton PL `PL 00BA WATR` (not `PL PL BA WATR`) empirically confirms.
+**Data sites — check for persisted old-format ACT values that would break on a runtime flip:**
 
-### Output format (single paragraph, five lines)
+15. `cost_head_activity_overrides` — schema shows `building_identifier`, no ACT column, so likely safe. Confirm no full ACT strings stored.
+16. `floor_section_mappings.activity_code` — defaults to `0000`. Are any rows storing pre-assembled level-split values like `01BA`?
+17. `building_section_mappings.section_code` — should store raw building IDs (`BA`, `B12`). Hamilton PL evidence already confirms raw storage. Re-verify.
+18. `project_small_code_merges` — `merged_act` and `redistribute_adjustments` jsonb. **Critical:** Hamilton PL has saved merges referencing specific ACT codes. If those are stored as `01BA`, flipping runtime to `BA01` orphans every saved merge.
+19. `category_item_name_overrides.labor_code` + `category_item_type_overrides.labor_code` + `category_material_desc_overrides.labor_code` — full code strings. Do any contain level-split ACTs?
 
-```
-Project scoping: ✅/❌ — Hamilton MP project ID: <uuid> (distinct from PL: 79aeb1d0...)
-Padding: <exact line from resolver>, padStart confirmed
-Confidence: <gating | display-only> — code path: <file:line>
-Q1: <plain language>
-Q2: <plain language>
-```
+For items 15-19 I'll run targeted `supabase--read_query` SELECTs scoped to Hamilton PL (`79aeb1d0-5c88-48a6-8485-74bc792abae5`) and Hamilton MP (`7aa11e70-0781-495d-82a6-53d486d747da`) to see actual stored values, not assumed schema.
 
-### Hard out-of-scope (explicit)
+### Deliverable
 
-- ❌ No proposed change to confidence threshold
-- ❌ No proposed change to `datasetProfiler.ts`
-- ❌ No touch on override detection UI
-- ❌ No "fix" to Section Mapping that scans drawings (architecture is correct as-is)
+A single document with three sections:
+
+**A. Patch surface map**
+- Every file:line where ACT is assembled
+- Whether each site uses a shared helper or inlines the concatenation
+- Recommended single-helper location (likely `src/lib/utils.ts` next to `normalizeActivityCode`)
+- List of consumers that would need to switch from inline `levelPrefix + bldgSuffix` to `assembleActivityCode(buildingId, levelPrefix)`
+
+**B. Data migration risk assessment**
+- For each of the 5 DB sites (15-19): exact count of rows containing level-split ACT codes on Hamilton PL and Hamilton MP
+- Whether flipping runtime format orphans any saved merges, overrides, or floor mappings
+- If yes → recommended approach: (a) per-project format flag on `estimate_projects` (legacy stays level-first, new projects go building-first), (b) one-shot data migration, or (c) leave Hamilton PL alone and apply new format to MP only via a code-format-mode variant
+
+**C. Hamilton PL impact statement**
+- Whether PMs have any exported budgets quoting `PL 01BA WATR` that downstream Murray accounting depends on
+- This is a question for **you**, not something I can answer from the code — but I'll flag it explicitly so it's not skipped
+
+**D. Spec/memory updates required**
+- `mem://features/multitrade-level-indicators` says level-first is the format. If we flip, this memory is wrong and must be updated in the same patch.
+- `mem://data/cost-code-formatting-constraints` — the `padStart` rule is correct for the leading-zero case but doesn't address building-first ordering. Needs a clarifying line.
+- CLAUDE.md `data/cost-code-formatting-constraints` reference — same.
+
+### Hard out-of-scope
+
 - ❌ No code edits this loop
-- ❌ No re-derivation of Q3
+- ❌ No DB migrations this loop
+- ❌ No `mem://` writes this loop
+- ❌ No proposed patch — only the patch surface map. Patch design happens after you decide on per-project flag vs global flip vs MP-only.
+- ❌ No re-derivation of Q3 / multitrade SEC overwrite (settled)
+- ❌ No touching `datasetProfiler.ts`
 
-If verification 1, 2, or 3 surfaces something unexpected (stale-rows leak, `padEnd`, gating with wrong-field routing), **stop and report** — do not propose a fix inline.
+### Stop conditions
+
+- If item 18 (`project_small_code_merges` on Hamilton PL) shows level-split ACT values like `01BA` in `merged_act` or `redistribute_adjustments` keys → **stop, report, do not propose flip without your explicit decision on Hamilton PL re-export vs per-project versioning**
+- If any code site assembles ACT in a way that *can't* be expressed by a single `assembleActivityCode(buildingId, levelPrefix)` helper → stop, report the exception, ask whether to special-case or refactor
+- If `mem://features/multitrade-level-indicators` documents specific PM-facing behavior we'd be changing (not just internal format) → stop, report
 
 ### Time
 
-~5 minutes, 3 files + 1 grep + 1 visual check. Approve and I'll return the five-line paragraph.
+~10 minutes: 5 file reads, 2 greps, 5 scoped DB queries, 3 memory file reads. Approve and I'll return the three-section document.
 
