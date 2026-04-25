@@ -43,6 +43,7 @@ import {
 import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
+import { computeAdjustedLaborSummary } from '@/utils/laborSummaryComputation';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
@@ -985,99 +986,27 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   }, [bidRates.shop?.rate, bidLaborRate]);
 
   const calculations = useMemo(() => {
-    const originalTotalHours = Object.values(laborSummary)
-      .reduce((sum, item) => sum + (item.fieldHours || 0), 0);
-
-    const foremanBonusHours = foremanBonusEnabled 
-      ? originalTotalHours * (foremanBonusPercent / 100) 
-      : 0;
-    const foremanBonusDollars = foremanBonusHours * computedBidLaborRate;
-
-    const hoursAfterForemanStrip = originalTotalHours - foremanBonusHours;
-    const foremanStripRatio = originalTotalHours > 0 ? hoursAfterForemanStrip / originalTotalHours : 1;
-
-    const fabricationSummary: BudgetAdjustments['fabricationSummary'] = [];
-    const adjustedLaborSummary: BudgetAdjustments['adjustedLaborSummary'] = {};
-
-    let totalFieldHours = 0;
-    let totalFabHours = 0;
-
-    // Accumulate fab hours by material cost head before assembling codes
-    const fabAccumulator: Record<string, { hours: number }> = {};
-
-    Object.entries(laborSummary).forEach(([code, data]) => {
-      const hoursAfterForeman = (data.fieldHours || 0) * foremanStripRatio;
-      // Look up fab config by cost head (last segment)
-      const parts = code.trim().split(/\s+/);
-      const costHead = parts[parts.length - 1];
-      const fabConfig = fabricationConfigs[costHead];
-      const fabEnabled = fabConfig?.enabled || false;
-      const fabPercent = fabConfig?.percentage || 0;
-
-      if (fabEnabled && fabPercent > 0) {
-        const fabHours = hoursAfterForeman * (fabPercent / 100);
-        const fieldHours = hoursAfterForeman - fabHours;
-
-        adjustedLaborSummary[code] = {
-          code,
-          description: data.description,
-          hours: fieldHours,
-          rate: budgetRate,
-          dollars: fieldHours * budgetRate,
-          type: 'field'
-        };
-
-        // Accumulate into material fab bucket using the routing map.
-        // Only count hours toward totalFabHours if they actually route to a
-        // fab code — unrouted stripped hours would otherwise inflate the
-        // aggregate and make computeGcFabCont underestimate the volume gap.
-        const fabCostHead = fabCodeMap[costHead];
-        if (fabCostHead) {
-          fabAccumulator[fabCostHead] = {
-            hours: (fabAccumulator[fabCostHead]?.hours || 0) + fabHours,
-          };
-          totalFabHours += fabHours;
-        } else {
-          if (import.meta.env.DEV) console.warn(`No fab material mapping defined for cost head: ${costHead}`);
-        }
-
-        fabricationSummary.push({
-          code,
-          description: data.description,
-          fabCode: fabCostHead ? `${FAB_SECTION} ${FAB_ACTIVITY} ${fabCostHead}` : `FP ???? ${costHead}`,
-          strippedHours: fabHours,
-          remainingFieldHours: fieldHours
-        });
-
-        totalFieldHours += fieldHours;
-      } else {
-        adjustedLaborSummary[code] = {
-          code,
-          description: data.description,
-          hours: hoursAfterForeman,
-          rate: budgetRate,
-          dollars: hoursAfterForeman * budgetRate,
-          type: 'field'
-        };
-        totalFieldHours += hoursAfterForeman;
-      }
-    });
-
-    // Insert one properly assembled fab code per material type
-    // e.g. "FP 0000 COPR", "FP 0000 CSTF", "FP 0000 HFBS"
-    const generatedFabCodes: Record<string, number> = {};
-    Object.entries(fabAccumulator).forEach(([fabCostHead, { hours }]) => {
-      const assembledCode = `${FAB_SECTION} ${FAB_ACTIVITY} ${fabCostHead}`;
-      const fabBudgetRate = parseFloat(fabRates[fabCostHead]?.budgetRate) || shopRate;
-      adjustedLaborSummary[assembledCode] = {
-        code: assembledCode,
-        description: FAB_COST_HEAD_DESCRIPTIONS[fabCostHead] || customFabCodes[fabCostHead] || `FABRICATION - ${fabCostHead}`,
-        hours,
-        rate: fabBudgetRate,
-        dollars: hours * fabBudgetRate,
-        type: 'fab',
-      };
-      generatedFabCodes[fabCostHead] = hours;
+    // Commit 1a: labor/fab/foreman/rounding pass extracted to pure helper.
+    // Material tax pass stays panel-local — independent deps, separate concern.
+    const {
+      adjustedLaborSummary,
+      foremanBonusHours,
+      foremanBonusDollars,
+      fabricationSummary,
+      totalFieldHours,
+      totalFabHours,
+      generatedFabCodes,
+    } = computeAdjustedLaborSummary({
+      laborSummary,
+      foremanBonusEnabled,
+      foremanBonusPercent,
+      computedBidLaborRate,
+      fabricationConfigs,
+      fabCodeMap,
+      fabRates,
+      customFabCodes,
+      shopRate,
+      budgetRate,
     });
 
     // Note: FCNT (Foreman Contingency) is now a MATERIAL line item, not labor
@@ -1115,18 +1044,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
 
     const totalMaterialWithTax = totalMaterialPreTax + totalMaterialTax;
-
-    // Round at source using Largest Remainder Method.
-    // Must happen before small code thresholds, merge detection, and export
-    // so every downstream consumer sees only whole numbers.
-    const summaryKeys = Object.keys(adjustedLaborSummary);
-    if (summaryKeys.length > 0) {
-      const rawHours = summaryKeys.map(k => adjustedLaborSummary[k].hours ?? 0);
-      const roundedHours = roundHoursPreservingTotal(rawHours);
-      summaryKeys.forEach((k, i) => {
-        adjustedLaborSummary[k] = { ...adjustedLaborSummary[k], hours: roundedHours[i] };
-      });
-    }
 
     return {
       foremanBonusHours,
