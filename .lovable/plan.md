@@ -1,65 +1,58 @@
 
 
-## Fab & Foreman Audit Export + totalFabHours Bug Fix
+## Scoped Investigation: Section Mapping vs Building Mapping (Multitrade MP)
 
-Bundled patch: one bug fix + one new export. No DB changes, no backend, no new dependencies.
+Read-only diagnostic. No code changes. Returns a five-line paragraph.
 
-### Files touched
+### Three verifications
 
-| # | File | Action |
-|---|---|---|
-| 1 | `src/components/BudgetAdjustmentsPanel.tsx` | 1-line logic fix — move `totalFabHours += fabHours` inside the `if (fabCostHead)` block |
-| 2 | `src/utils/fabAuditExport.ts` | NEW — pure function `exportFabAuditReport(items, projectInfo, ba)` returning a 4-sheet `.xlsx` |
-| 3 | `src/components/ExportDropdown.tsx` | 3 edits — add import, add `handleExportFabAudit`, add menu item below Audit Report |
+**1. `building_section_mappings` project scoping**
+- File: `src/hooks/useBuildingSectionMappings.ts`
+- Confirm `.eq('project_id', projectId)` on **both** `.select()` and `.insert()` paths
+- Confirm Hamilton MP project ID is distinct from Hamilton PL (`79aeb1d0-5c88-48a6-8485-74bc792abae5`) — visual check via project selector / URL
+- **Failure mode being checked:** stale rows from prior project loaded under wrong project_id, not "global by mistake"
 
-### Patch 1 — Bug fix in BudgetAdjustmentsPanel
+**2. `floorMap.buildingActivity` padding — paste the exact line**
+- File: `src/hooks/useBuildingSectionMappings.ts` `resolveFloorMappingStatic`
+- Hamilton PL evidence: stored `BA` → returned `00BA`. That proves padding happens in the resolver, but doesn't prove direction without reading.
+- **Specific deliverable:** paste the exact padding line. Must be `padStart(4, '0')`. If `padEnd`, that's a bug masked by alpha inputs (`BA → BA00` would still display 4 chars and slip QA).
+- Per CLAUDE.md: "ACT codes are always 4 characters, padded with leading zeros (padStart, not padEnd)."
 
-`totalFabHours += fabHours` moves inside the `if (fabCostHead)` block so unrouted stripped hours no longer inflate the aggregate. Today this is gated by the export reconciliation (no broken data ships), but the internal model becomes consistent with what's actually in `adjustedLaborSummary` — which means `computeGcFabCont` sees the real volume gap.
+**3. Confidence value behavior in `resolveFloorMappingStatic`**
+- Files: `src/utils/datasetProfiler.ts` (already in context — confidence is a number on the profile object) + consumers in `src/pages/Index.tsx` / `useBuildingSectionMappings.ts`
+- Question: when `datasetProfile.confidence = 0.3`, does the resolver:
+  - **(a) Gate** — uses confidence to pick which column to read (drawing vs floor vs zone). Low confidence could route to the wrong field, partially explaining the 13/14 slip-through.
+  - **(b) Display-only** — confidence is shown in the UI but resolution logic always uses `buildingSource` / `floorSource` regardless of value.
+- Search: `grep -rn 'confidence' src/pages/Index.tsx src/hooks/useBuildingSectionMappings.ts src/components/FloorSectionMapping.tsx src/components/BuildingSectionMapping.tsx`
 
-### Patch 2 — `src/utils/fabAuditExport.ts`
+### Plain-language answers (Q1 + Q2) to compose at the end
 
-Pure client-side, uses existing `xlsx` library (already a project dep via `budgetExportSystem.ts`). Re-aggregates `items` by cost head internally — no new prop plumbing through `Index.tsx`.
+- **Q1 — Why 13/14 missing from Section Mapping:** Section Mapping derives rows from `unique(item.floor)`. If estimator left Floor blank for buildings 13/14 (encoded only in Drawing column), they produce no Floor row → no Section Mapping entry. Building Section Mapping derives from drawing names, so it sees them.
+- **Q2 — Architectural difference:** Section Mapping = per-floor granular (Floor → SEC + ACT). Building Section Mapping = drawing-derived coarse fallback (Building → SEC, feeds ACT building suffix via `buildingActivity`). Complementary, not redundant.
+- **Q3 — Multitrade overwrite risk:** None. Already settled by `Index.tsx` lines ~715-720: `section = tradePrefix || 'PL'` is hardcoded in multitrade mode. Building Mapping `section_code` flows into ACT, never SEC. Hamilton PL `PL 00BA WATR` (not `PL PL BA WATR`) empirically confirms.
 
-**Sheet 1 — Summary:** top-down hour reconciliation
-- Original → − Foreman → After Foreman → − Fab → Final Field
-- + Fab re-routed + Foreman re-routed (FCNT) = Reconciliation total
-- Pass/fail row (delta < 1.0h = PASS)
+### Output format (single paragraph, five lines)
 
-**Sheet 2 — Strip Trail:** one row per cost head (matches UI table)
-- `Cost Head | Description | Original | Foreman % | Foreman Hrs | After Foreman | Fab % | Fab Hrs | Final Field | Routed To`
-- Sorted by Original Hours desc, totals row at bottom
-- Unrouted fab shows "UNROUTED — hours lost" so the approver sees the gap
+```
+Project scoping: ✅/❌ — Hamilton MP project ID: <uuid> (distinct from PL: 79aeb1d0...)
+Padding: <exact line from resolver>, padStart confirmed
+Confidence: <gating | display-only> — code path: <file:line>
+Q1: <plain language>
+Q2: <plain language>
+```
 
-**Sheet 3 — Fab Routing:** grouped by fab code with source subrows
-- Subrow hours rounded via `roundHoursPreservingTotal` per group so subrows sum exactly to the rolled-up fab code total (avoids drift between fractional `fabricationSummary` and rounded `adjustedLaborSummary`)
-- Grand total at bottom
+### Hard out-of-scope (explicit)
 
-**Sheet 4 — Inputs & Settings:**
-- Foreman: enabled/%/hours/$ at bid rate
-- Rates: budget, shop, computed bid blended
-- Per-cost-head fab config (only enabled rows): % + routes-to
-- Project metadata + export timestamp
+- ❌ No proposed change to confidence threshold
+- ❌ No proposed change to `datasetProfiler.ts`
+- ❌ No touch on override detection UI
+- ❌ No "fix" to Section Mapping that scans drawings (architecture is correct as-is)
+- ❌ No code edits this loop
+- ❌ No re-derivation of Q3
 
-### Patch 3 — ExportDropdown wiring
+If verification 1, 2, or 3 surfaces something unexpected (stale-rows leak, `padEnd`, gating with wrong-field routing), **stop and report** — do not propose a fix inline.
 
-- Import `exportFabAuditReport`
-- Add `handleExportFabAudit` — toasts pass/fail with reconciliation delta, distinct destructive variant on FAIL with 12s duration so the user reads it before sharing
-- Add third menu item below the existing Audit Report (matches existing styling, amber/orange icon to differentiate from green Budget Packet and blue Audit Report)
-- No reconciliation gate on this export — the audit IS the reconciliation; blocking it would defeat the purpose (PM needs to see what's broken)
+### Time
 
-### Technical notes
-
-- `roundHoursPreservingTotal` is exported from `budgetExportSystem.ts` (Largest Remainder Method, already used by main export)
-- Cost-head re-aggregation uses the same priority chain as the rest of the app: `item.laborCostHead || item.costCode || item.suggestedCode?.costHead || 'UNCD'`
-- Fab route lookup matches by stripping the cost code's last segment against `fabricationSummary[].code` — same pattern the panel uses
-- File written via `XLSX.writeFile` (browser download); filename `Fab_Foreman_Audit_{jobNumber}_{YYYY-MM-DD}.xlsx`
-
-### Verification after ship
-
-1. Hamilton project → Export → "Fab & Foreman Audit"
-2. Sheet 1 reconciliation delta ≤ 1 hr (PASS)
-3. Sheet 2 TOTALS row matches Sheet 1 numbers
-4. Sheet 3 per-fab-code subrows sum exactly to group total
-5. Sheet 4 reflects the inputs configured in Budget Adjustments panel
-6. GC 0FAB CONT on Bid Reconciliation unchanged on Hamilton (all fab strips routed) — the bug fix only affects projects with unrouted strips
+~5 minutes, 3 files + 1 grep + 1 visual check. Approve and I'll return the five-line paragraph.
 
