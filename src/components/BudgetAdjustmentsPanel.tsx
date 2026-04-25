@@ -4753,8 +4753,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                                 onChange={(e) => {
                                   const val = parseInt(e.target.value) || 8;
                                   const clamped = Math.max(1, Math.min(40, val));
-                                  setMinHoursThreshold(clamped);
-                                  localStorage.setItem('smallCodeMinHours', String(clamped));
+                                  // Route through prop callback — Index.tsx is the
+                                  // single owner of consolidationThresholds. The
+                                  // legacy `smallCodeMinHours` localStorage write
+                                  // is intentionally gone; the seed migration in
+                                  // Index.tsx already drained it on first load.
+                                  onConsolidationThresholdsChange({
+                                    ...consolidationThresholds,
+                                    smallLine: clamped,
+                                  });
                                 }}
                                 className="h-7 w-14 text-xs font-mono"
                               />
