@@ -55,6 +55,17 @@ export const CodeCleanupTab: React.FC = () => {
     [finalLaborSummary, livePreview, thresholds]
   );
 
+  // Project-wide list of cost heads — used by Step 1 Reroute dropdown so the PM
+  // picks from real heads in the project instead of typing free-form.
+  const projectHeads = useMemo(() => {
+    const set = new Set<string>();
+    for (const k of Object.keys(finalLaborSummary || {})) {
+      const parts = k.trim().split(/\s+/);
+      if (parts.length >= 3) set.add(parts.slice(2).join(' '));
+    }
+    return Array.from(set).sort();
+  }, [finalLaborSummary]);
+
   if (!projectId || projectId === 'default') {
     return (
       <div className="p-12 text-center text-muted-foreground">
@@ -101,6 +112,7 @@ export const CodeCleanupTab: React.FC = () => {
           detection={detection}
           decisions={pending.decisions}
           onChange={pending.setStep1}
+          projectHeads={projectHeads}
         />
       </section>
 
