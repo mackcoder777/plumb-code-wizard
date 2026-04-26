@@ -57,6 +57,9 @@ import { JobWideConsolidation } from '@/components/JobWideConsolidation';
 import { DuplicateScopeDetection } from '@/components/DuplicateScopeDetection';
 import { CorruptCodeBanner } from '@/components/CorruptCodeBanner';
 import { HourReconciliationBar } from '@/components/HourReconciliationBar';
+import { CodeCleanupProvider } from '@/contexts/CodeCleanupContext';
+import { CodeCleanupTab } from '@/components/tabs/CodeCleanupTab';
+import type { CleanupThresholds } from '@/utils/codeCleanupDetector';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
 const STANDARD_COST_CODES = {
@@ -2873,7 +2876,7 @@ const EnhancedCostCodeManager = () => {
         )}
         {/* Tabs */}
         <div className="flex border-b bg-gray-50 items-center">
-          {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'buyout', 'rules'].map((tab) => (
+          {['upload', 'estimates', 'mapping', 'material-mapping', 'budget', 'code-cleanup', 'buyout', 'rules'].map((tab) => (
             <button
               key={tab}
               onClick={() => handleTabChange(tab)}
@@ -2888,6 +2891,7 @@ const EnhancedCostCodeManager = () => {
               {tab === 'mapping' && '🔗 Labor Mapping'}
               {tab === 'material-mapping' && '📦 Material Mapping'}
               {tab === 'budget' && '💰 Budget Builder'}
+              {tab === 'code-cleanup' && '🧹 Code Cleanup'}
               {tab === 'buyout' && '🛒 Bulk Buyout'}
               {tab === 'rules' && '🤖 Rules'}
             </button>
