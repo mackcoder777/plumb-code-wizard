@@ -34,6 +34,13 @@ export const Step2SectionCards: React.FC<Props> = ({
   const liveBySec = new Map<string, Step2Candidate>(
     liveDetection.step2Candidates.map(c => [c.sec, c])
   );
+  // Partner dropdown source: prefer live numbers for every pinned candidate so
+  // the "(Nh)" hours next to each option reflect post-Step-1 reality. Falls
+  // back to the pinned candidate if a section dropped below threshold in the
+  // live recompute (still a valid partner — PM may want to combine into it).
+  const partnerPool: Step2Candidate[] = detection.step2Candidates.map(
+    c => liveBySec.get(c.sec) ?? c
+  );
   // A combine decision on owner sec X claims partner sec Y. The partner card
   // must disappear from the list while the combine is active so the PM can't
   // commit a contradictory independent decision on it.
@@ -48,16 +55,26 @@ export const Step2SectionCards: React.FC<Props> = ({
   );
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {visibleCandidates.map(c => (
-        <Step2SectionCard
-          key={c.sec}
-          candidate={c}
-          liveCandidate={liveBySec.get(c.sec)}
-          partnerOptions={detection.step2Candidates}
-          decision={decisions.step2[c.sec]}
-          onChange={d => onChange(c.sec, d)}
-        />
-      ))}
+      {visibleCandidates.map(c => {
+        // Reuse the same claimedBy map: hide partners already claimed by
+        // another owner, but always allow the current card's own claimed
+        // partner to remain selectable in its own dropdown.
+        const partnerOptionsForCard = partnerPool.filter(p => {
+          if (p.sec === c.sec) return false;
+          const claimer = claimedBy.get(p.sec);
+          return !claimer || claimer === c.sec;
+        });
+        return (
+          <Step2SectionCard
+            key={c.sec}
+            candidate={c}
+            liveCandidate={liveBySec.get(c.sec)}
+            partnerOptions={partnerOptionsForCard}
+            decision={decisions.step2[c.sec]}
+            onChange={d => onChange(c.sec, d)}
+          />
+        );
+      })}
     </div>
   );
 };
