@@ -326,7 +326,7 @@ This is a substantially larger lift than the original Section Rollup task. Ship 
 
 | Phase | Deliverable | Risk gate |
 |---|---|---|
-| 1 | Detection layer — pure function returning `{ step1Candidates, step2Candidates, step3Candidates }` from `finalLaborSummary` and threshold object. No UI. Unit tests cover Pasadena fixtures. | Lovable cites Pasadena test cases verified against expected output |
+| 1 | Detection layer — pure function returning `{ step1Candidates, step2Candidates, step3Candidates }` from `finalLaborSummary` and threshold object. DEV-only `/debug/code-cleanup` route renders the three arrays as JSON for PM verification (single source of truth — reads `finalLaborSummary` published by `BudgetAdjustmentsPanel`'s DEV-only effect, not a re-implementation). | PM opens `/debug/code-cleanup` against Pasadena and confirms the four bullets from the verification gate (DRNS×5 + COND×1 in step1; 1M, 2M, L2 in step2; SR borderline heads in step3; ST never appears) |
 | 2 | New top-level Code Cleanup tab with empty page shell. Tab badge wired. Code Health stripped of action buttons (read-only mode). | Tab renders, navigation works, Code Health metrics still display |
 | 3 | Step 1 (global head decisions) cards rendered from detection layer. Apply writes merge records via existing pipeline + the new line 1593 path. | Pasadena: DRNS Pool to 40 produces correct merge records, applies cleanly, audit captures provenance |
 | 4 | Step 2 (section folds) cards with combine action. Live recomputation from Step 1 selections. | Pasadena: 1M + 2M combine to MZ 0000 PLMB with correct field note, audit shows 10 source codes folded |
