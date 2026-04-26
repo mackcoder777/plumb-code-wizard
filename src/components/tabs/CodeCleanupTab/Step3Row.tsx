@@ -66,12 +66,30 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
     [livePreview, candidate.sec, candidate.head]
   );
 
+  // Local "view mode" — controls which sub-block is expanded. Independent of the
+  // committed decision so the row never collapses out of the list while the PM
+  // is filling in a target. A decision is only committed when the form has
+  // enough data to be meaningful.
+  const [viewMode, setViewMode] = useState<Mode>(mode);
+
+  // Sync viewMode with external decision when one is committed. We do NOT
+  // collapse back to '' when the decision is cleared (e.g., because the form
+  // isn't valid yet) — that would close the sub-control the PM just opened to
+  // type the target into.
+  React.useEffect(() => {
+    if (mode) setViewMode(mode);
+  }, [mode]);
+
   const setMode = (next: Mode) => {
-    if (next === '' || next === mode) return;
+    if (next === '' || next === viewMode) return;
+    setViewMode(next);
+    // Only Accept commits immediately. Redistribute / Reroute / Custom wait for
+    // valid form input before writing a decision (writing too early moves the
+    // row's hours into a malformed key and corrupts livePreview).
     if (next === 'accept') onChange({ kind: 'accept' });
-    else if (next === 'redistribute')
+    else if (next === 'redistribute' && redistSrc && redistHrs > 0) {
       onChange({ kind: 'redistribute', sourceHead: redistSrc, hours: redistHrs });
-    else if (next === 'reroute') {
+    } else if (next === 'reroute' && rerouteTargetKey) {
       const parts = rerouteTargetKey.trim().split(/\s+/);
       onChange({
         kind: 'reroute',
@@ -79,8 +97,17 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
         targetAct: parts[1] ?? '0000',
         targetHead: parts.slice(2).join(' ') || candidate.head,
       });
-    } else if (next === 'custom') {
-      onChange({ kind: 'custom', targetSec: customSec, targetAct: customAct, targetHead: customHead });
+    } else if (next === 'custom' && customSec && customHead) {
+      onChange({
+        kind: 'custom',
+        targetSec: customSec,
+        targetAct: customAct || '0000',
+        targetHead: customHead,
+      });
+    } else {
+      // Switched into a sub-mode but not enough data yet — clear any prior
+      // decision so the row's hours stay put until the PM fills the target.
+      onChange(null);
     }
   };
 
@@ -100,22 +127,22 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
           </p>
         </div>
         <div className="flex flex-wrap gap-1">
-          <ModeButton active={mode === 'accept'} onClick={() => setMode('accept')}>
+          <ModeButton active={viewMode === 'accept'} onClick={() => setMode('accept')}>
             Accept
           </ModeButton>
-          <ModeButton active={mode === 'redistribute'} onClick={() => setMode('redistribute')}>
+          <ModeButton active={viewMode === 'redistribute'} onClick={() => setMode('redistribute')}>
             Redistribute
           </ModeButton>
-          <ModeButton active={mode === 'reroute'} onClick={() => setMode('reroute')}>
+          <ModeButton active={viewMode === 'reroute'} onClick={() => setMode('reroute')}>
             Reroute
           </ModeButton>
-          <ModeButton active={mode === 'custom'} onClick={() => setMode('custom')}>
+          <ModeButton active={viewMode === 'custom'} onClick={() => setMode('custom')}>
             Custom
           </ModeButton>
         </div>
       </div>
 
-      {mode === 'redistribute' && (
+      {viewMode === 'redistribute' && (
         <div className="rounded-md bg-muted/30 p-3 space-y-2">
           <div className="flex flex-wrap items-end gap-2">
             <div>
@@ -165,7 +192,7 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
         </div>
       )}
 
-      {mode === 'reroute' && (
+      {viewMode === 'reroute' && (
         <div className="rounded-md bg-muted/30 p-3 space-y-2">
           <Label className="text-xs">Target (same section, healthy peer)</Label>
           <Select
@@ -195,7 +222,7 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
         </div>
       )}
 
-      {mode === 'custom' && (
+      {viewMode === 'custom' && (
         <div className="rounded-md bg-muted/30 p-3 flex flex-wrap items-end gap-2">
           <div>
             <Label className="text-xs">SEC</Label>

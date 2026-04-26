@@ -104,6 +104,16 @@ export interface Step2Decision {
   combinedSec?: string;
   /** Combine only — PM scope note for the field. */
   fieldScopeNote?: string;
+  /**
+   * Optional ACT override for the fold target. Defaults to "0000".
+   * PM may type "BLDG" or any other 4-char ACT.
+   */
+  targetAct?: string;
+  /**
+   * Optional HEAD override for the fold target. Defaults to "PLMB".
+   * PM may route the section's residual to a peer head instead.
+   */
+  targetHead?: string;
 }
 
 export type Step3Decision =
@@ -189,12 +199,15 @@ export function applyPendingDecisions(
         ? [sec, decision.combineWithSec]
         : [sec];
 
+    const targetAct = (decision.targetAct && decision.targetAct.trim()) || '0000';
+    const targetHead = (decision.targetHead && decision.targetHead.trim()) || 'PLMB';
+
     for (const srcSec of sourceSecs) {
       const matches = Object.keys(result).filter(k => {
         const p = parseKey(k);
         return p && p.sec === srcSec && !isStExempt(p.sec, p.act);
       });
-      for (const k of matches) move(k, targetSec, '0000', 'PLMB');
+      for (const k of matches) move(k, targetSec, targetAct, targetHead);
     }
   }
 

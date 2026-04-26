@@ -55,6 +55,17 @@ export const CodeCleanupTab: React.FC = () => {
     [finalLaborSummary, livePreview, thresholds]
   );
 
+  // Project-wide list of cost heads — used by Step 1 Reroute dropdown so the PM
+  // picks from real heads in the project instead of typing free-form.
+  const projectHeads = useMemo(() => {
+    const set = new Set<string>();
+    for (const k of Object.keys(finalLaborSummary || {})) {
+      const parts = k.trim().split(/\s+/);
+      if (parts.length >= 3) set.add(parts.slice(2).join(' '));
+    }
+    return Array.from(set).sort();
+  }, [finalLaborSummary]);
+
   if (!projectId || projectId === 'default') {
     return (
       <div className="p-12 text-center text-muted-foreground">
@@ -101,13 +112,19 @@ export const CodeCleanupTab: React.FC = () => {
           detection={detection}
           decisions={pending.decisions}
           onChange={pending.setStep1}
+          projectHeads={projectHeads}
         />
       </section>
 
       <section className="space-y-3">
-        <SectionTitle index={2} title="Section folds" subtitle="Each card recomputes live as Step 1 selections come in." />
+        <SectionTitle
+          index={2}
+          title="Section folds"
+          subtitle="List is pinned from initial detection; per-card hour previews update as Step 1 selections come in."
+        />
         <Step2SectionCards
-          detection={liveDetection}
+          detection={detection}
+          liveDetection={liveDetection}
           decisions={pending.decisions}
           onChange={pending.setStep2}
         />
@@ -116,7 +133,7 @@ export const CodeCleanupTab: React.FC = () => {
       <section className="space-y-3">
         <SectionTitle index={3} title="What's left" subtitle="Lines still under floor after Steps 1 + 2." />
         <Step3RowList
-          detection={liveDetection}
+          detection={detection}
           decisions={pending.decisions}
           livePreview={livePreview}
           onChange={pending.setStep3}
