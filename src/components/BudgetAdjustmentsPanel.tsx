@@ -1059,7 +1059,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate, customFabCodes]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
@@ -1126,7 +1126,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       savedMergesData: savedMergesData as any,
       staleMergeUpdates,
     });
-  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, minHoursThreshold]);
+  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
 
   // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
   const cleanupRanRef = useRef(false);
