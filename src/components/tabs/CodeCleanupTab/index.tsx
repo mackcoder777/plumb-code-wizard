@@ -164,7 +164,11 @@ export const CodeCleanupTab: React.FC = () => {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle index={3} title="What's left" subtitle="Lines still under floor after Steps 1 + 2." />
+        <SectionTitle
+          index={3}
+          title="What's left"
+          subtitle="Lines still under floor after Steps 1 + 2. List re-evaluates after each Apply — expect new rows to surface as upstream sections are cleaned up."
+        />
         <Step3RowList
           detection={detection}
           liveDetection={liveDetection}
