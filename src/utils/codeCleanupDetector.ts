@@ -199,12 +199,15 @@ export function applyPendingDecisions(
         ? [sec, decision.combineWithSec]
         : [sec];
 
+    const targetAct = (decision.targetAct && decision.targetAct.trim()) || '0000';
+    const targetHead = (decision.targetHead && decision.targetHead.trim()) || 'PLMB';
+
     for (const srcSec of sourceSecs) {
       const matches = Object.keys(result).filter(k => {
         const p = parseKey(k);
         return p && p.sec === srcSec && !isStExempt(p.sec, p.act);
       });
-      for (const k of matches) move(k, targetSec, '0000', 'PLMB');
+      for (const k of matches) move(k, targetSec, targetAct, targetHead);
     }
   }
 
