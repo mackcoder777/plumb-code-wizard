@@ -1,71 +1,124 @@
-# Fix: Step 3 missing rows for "Keep distributed" heads
+## Diagnosis confirmed
 
-## Root cause (verified in source)
+Your read is exactly right. I traced both suspect paths against `HourReconciliationBar.tsx:30` (the `entry.type === 'field'` filter) and `laborSummaryComputation.ts:58` (the `SummaryEntry.type` field declaration), and there are exactly two places where new entries get inserted into `result` via a bare object literal — both omit `type`. Every other `result[k] = { ... }` site either spreads an existing entry (which carries `type` forward) or just updates an existing entry's hours/dollars.
 
-`src/components/tabs/CodeCleanupTab/Step3RowList.tsx` line 40 iterates `detection.step3Candidates` — the **initial pessimistic** detection where every Step 1 candidate head is excluded. As a result, when SNWV / PIDV / SLVS are set to `keep_distributed`, their small instances (e.g., SR 0000 SNWV 10h, 1M 0000 SNWV 3h, 2M 0000 SNWV 3h) never appear in Step 3 — even though the spec promises exactly that.
+**The 35.4h gap is structural and surgical: untyped entries silently drop out of `exportFieldHours`.**
 
-The detector itself is already correct: lines 487–488 of `codeCleanupDetector.ts` honor `step1ExclusionSet` and `step2ExclusionSet`, so `liveDetection.step3Candidates` is the authoritative live list. The parent (`CodeCleanupTab/index.tsx` lines 78, 170) already passes `liveDetection` into `Step3RowList`. The leak is purely the wrong source pick inside the row list.
+### Site 1 — Cross-section reassign create-new-key (`src/utils/laborSummaryComputation.ts:759-767`)
 
-A previous patch (the comment at lines 34–39) deliberately pinned to `detection` to prevent rows from vanishing mid-edit when the PM commits a Step 3 reroute / custom / redistribute (those decisions move hours out of `livePreview`, dropping the candidate from `liveDetection`). That guard was real, just over-applied — it also blocked legitimate Step 1 `keep_distributed` recovery.
-
-## Fix — single file, ~10 lines
-
-Edit `src/components/tabs/CodeCleanupTab/Step3RowList.tsx`:
-
-1. **Primary source becomes `liveDetection.step3Candidates`** — honors `committedStep1Heads` / `committedStep2Sections` exactly the way the detector already computes them.
-2. **Union-merge with pending Step 3 decisions** — if the PM has an active `decisions.step3[key]` and the candidate is no longer in `liveDetection` (because their reroute already moved the hours), pull the original candidate from `detection.step3Candidates` so the row stays visible mid-edit.
-3. **Re-apply the upstream filters** to the union (defensive — `liveDetection` already filters, but a re-added pinned row needs the same gate).
-4. **Deterministic sort by `hours` ascending** to match the detector's existing `step3Candidates.sort((a, b) => a.hours - b.hours)` at line 512. Map insertion order is fine functionally, but a stable sort prevents any visual jitter on re-renders.
-
-### Sketch
+This is the MZ path. Fires when `reassign_to_sec` is set and no existing target key matches:
 
 ```ts
-// Primary source: liveDetection (correctly excludes only COMMITTED Step 1/2)
-const byKey = new Map(liveDetection.step3Candidates.map(c => [c.key, c]));
-
-// Union with pending Step 3 decisions to prevent mid-edit vanishing
-// (a committed reroute/custom/redistribute moves hours out of livePreview,
-// which would otherwise drop the row from liveDetection.step3Candidates).
-for (const key of Object.keys(decisions.step3)) {
-  if (decisions.step3[key] && !byKey.has(key)) {
-    const original = detection.step3Candidates.find(c => c.key === key);
-    if (original) byKey.set(key, original);
-  }
-}
-
-const visible = Array.from(byKey.values())
-  .filter(c => !committedStep1Heads.has(c.head) && !committedStep2Sections.has(c.sec))
-  .sort((a, b) => a.hours - b.hours); // match detector's ordering
+result[newTargetKey] = {
+  code: newTargetKey,
+  sec: targetSec,
+  activityCode: targetAct,
+  head: effectiveTargetHead,
+  hours: sourceHours,
+  dollars: sourceDollars,
+  description: `Reassigned from ${head}`,
+  // ❌ no `type` field
+};
 ```
 
-Update the inline comments to reflect the new pattern (drop the "pinned against detection" wording; document that `liveDetection` is the source of truth and `detection` is consulted only as a mid-edit fallback).
+When 1M + 2M combined to MZ on Pasadena, this path created `MZ 0000 SNWV`, `MZ 0000 PIDV`, etc. — all without `type`. They live in `finalLaborSummary` with the right hours, but the reconciliation strip can't see them. That's the 35.4h.
 
-## Files touched
+### Site 2 — Stage 3.5 redistribute create-target-key (`src/utils/laborSummaryComputation.ts:856-864`)
 
-- `src/components/tabs/CodeCleanupTab/Step3RowList.tsx` — replace the `visible` computation and refresh comments. No prop changes.
+Same class of bug, inert today because Pasadena has 0 redistributions, but it'll bite the moment a PM uses Step 3 Redistribute:
 
-## Not touched (verified safe to leave alone)
+```ts
+result[targetKey] = {
+  code: targetKey,
+  sec: red.sec,
+  activityCode: red.act,
+  head: red.targetHead,
+  hours: actualMoved,
+  dollars: actualDollars,
+  description: `Redistributed from ${red.sourceHead}`,
+  // ❌ no `type` field
+};
+```
 
-- `src/utils/codeCleanupDetector.ts` — already correct (uses `step1ExclusionSet` / `step2ExclusionSet` at lines 487–488, sorts at line 512).
-- `src/components/tabs/CodeCleanupTab/index.tsx` — `liveDetection` memo and prop wiring already correct (lines 78, 170).
-- `applyPendingDecisions` and the Apply All writer — out of scope.
+The comment on line 854 even says "same description style as the cross-section reassign create-new path" — confirms these two sites were authored as a pair and drift together.
 
-## Verification on Pasadena
+### Why other paths are safe
 
-**Set A — keep_distributed recovery (the bug we're fixing):**
-1. Reset all decisions, then set SNWV = Keep distributed → SR/1M/2M 0000 SNWV instances appear in Step 3.
-2. Set PIDV = Keep distributed → small PIDV instances appear in Step 3.
-3. Flip SNWV back to Pool → SNWV rows disappear from Step 3.
-4. Pick Reroute on a Step 3 row, choose a target → row stays visible (mid-edit guard via union).
-5. Set 1M = fold (Step 2) → 1M small lines disappear from Step 3.
-6. Combine 1M + 2M → both sections' small lines disappear.
+I audited all 21 `result[...] = {` sites:
 
-**Set B — Phase 2 end-to-end (after Set A passes):**
-1. Reset → click Reroute on SR 0000 COND → dropdown expands inline, row stays visible.
-2. Pick a target → decision persists, row stays visible.
-3. Open Step 2 1M card → click Accept fold → fields populate (1M / 0000 / PLMB).
-4. Edit ACT from `0000` to `BLDG` → live target shows `1M BLDG PLMB`.
-5. Combine 1M + 2M with name `MZ`, scope `Mezzanine plumbing` → both cards remain until Apply All.
-6. Click Apply All → footer BUDGET LINES drops, Hour Reconciliation strip approaches ~0h missing, decisions persist after page reload.
+- **Spreads from existing entries** (`...item`, `...result[k]`, `...fbEntry`, `...group[0]`, `...source`) — carry `type` forward. Safe.
+- **Hours/dollars updates on existing keys** — `type` already set. Safe.
+- **Only the two flagged sites** build a new entry from scratch with field-by-field assignment. Both miss `type`.
 
-If both sets pass, Phase 2's core flow is shipped end-to-end.
+## The fix
+
+### File 1: `src/utils/laborSummaryComputation.ts`
+
+Add `type: 'field' as const,` (or just `type: 'field',` since the surrounding object satisfies the discriminated union) to both new-entry literals:
+
+**Line 759-767** — cross-section reassign create-new-key:
+```ts
+result[newTargetKey] = {
+  code: newTargetKey,
+  sec: targetSec,
+  activityCode: targetAct,
+  head: effectiveTargetHead,
+  hours: sourceHours,
+  dollars: sourceDollars,
+  type: 'field',                          // ← add
+  description: `Reassigned from ${head}`,
+};
+```
+
+**Line 856-864** — Stage 3.5 redistribute create-target-key:
+```ts
+result[targetKey] = {
+  code: targetKey,
+  sec: red.sec,
+  activityCode: red.act,
+  head: red.targetHead,
+  hours: actualMoved,
+  dollars: actualDollars,
+  type: 'field',                          // ← add
+  description: `Redistributed from ${red.sourceHead}`,
+};
+```
+
+That's the entire reconciliation fix. Two added lines.
+
+### File 2: `src/components/tabs/CodeCleanupTab/index.tsx`
+
+Subtitle copy fix at line 156. Current text says the Step 2 list is "pinned from initial detection," but after the recent Step 2 leak fix it actually iterates `liveDetection`. Realign copy to truth:
+
+```tsx
+// before
+subtitle="List is pinned from initial detection; per-card hour previews update as Step 1 selections come in."
+// after
+subtitle="Per-card hour previews and remaining heads update as Step 1 selections come in."
+```
+
+No behavior change; just stops misleading the reader of the source.
+
+## Verification
+
+User runs the lightweight check on Pasadena — no full re-run of the six scenarios needed:
+
+1. Reload the page (clears any cached state).
+2. Re-apply the same scenario that produced 35.4h missing (combine 1M + 2M into MZ, custom on PIDV, keep distributed on SNWV/SLVS, Apply All).
+3. Watch the **Hour Reconciliation strip** at the top of Pasadena.
+
+**Expected result:** strip drops to **0h missing** (or under 1h of rounding noise).
+
+If the strip still shows 35.4h, the type fix didn't reach the path that produced those hours — paste back the breakdown and we triage. If it shows ~0h, **Phase 2's core flow is shipped end-to-end** and the remaining items (Step 2/3 inline UI polish, audit drawer, old-surface deletion) are punch-list, not blockers.
+
+## Scope discipline
+
+Only these two files change. Specifically NOT touching:
+
+- `applyPendingDecisions` — no behavior change needed.
+- Initial pessimistic detection — stays pessimistic by design.
+- Step 3 row union logic — already shipped and verified.
+- The reconciliation bar filter itself — `entry.type === 'field'` is correct; the bug is upstream entries not declaring their type.
+- Any merge/reassign control flow — the fix is one extra field in two object literals.
+
+Approve and I'll switch to default mode and ship the two-file patch.

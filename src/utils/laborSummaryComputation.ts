@@ -763,6 +763,7 @@ export function computeFinalLaborSummary(
           head: effectiveTargetHead,
           hours: sourceHours,
           dollars: sourceDollars,
+          type: 'field',
           description: `Reassigned from ${head}`,
         };
         matchingKeys.forEach(k => delete result[k]);
@@ -860,6 +861,7 @@ export function computeFinalLaborSummary(
           head: red.targetHead,
           hours: actualMoved,
           dollars: actualDollars,
+          type: 'field',
           description: `Redistributed from ${red.sourceHead}`,
         };
       }
