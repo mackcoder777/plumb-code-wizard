@@ -1128,6 +1128,20 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     });
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
 
+  // DEV-only: expose finalLaborSummary to /debug/code-cleanup.
+  // Single source of truth — the debug route reads exactly what the export reads.
+  // The DEV gate is inside the effect body so the hook count stays stable;
+  // production builds short-circuit on the constant-folded condition.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as any).__codeCleanupDebug = {
+      projectId,
+      finalLaborSummary,
+      adjustedLaborSummary: calculations.adjustedLaborSummary,
+      timestamp: Date.now(),
+    };
+  }, [projectId, finalLaborSummary, calculations.adjustedLaborSummary]);
+
   // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
   const cleanupRanRef = useRef(false);
 
