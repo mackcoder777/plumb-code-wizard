@@ -811,6 +811,67 @@ export function computeFinalLaborSummary(
 
   });
 
+  // ---- Stage 3.5 — hour redistributions (spec §4.1, §10.3) ----
+  // Applied AFTER merges but BEFORE zero-hour cleanup so a redistribution
+  // can rescue a small line that would otherwise round to <0.05h.
+  // Section total is preserved by design: every hour added to target is
+  // subtracted from source.
+  if (hourRedistributions?.length) {
+    hourRedistributions.forEach(red => {
+      if (!red || !red.hoursMoved || red.hoursMoved <= 0) return;
+      const sourceKey = `${red.sec} ${red.act} ${red.sourceHead}`;
+      const targetKey = `${red.sec} ${red.act} ${red.targetHead}`;
+      const source = result[sourceKey];
+      if (!source) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[finalLaborSummary] redistribute skipping — source ${sourceKey} not found in result`
+          );
+        }
+        return;
+      }
+      const sourceRate = source.hours > 0 ? (source.dollars ?? 0) / source.hours : 0;
+      const movedDollars = red.hoursMoved * sourceRate;
+
+      // Cap the move at the source's available hours. Never produce negative.
+      const actualMoved = Math.min(red.hoursMoved, source.hours ?? 0);
+      if (actualMoved <= 0) return;
+      const actualDollars = actualMoved * sourceRate;
+
+      result[sourceKey] = {
+        ...source,
+        hours: (source.hours ?? 0) - actualMoved,
+        dollars: (source.dollars ?? 0) - actualDollars,
+      };
+
+      if (result[targetKey]) {
+        result[targetKey] = {
+          ...result[targetKey],
+          hours: (result[targetKey].hours ?? 0) + actualMoved,
+          dollars: (result[targetKey].dollars ?? 0) + actualDollars,
+        };
+      } else {
+        // Target line didn't exist yet — create it. Same description style
+        // as the cross-section reassign create-new path.
+        result[targetKey] = {
+          code: targetKey,
+          sec: red.sec,
+          activityCode: red.act,
+          head: red.targetHead,
+          hours: actualMoved,
+          dollars: actualDollars,
+          description: `Redistributed from ${red.sourceHead}`,
+        };
+      }
+
+      if (import.meta.env.DEV) {
+        console.log(
+          `[finalLaborSummary] redistribute ${actualMoved.toFixed(2)}h: ${sourceKey} → ${targetKey} (movedDollars=${movedDollars.toFixed(2)})`
+        );
+      }
+    });
+  }
+
   // Clean up entries with effectively zero hours after merges
   Object.keys(result).forEach(k => {
     if (Math.abs(result[k]?.hours ?? 0) < 0.05) delete result[k];
