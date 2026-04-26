@@ -2910,6 +2910,22 @@ const EnhancedCostCodeManager = () => {
         </div>
 
         {/* Tab Content */}
+        <CodeCleanupProvider
+          projectId={currentProject?.id || null}
+          pmEmail={user?.email || null}
+          finalLaborSummary={(budgetAdjustments?.adjustedLaborSummary ?? {}) as Record<string, { hours: number; dollars?: number; [k: string]: any }>}
+          thresholds={{
+            lineFloor: consolidationThresholds.smallLine,
+            sectionThreshold: consolidationThresholds.sectionRollup,
+          }}
+          setThresholds={(next: CleanupThresholds) => {
+            updateConsolidationThresholds({
+              ...consolidationThresholds,
+              smallLine: next.lineFloor,
+              sectionRollup: next.sectionThreshold,
+            });
+          }}
+        >
         <div className="p-6">
           {/* Upload Tab */}
           {activeTab === 'upload' && (
