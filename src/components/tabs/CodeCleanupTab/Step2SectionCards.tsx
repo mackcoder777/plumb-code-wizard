@@ -34,9 +34,21 @@ export const Step2SectionCards: React.FC<Props> = ({
   const liveBySec = new Map<string, Step2Candidate>(
     liveDetection.step2Candidates.map(c => [c.sec, c])
   );
+  // A combine decision on owner sec X claims partner sec Y. The partner card
+  // must disappear from the list while the combine is active so the PM can't
+  // commit a contradictory independent decision on it.
+  const claimedBy = new Map<string, string>();
+  for (const [ownerSec, decision] of Object.entries(decisions.step2)) {
+    if (decision?.kind === 'combine' && decision.combineWithSec) {
+      claimedBy.set(decision.combineWithSec, ownerSec);
+    }
+  }
+  const visibleCandidates = detection.step2Candidates.filter(
+    c => !claimedBy.has(c.sec)
+  );
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {detection.step2Candidates.map(c => (
+      {visibleCandidates.map(c => (
         <Step2SectionCard
           key={c.sec}
           candidate={c}
