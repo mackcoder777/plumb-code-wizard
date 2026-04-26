@@ -5,12 +5,11 @@ import type { DetectionResult, FinalLaborSummary, PendingDecisions, Step3Decisio
 interface Props {
   detection: DetectionResult;
   /**
-   * Live detection — used for the per-row inline numbers (e.g., section
-   * totals, peer hours after Step 1/2). The rendered LIST itself is pinned
-   * against `detection` so a row never vanishes mid-edit when the PM commits
-   * a Step 3 reroute/custom/redistribute on it (those decisions move hours
-   * out of livePreview, which would otherwise drop the row from
-   * `liveDetection.step3Candidates` while the PM is still working).
+   * Live detection — primary source of truth for the visible Step 3 list.
+   * The detector already excludes only COMMITTED Step 1 heads / Step 2
+   * sections, so heads the PM set to keep_distributed correctly surface
+   * their small instances here. We union-merge with `detection` only as a
+   * mid-edit fallback (see `visible` computation below).
    */
   liveDetection: DetectionResult;
   decisions: PendingDecisions;
@@ -31,18 +30,32 @@ export const Step3RowList: React.FC<Props> = ({
   committedStep2Sections,
   onChange,
 }) => {
-  // Pin the visible list against the initial detection so a Step 3 reroute /
-  // custom / redistribute commit on a row doesn't immediately drop the row
-  // from the list (applyPendingDecisions moves the source key out of
-  // livePreview, which would remove it from liveDetection.step3Candidates).
-  // Upstream Step 1/2 commits still hide rows correctly via the committed
-  // sets — those are explicit promotions to a higher step, not mid-edit.
-  const visible = detection.step3Candidates.filter(
-    c => !committedStep1Heads.has(c.head) && !committedStep2Sections.has(c.sec)
-  );
-  // liveDetection is still consulted (per-row peer numbers come via
-  // livePreview); reference it so the prop isn't dead.
-  void liveDetection;
+  // Primary source: liveDetection. The detector at codeCleanupDetector.ts
+  // (lines ~487–488) excludes only COMMITTED Step 1 heads / Step 2 sections,
+  // so a head set to keep_distributed correctly resurfaces its small
+  // instances in liveDetection.step3Candidates. Reading from `detection`
+  // (initial pessimistic) was the prior bug — it dropped every Step 1
+  // candidate's small lines whether the PM committed them or not.
+  const byKey = new Map(liveDetection.step3Candidates.map(c => [c.key, c]));
+
+  // Mid-edit fallback: when the PM commits a Step 3 reroute / custom /
+  // redistribute, applyPendingDecisions moves hours out of livePreview, so
+  // the candidate disappears from liveDetection.step3Candidates. Re-add
+  // those rows from the original `detection` snapshot so they don't vanish
+  // while the PM is still editing them.
+  for (const key of Object.keys(decisions.step3)) {
+    if (decisions.step3[key] && !byKey.has(key)) {
+      const original = detection.step3Candidates.find(c => c.key === key);
+      if (original) byKey.set(key, original);
+    }
+  }
+
+  // Defensive filter (liveDetection already excludes these; a re-added
+  // pinned row needs the same gate) + deterministic sort matching the
+  // detector's own `step3Candidates.sort((a, b) => a.hours - b.hours)`.
+  const visible = Array.from(byKey.values())
+    .filter(c => !committedStep1Heads.has(c.head) && !committedStep2Sections.has(c.sec))
+    .sort((a, b) => a.hours - b.hours);
   if (visible.length === 0) {
     return (
       <p className="text-sm text-muted-foreground italic px-1">
