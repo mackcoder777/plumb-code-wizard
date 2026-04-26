@@ -315,7 +315,7 @@ export function computeAdjustedLaborSummary(
 export function computeFinalLaborSummary(
   input: ComputeFinalLaborSummaryInput
 ): Record<string, any> {
-  const { adjustedLaborSummary, savedMergesData, staleMergeUpdates } = input;
+  const { adjustedLaborSummary, savedMergesData, staleMergeUpdates, hourRedistributions } = input;
 
   const summary = adjustedLaborSummary;
   if (!summary || Object.keys(summary).length === 0) return summary as any;
@@ -710,10 +710,25 @@ export function computeFinalLaborSummary(
       // Resolve through any reassignment chain to find the terminal target
       const effectiveTargetHead = reassignChainMap.get(`${sec}|${head}`) ?? reassignTo;
 
-      // Reassign: move hours/dollars to the terminal target cost head in same SEC
+      // Spec §10.1: when `reassign_to_sec` is set (Pool to 40 / Combine sections),
+      // the target lives in a DIFFERENT section than the source. The helper must
+      // look for / create the target under that new section, not the source's.
+      // When null, behavior is unchanged: target lives in same section as source.
+      const targetSec = (merge as any).reassign_to_sec || sec;
+      const targetAct = (merge as any).reassign_to_act || '0000';
+
+      // Reassign: move hours/dollars to the terminal target cost head.
+      // Match exact (sec, act, head) when reassign_to_sec is set; otherwise
+      // match same-sec / same-head with any activity (legacy behavior).
+      const isCrossSection = !!(merge as any).reassign_to_sec;
       const targetKey = Object.keys(result).find(key => {
         const parts = key.trim().split(/\s+/);
-        return parts.length >= 3 && parts[0] === sec && parts.slice(2).join(' ') === effectiveTargetHead;
+        if (parts.length < 3) return false;
+        if (parts.slice(2).join(' ') !== effectiveTargetHead) return false;
+        if (isCrossSection) {
+          return parts[0] === targetSec && parts[1] === targetAct;
+        }
+        return parts[0] === sec;
       });
       // Exclude target from source keys to prevent double-counting
       const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
@@ -732,11 +747,19 @@ export function computeFinalLaborSummary(
           matchingKeys.forEach(k => delete result[k]);
           return;
         }
-        const newTargetKey = `${sec} 0000 ${effectiveTargetHead}`;
+        // §10.1: use the cross-section target when set, otherwise fall back
+        // to the legacy same-sec / 0000 target. Line 1593 of the original
+        // panel — "load-bearing for Fold to PLMB and Pool to 40."
+        const newTargetKey = `${targetSec} ${targetAct} ${effectiveTargetHead}`;
+        if (import.meta.env.DEV && isCrossSection) {
+          console.log(
+            `[finalLaborSummary] cross-section reassign: ${sec}|${head} → ${newTargetKey} (op=${(merge as any).operation_type ?? 'unknown'})`
+          );
+        }
         result[newTargetKey] = {
           code: newTargetKey,
-          sec: sec,
-          activityCode: '0000',
+          sec: targetSec,
+          activityCode: targetAct,
           head: effectiveTargetHead,
           hours: sourceHours,
           dollars: sourceDollars,
