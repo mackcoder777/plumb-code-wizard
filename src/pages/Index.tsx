@@ -3551,6 +3551,11 @@ const EnhancedCostCodeManager = () => {
               </div>
           </div>
 
+          {/* Code Cleanup Tab */}
+          {activeTab === 'code-cleanup' && (
+            <CodeCleanupTab />
+          )}
+
           {/* Bulk Buyout Tab */}
           {activeTab === 'buyout' && (
             <BulkBuyoutTab
@@ -3786,6 +3791,7 @@ const EnhancedCostCodeManager = () => {
             preloadedFileName={pendingUploadFileName}
           />
         </div>
+        </CodeCleanupProvider>
 
         {/* Unapplied system mapping changes warning dialog */}
         {showMappingWarning && (
