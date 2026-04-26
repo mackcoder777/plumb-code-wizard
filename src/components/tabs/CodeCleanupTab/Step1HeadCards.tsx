@@ -6,9 +6,16 @@ interface Props {
   detection: DetectionResult;
   decisions: PendingDecisions;
   onChange: (head: string, decision: Step1Decision | null) => void;
+  /** All heads present in the project — fuels Reroute dropdown options. */
+  projectHeads: string[];
 }
 
-export const Step1HeadCards: React.FC<Props> = ({ detection, decisions, onChange }) => {
+export const Step1HeadCards: React.FC<Props> = ({
+  detection,
+  decisions,
+  onChange,
+  projectHeads,
+}) => {
   if (detection.step1Candidates.length === 0) {
     return (
       <p className="text-sm text-muted-foreground italic px-1">
@@ -24,6 +31,7 @@ export const Step1HeadCards: React.FC<Props> = ({ detection, decisions, onChange
           candidate={c}
           decision={decisions.step1[c.head]}
           onChange={d => onChange(c.head, d)}
+          projectHeads={projectHeads}
         />
       ))}
     </div>
