@@ -36,7 +36,7 @@ export const Step1HeadCard: React.FC<Props> = ({
   candidate,
   decision,
   onChange,
-  projectHeads,
+  projectHeads = [],
 }) => {
   const [auditOpen, setAuditOpen] = useState(false);
   const [rerouteTarget, setRerouteTarget] = useState(
@@ -46,7 +46,7 @@ export const Step1HeadCard: React.FC<Props> = ({
   // the dropdown rather than a known head).
   const [rerouteIsCustom, setRerouteIsCustom] = useState(
     decision?.kind === 'reroute_global' && decision.targetHead
-      ? !projectHeads.includes(decision.targetHead)
+      ? !(projectHeads ?? []).includes(decision.targetHead)
       : false
   );
   const [customSec, setCustomSec] = useState(decision?.kind === 'custom' ? decision.targetSec : '');
