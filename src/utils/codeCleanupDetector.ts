@@ -287,6 +287,27 @@ function isStExempt(sec: string, act: string): boolean {
 }
 
 /**
+ * Step 1 surfacing — proportional noise filter.
+ *
+ * Spec §7.1 literally says "surface if n_small ≥ 2". But §4.5 ("acceptable
+ * noise") makes clear a head where 2 small instances exist in a sea of
+ * healthy sections is NOT a cross-section pattern — it's stragglers in a
+ * healthy distribution. Pooling them into 40 0000 HEAD would move hundreds
+ * of healthy hours away from real building tracking based on a few hours
+ * of noise.
+ *
+ * Rule: a head only surfaces in Step 1 when the small instances meaningfully
+ * dominate its global footprint. 0.30 chosen as the initial cutoff against
+ * Pasadena: WATR (734h, ~2h small) = 0.003 → drops; DRNS (113h, ~5h small) =
+ * 0.044 → also drops by share alone. The sole-below-floor branch handles the
+ * "head only exists once and is itself small" case explicitly.
+ *
+ * Tunable. If PMs report still seeing too much noise OR missing real cases,
+ * adjust here and re-verify against a reference project.
+ */
+const STEP1_SMALL_SHARE_THRESHOLD = 0.30;
+
+/**
  * Detect cleanup candidates from finalLaborSummary.
  *
  * Spec §7. Pure: same input → same output. No DB reads, no clock reads.
@@ -326,8 +347,14 @@ export function detectCandidates(
 
     if (nSmall < 1) continue;
 
+    const smallHours = instances
+      .filter(i => i.hours < lineFloor)
+      .reduce((s, i) => s + i.hours, 0);
+    const smallShare = totalHours > 0 ? smallHours / totalHours : 0;
+
+    // Spec §4.5 — only surface heads with a real cross-section pattern.
     const surface =
-      nSmall >= 2 ||
+      (nSmall >= 2 && smallShare > STEP1_SMALL_SHARE_THRESHOLD) ||
       (nTotal === 1 && totalHours < lineFloor);
 
     if (!surface) continue;
