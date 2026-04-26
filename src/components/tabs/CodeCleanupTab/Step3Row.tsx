@@ -124,22 +124,22 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
           </p>
         </div>
         <div className="flex flex-wrap gap-1">
-          <ModeButton active={mode === 'accept'} onClick={() => setMode('accept')}>
+          <ModeButton active={viewMode === 'accept'} onClick={() => setMode('accept')}>
             Accept
           </ModeButton>
-          <ModeButton active={mode === 'redistribute'} onClick={() => setMode('redistribute')}>
+          <ModeButton active={viewMode === 'redistribute'} onClick={() => setMode('redistribute')}>
             Redistribute
           </ModeButton>
-          <ModeButton active={mode === 'reroute'} onClick={() => setMode('reroute')}>
+          <ModeButton active={viewMode === 'reroute'} onClick={() => setMode('reroute')}>
             Reroute
           </ModeButton>
-          <ModeButton active={mode === 'custom'} onClick={() => setMode('custom')}>
+          <ModeButton active={viewMode === 'custom'} onClick={() => setMode('custom')}>
             Custom
           </ModeButton>
         </div>
       </div>
 
-      {mode === 'redistribute' && (
+      {viewMode === 'redistribute' && (
         <div className="rounded-md bg-muted/30 p-3 space-y-2">
           <div className="flex flex-wrap items-end gap-2">
             <div>
@@ -189,7 +189,7 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
         </div>
       )}
 
-      {mode === 'reroute' && (
+      {viewMode === 'reroute' && (
         <div className="rounded-md bg-muted/30 p-3 space-y-2">
           <Label className="text-xs">Target (same section, healthy peer)</Label>
           <Select
@@ -219,7 +219,7 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
         </div>
       )}
 
-      {mode === 'custom' && (
+      {viewMode === 'custom' && (
         <div className="rounded-md bg-muted/30 p-3 flex flex-wrap items-end gap-2">
           <div>
             <Label className="text-xs">SEC</Label>
