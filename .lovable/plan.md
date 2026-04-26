@@ -1,101 +1,71 @@
-# Section Rollup + Threshold Unification — Corrected Plan
+# Fix: Step 3 missing rows for "Keep distributed" heads
 
-**Correction from prior plan:** Task 1 has been reworded. The previous "Add section-act guard" framing implied an `act === '0000'` filter on the detector. That violates Rule E (universal applicability) — it works for Pasadena (whose small buckets happen to be `0000`) but breaks level-split projects (`1M 01BA`, `2M 02BA`) the moment they produce multi-head small buckets. The correct invariant is at the **target dropdown**, not the detector.
+## Root cause (verified in source)
 
----
+`src/components/tabs/CodeCleanupTab/Step3RowList.tsx` line 40 iterates `detection.step3Candidates` — the **initial pessimistic** detection where every Step 1 candidate head is excluded. As a result, when SNWV / PIDV / SLVS are set to `keep_distributed`, their small instances (e.g., SR 0000 SNWV 10h, 1M 0000 SNWV 3h, 2M 0000 SNWV 3h) never appear in Step 3 — even though the spec promises exactly that.
 
-## Verified source citations (re-confirmed this turn)
+The detector itself is already correct: lines 487–488 of `codeCleanupDetector.ts` honor `step1ExclusionSet` and `step2ExclusionSet`, so `liveDetection.step3Candidates` is the authoritative live list. The parent (`CodeCleanupTab/index.tsx` lines 78, 170) already passes `liveDetection` into `Step3RowList`. The leak is purely the wrong source pick inside the row list.
 
-**`src/components/BudgetAdjustmentsPanel.tsx:1567–1604`** — Stage 3 reassign branch:
-- Line 1572: `Object.keys(result).find` matches by `sec` + `head` only — **activity code is not part of the match key**.
-- Line 1580: if any key in the section has the target head (any ACT), source keys collapse into it.
-- Line 1593: hardcoded `${sec} 0000 ${effectiveTargetHead}` fall-through — only fires when no key in the section has that head.
+A previous patch (the comment at lines 34–39) deliberately pinned to `detection` to prevent rows from vanishing mid-edit when the PM commits a Step 3 reroute / custom / redistribute (those decisions move hours out of `livePreview`, dropping the candidate from `liveDetection`). That guard was real, just over-applied — it also blocked legitimate Step 1 `keep_distributed` recovery.
 
-**Implication:** If the Section Rollup target dropdown is constrained to heads already present in the bucket, line 1572 always matches → line 1593 is unreachable → no act filter needed. Same-act preservation is automatic because the matched target key is the existing bucket member.
+## Fix — single file, ~10 lines
 
----
+Edit `src/components/tabs/CodeCleanupTab/Step3RowList.tsx`:
 
-## Tasks (5 total — Task 1 corrected, others unchanged)
+1. **Primary source becomes `liveDetection.step3Candidates`** — honors `committedStep1Heads` / `committedStep2Sections` exactly the way the detector already computes them.
+2. **Union-merge with pending Step 3 decisions** — if the PM has an active `decisions.step3[key]` and the candidate is no longer in `liveDetection` (because their reroute already moved the hours), pull the original candidate from `detection.step3Candidates` so the row stays visible mid-edit.
+3. **Re-apply the upstream filters** to the union (defensive — `liveDetection` already filters, but a re-added pinned row needs the same gate).
+4. **Deterministic sort by `hours` ascending** to match the detector's existing `step3Candidates.sort((a, b) => a.hours - b.hours)` at line 512. Map insertion order is fine functionally, but a stable sort prevents any visual jitter on re-renders.
 
-### Task 1 (CORRECTED): Constrain Section Rollup target to bucket heads
+### Sketch
 
-**Invariant:** The target-head dropdown for any Section Rollup card must be populated **only from the cost heads already present in that `sec|act` bucket**. No free-text input. No heads from other buckets. No heads from other sections.
+```ts
+// Primary source: liveDetection (correctly excludes only COMMITTED Step 1/2)
+const byKey = new Map(liveDetection.step3Candidates.map(c => [c.key, c]));
 
-**Why this is the right invariant:**
-- With this constraint, `Object.keys(result).find` at line 1572 always succeeds — the target key is, by construction, an existing bucket member.
-- Line 1593's hardcoded-`0000` fall-through becomes unreachable for Section Rollup writes.
-- Works universally for any `sec|act` bucket: `1M 0000`, `1M 01BA`, `B2 00L3`, etc. No activity-code restriction.
-- Preserves the source bucket's ACT automatically because the target lives in the same bucket.
+// Union with pending Step 3 decisions to prevent mid-edit vanishing
+// (a committed reroute/custom/redistribute moves hours out of livePreview,
+// which would otherwise drop the row from liveDetection.step3Candidates).
+for (const key of Object.keys(decisions.step3)) {
+  if (decisions.step3[key] && !byKey.has(key)) {
+    const original = detection.step3Candidates.find(c => c.key === key);
+    if (original) byKey.set(key, original);
+  }
+}
 
-**Do NOT implement:** Any `act === '0000'` filter on the detector. Any `act` parameter in the reassign payload. Any "both for safety" combination of dropdown constraint + act filter — the dropdown constraint alone is sufficient and correct.
+const visible = Array.from(byKey.values())
+  .filter(c => !committedStep1Heads.has(c.head) && !committedStep2Sections.has(c.sec))
+  .sort((a, b) => a.hours - b.hours); // match detector's ordering
+```
 
-**UI implementation:**
-- Section Rollup card lists heads in the bucket sorted by hours descending.
-- Dominant head pre-selected as default target.
-- Dropdown options = the other N-1 heads in the same bucket. The dominant head is the implicit target; the dropdown picks an alternate if the PM disagrees.
-- Save writes N-1 reassign records to `project_small_code_merges`, each with `sec_code = bucket sec`, `cost_head = source head`, `reassign_to_head = target head`. No `act` field needed in the payload.
+Update the inline comments to reflect the new pattern (drop the "pinned against detection" wording; document that `liveDetection` is the source of truth and `detection` is consulted only as a mid-edit fallback).
 
-### Task 2: Resolve Standalone overlap — Section Rollup as visualization layer
+## Files touched
 
-Section Rollup card displays the bucket grouping. The underlying Standalone rows for those heads remain visible in the Standalone tab. Saving a Section Rollup proposal writes the same reassign records that an individual Standalone reassign would write — there is exactly one persistence path. PMs see both the grouped view and the per-row view; only one of them needs to be acted on (whichever is more convenient).
+- `src/components/tabs/CodeCleanupTab/Step3RowList.tsx` — replace the `visible` computation and refresh comments. No prop changes.
 
-### Task 3: Prevent Job-Wide double-saves
+## Not touched (verified safe to leave alone)
 
-Section Rollup detector skips any `sec|head` already saved as a Job-Wide merge (records where `merged_act === '__JOBWIDE__'`). Prevents proposing a section-level fold for a head that's already been folded job-wide.
+- `src/utils/codeCleanupDetector.ts` — already correct (uses `step1ExclusionSet` / `step2ExclusionSet` at lines 487–488, sorts at line 512).
+- `src/components/tabs/CodeCleanupTab/index.tsx` — `liveDetection` memo and prop wiring already correct (lines 78, 170).
+- `applyPendingDecisions` and the Apply All writer — out of scope.
 
-### Task 4: Unify dashboard thresholds
+## Verification on Pasadena
 
-Fold the hardcoded `200` in `CodeHealthDashboard.tsx:225` into a `sectionWarningThreshold` field. All thresholds (line floor, section bucket, section warning, job-wide) live in a single object passed as props from the Budget tab parent. No per-component `useState`.
+**Set A — keep_distributed recovery (the bug we're fixing):**
+1. Reset all decisions, then set SNWV = Keep distributed → SR/1M/2M 0000 SNWV instances appear in Step 3.
+2. Set PIDV = Keep distributed → small PIDV instances appear in Step 3.
+3. Flip SNWV back to Pool → SNWV rows disappear from Step 3.
+4. Pick Reroute on a Step 3 row, choose a target → row stays visible (mid-edit guard via union).
+5. Set 1M = fold (Step 2) → 1M small lines disappear from Step 3.
+6. Combine 1M + 2M → both sections' small lines disappear.
 
-### Task 5: Seed thresholds on first load
+**Set B — Phase 2 end-to-end (after Set A passes):**
+1. Reset → click Reroute on SR 0000 COND → dropdown expands inline, row stays visible.
+2. Pick a target → decision persists, row stays visible.
+3. Open Step 2 1M card → click Accept fold → fields populate (1M / 0000 / PLMB).
+4. Edit ACT from `0000` to `BLDG` → live target shows `1M BLDG PLMB`.
+5. Combine 1M + 2M with name `MZ`, scope `Mezzanine plumbing` → both cards remain until Apply All.
+6. Click Apply All → footer BUDGET LINES drops, Hour Reconciliation strip approaches ~0h missing, decisions persist after page reload.
 
-Silent one-shot migration: on first load post-deployment, if `consolidation_thresholds` is null in `project_budget_settings`, read existing localStorage values (if any) and write them to the DB, then clear the localStorage entry. After this loop, all reads/writes go through `useBudgetSettings`. No PM-visible toast.
-
----
-
-## Phase 4 (auto-resolve copy update) — unchanged
-
-Auto-resolve handler updated to surface "Section Rollup available for this bucket" hint when a code with no deterministic fallback chain is part of a multi-head small bucket. Does not auto-write — surfaces the option in the inline hint, PM clicks through to the Section Rollup card.
-
----
-
-## Acceptance criteria
-
-1. Pasadena: `1M 0000` (5 heads, 18h) appears as a single Section Rollup card with the dominant head pre-selected. Saving produces 4 reassign records, all heads collapse into the dominant target, line 1593 fall-through is **not** triggered (verifiable via `import.meta.env.DEV` log).
-2. Hypothetical level-split project with `1M 01BA` (4 heads, 22h): same card structure, same save behavior, target ACT = `01BA` (preserved automatically), line 1593 not triggered.
-3. `CodeHealthDashboard` reads `sectionWarningThreshold` from props; no hardcoded `200`.
-4. Both `JobWideConsolidation` and `BudgetAdjustmentsPanel` read thresholds from `useBudgetSettings.consolidation_thresholds`. Changing a threshold in one updates the other.
-5. localStorage `minHoursThreshold` key absent after first load; DB row present.
-6. No `sec|head` appears in both a Section Rollup card and an active Job-Wide merge.
-
----
-
-## Out of scope (deferred to separate loops)
-
-- **Phase 5** (unify Job-Wide and Section Rollup engines): merge-record schema differences make this a regression risk on already-saved consolidations. Both detectors will read from the unified threshold object so thresholds don't drift, but the detectors remain parallel implementations.
-- **Open Item 7** (silent batchUpdateSilent failures): tracked separately.
-
----
-
-## Loop closure (partial — 2026-04-25 session 2)
-
-### Shipped
-- **Task 4 (threshold unification)** — `ConsolidationThresholds` interface added to `BudgetAdjustmentsPanel`. `CodeHealthDashboard` and `JobWideConsolidation` now read thresholds from props (passed from `Index.tsx` via `budgetAdjustments.consolidationThresholds`). Hardcoded `200`/`40`/`160` removed; `useState` thresholds in dashboards eliminated.
-- **Task 5 (seed migration)** — Legacy `localStorage.smallCodeMinHours` reads on first auto-migration cycle, seeds DB `consolidation_thresholds` setting, removes the localStorage key. Subsequent loads use DB exclusively.
-- `useBudgetSettings.SETTINGS_KEYS` extended with `'consolidation_thresholds'`.
-- DB save effect added (debounced 500ms, same pattern as other settings).
-
-### Not yet implemented (deferred to next loop)
-- **Task 1 (Section Rollup detector + UI)** — design locked: useMemo keyed by `sec|act`, target dropdown constrained to bucket heads (Rule E preserved, no act filter). UI adds new tab in Small Code Review.
-- **Task 2 (Standalone overlap)** — Section Rollup save will write the same reassign records as individual Standalone reassigns; no new persistence path needed. Visualization layer only.
-- **Task 3 (Job-Wide skip)** — detector filters out any sec|head with an existing `__JOBWIDE__` merge record.
-
-### Architectural notes for next loop
-- The Stage 3 reassign branch at `BudgetAdjustmentsPanel.tsx:1567-1604` is verified safe to reuse: line 1572's target match ignores act, line 1593's hardcoded `0000` fall-through is unreachable when target dropdown is constrained to existing bucket heads.
-- `currentAdjustments` in `BudgetAdjustmentsPanel` now exposes `consolidationThresholds` to `Index.tsx`; passing them down to dashboards is wired via callback props that mutate `budgetAdjustments` state. The panel's own DB load/save effect handles persistence.
-
-### Open Items still pending
-- **Open Item 7** — silent batchUpdateSilent failures (toast + banner pattern).
-- **Open Item 5** — three-extractor consolidation (`extractMultitradeLevelPrefix` × 2 + `extractLevelPrefixForSummary`).
-- **Open Item 6** — format-logging during export.
-- **Phase 5** — unify Job-Wide and Section Rollup engines (deferred to separate loop, schema reconciliation risk).
+If both sets pass, Phase 2's core flow is shipped end-to-end.
