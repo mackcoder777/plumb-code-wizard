@@ -78,6 +78,192 @@ export interface DetectionResult {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Pending decisions — in-flight Step 1/2/3 selections, not yet persisted.
+// applyPendingDecisions() projects them onto a finalLaborSummary so the UI can
+// recompute live (Step 2 cards shrink as Step 1 pools, Step 3 disappears as
+// Steps 1+2 absorb lines, footer preview reflects the apply-time delta).
+//
+// Per spec §7: detection runs against finalLaborSummary; live preview runs
+// against applyPendingDecisions(finalLaborSummary, decisions). Persistence
+// happens elsewhere — this layer is pure.
+// ---------------------------------------------------------------------------
+
+export type Step1Decision =
+  | { kind: 'pool_to_40' }
+  | { kind: 'reroute_global'; targetHead: string }
+  | { kind: 'keep_distributed' }
+  | { kind: 'custom'; targetSec: string; targetAct: string; targetHead: string };
+
+export interface Step2Decision {
+  /** "fold": SEC 0000 PLMB. "combine": both source sections fold to a PM-named target. */
+  kind: 'fold' | 'combine';
+  /** Combine only — the partner section's code (the other half of the merge). */
+  combineWithSec?: string;
+  /** Combine only — PM-invented target SEC name (e.g., "MZ"). */
+  combinedSec?: string;
+  /** Combine only — PM scope note for the field. */
+  fieldScopeNote?: string;
+}
+
+export type Step3Decision =
+  | { kind: 'accept' }
+  | { kind: 'redistribute'; sourceHead: string; hours: number }
+  | { kind: 'reroute'; targetSec: string; targetAct: string; targetHead: string }
+  | { kind: 'custom'; targetSec: string; targetAct: string; targetHead: string };
+
+export interface PendingDecisions {
+  /** key: head name (matches Step1Candidate.head) */
+  step1: Record<string, Step1Decision>;
+  /** key: sec code (matches Step2Candidate.sec) */
+  step2: Record<string, Step2Decision>;
+  /** key: full "SEC ACT HEAD" (matches Step3Candidate.key) */
+  step3: Record<string, Step3Decision>;
+}
+
+export const EMPTY_PENDING: PendingDecisions = { step1: {}, step2: {}, step3: {} };
+
+/**
+ * Project pending decisions onto a finalLaborSummary. Pure: same input → same output.
+ * Used by the UI for live preview; the persistence layer writes via the existing
+ * project_small_code_merges + project_hour_redistributions tables.
+ *
+ * Order matters and mirrors §7:
+ *   1. Step 1 head decisions (pool / reroute / keep / custom)
+ *   2. Step 2 section folds (fold / combine)
+ *   3. Step 3 per-line actions (accept / redistribute / reroute / custom)
+ */
+export function applyPendingDecisions(
+  finalLaborSummary: FinalLaborSummary,
+  decisions: PendingDecisions
+): FinalLaborSummary {
+  const result: FinalLaborSummary = {};
+  for (const [k, v] of Object.entries(finalLaborSummary || {})) {
+    result[k] = { ...v };
+  }
+
+  const move = (fromKey: string, toSec: string, toAct: string, toHead: string) => {
+    const src = result[fromKey];
+    if (!src) return;
+    const targetKey = `${toSec} ${toAct} ${toHead}`.trim();
+    const tgt = result[targetKey];
+    if (tgt) {
+      tgt.hours = (tgt.hours ?? 0) + (src.hours ?? 0);
+      tgt.dollars = (tgt.dollars ?? 0) + (src.dollars ?? 0);
+    } else {
+      result[targetKey] = { ...src, hours: src.hours ?? 0, dollars: src.dollars ?? 0 };
+    }
+    delete result[fromKey];
+  };
+
+  // ---- Step 1 ----
+  for (const [head, decision] of Object.entries(decisions.step1)) {
+    if (decision.kind === 'keep_distributed') continue;
+    const matches = Object.keys(result).filter(k => {
+      const p = parseKey(k);
+      return p && p.head === head && !isStExempt(p.sec, p.act);
+    });
+    for (const k of matches) {
+      const p = parseKey(k)!;
+      if (decision.kind === 'pool_to_40') move(k, '40', '0000', head);
+      else if (decision.kind === 'reroute_global') move(k, p.sec, p.act, decision.targetHead);
+      else if (decision.kind === 'custom') move(k, decision.targetSec, decision.targetAct, decision.targetHead);
+    }
+  }
+
+  // ---- Step 2 ----
+  // Combine pairs: only act on the side that owns the decision (avoids double-write
+  // when both sides have a "combine with the other" decision).
+  const handledCombineSecs = new Set<string>();
+  for (const [sec, decision] of Object.entries(decisions.step2)) {
+    if (handledCombineSecs.has(sec)) continue;
+    if (isStExempt(sec, '0000')) continue;
+
+    let targetSec = sec;
+    if (decision.kind === 'combine' && decision.combinedSec) {
+      targetSec = decision.combinedSec;
+      if (decision.combineWithSec) handledCombineSecs.add(decision.combineWithSec);
+    }
+    const sourceSecs =
+      decision.kind === 'combine' && decision.combineWithSec
+        ? [sec, decision.combineWithSec]
+        : [sec];
+
+    for (const srcSec of sourceSecs) {
+      const matches = Object.keys(result).filter(k => {
+        const p = parseKey(k);
+        return p && p.sec === srcSec && !isStExempt(p.sec, p.act);
+      });
+      for (const k of matches) move(k, targetSec, '0000', 'PLMB');
+    }
+  }
+
+  // ---- Step 3 ----
+  for (const [key, decision] of Object.entries(decisions.step3)) {
+    if (!result[key]) continue; // already absorbed by Step 1/2
+    const p = parseKey(key);
+    if (!p) continue;
+    if (decision.kind === 'accept') continue;
+    if (decision.kind === 'redistribute') {
+      const sourceKey = `${p.sec} ${p.act} ${decision.sourceHead}`.trim();
+      const sourceEntry = result[sourceKey];
+      const targetEntry = result[key];
+      if (!sourceEntry || !targetEntry) continue;
+      const moveable = Math.min(decision.hours, sourceEntry.hours ?? 0);
+      if (moveable <= 0) continue;
+      sourceEntry.hours = (sourceEntry.hours ?? 0) - moveable;
+      targetEntry.hours = (targetEntry.hours ?? 0) + moveable;
+      // Dollars track hours proportionally at the source rate.
+      const srcRate =
+        (sourceEntry.hours ?? 0) > 0 && sourceEntry.dollars
+          ? sourceEntry.dollars / ((sourceEntry.hours ?? 0) + moveable)
+          : 0;
+      const movedDollars = srcRate * moveable;
+      sourceEntry.dollars = Math.max(0, (sourceEntry.dollars ?? 0) - movedDollars);
+      targetEntry.dollars = (targetEntry.dollars ?? 0) + movedDollars;
+    } else if (decision.kind === 'reroute' || decision.kind === 'custom') {
+      move(key, decision.targetSec, decision.targetAct, decision.targetHead);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Footer preview metrics — line counts and below-floor hours, before vs after.
+ */
+export function previewDelta(
+  before: FinalLaborSummary,
+  after: FinalLaborSummary,
+  thresholds: CleanupThresholds
+): {
+  beforeLines: number;
+  afterLines: number;
+  linesDelta: number;
+  beforeBelowFloor: number;
+  afterBelowFloor: number;
+  belowFloorDelta: number;
+} {
+  const countBelow = (s: FinalLaborSummary) =>
+    Object.entries(s).filter(([k, v]) => {
+      const p = parseKey(k);
+      if (!p || isStExempt(p.sec, p.act)) return false;
+      return (v.hours ?? 0) < thresholds.lineFloor;
+    }).length;
+  const beforeLines = Object.keys(before).length;
+  const afterLines = Object.keys(after).length;
+  const beforeBelowFloor = countBelow(before);
+  const afterBelowFloor = countBelow(after);
+  return {
+    beforeLines,
+    afterLines,
+    linesDelta: afterLines - beforeLines,
+    beforeBelowFloor,
+    afterBelowFloor,
+    belowFloorDelta: afterBelowFloor - beforeBelowFloor,
+  };
+}
+
 const ST_SECTIONS = new Set(['ST']);
 const ST_ACTIVITIES = new Set(['00ST']);
 
