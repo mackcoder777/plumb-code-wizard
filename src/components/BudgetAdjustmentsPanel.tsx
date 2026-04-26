@@ -741,13 +741,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .select('*')
         .eq('project_id', projectId);
       if (error) { console.error('Failed to load saved merges:', error); return []; }
-      if (import.meta.env.DEV) {
-        const cleanup = data?.filter((m: any) => m.operation_type) ?? [];
-        const legacy = data?.filter((m: any) => !m.operation_type) ?? [];
-        console.log(
-          `[BudgetPanel/diag] savedMergesData loaded: total=${data?.length ?? 0} cleanup=${cleanup.length} legacy=${legacy.length}`
-        );
-      }
       return data ?? [];
     },
     enabled: !!projectId && projectId !== 'default',
@@ -1174,18 +1167,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         hoursMoved: Number(r.hours_moved) || 0,
       })),
     });
-    if (import.meta.env.DEV) {
-      const inHours = Object.values(calculations.adjustedLaborSummary ?? {})
-        .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
-      const outHours = Object.values(result ?? {})
-        .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
-      console.log(
-        `[BudgetPanel/diag] finalLaborSummary: inKeys=${Object.keys(calculations.adjustedLaborSummary ?? {}).length} ` +
-          `outKeys=${Object.keys(result ?? {}).length} ` +
-          `inHours=${inHours.toFixed(1)} outHours=${outHours.toFixed(1)} ` +
-          `redist=${(hourRedistributionsData ?? []).length}`
-      );
-    }
     return result;
   }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, hourRedistributionsData]);
 

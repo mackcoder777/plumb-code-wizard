@@ -83,47 +83,6 @@ export const CodeCleanupTab: React.FC = () => {
     [livePreview, thresholds, committedStep1Heads, committedStep2Sections]
   );
 
-  // ---- Diagnostic: surface Bug 2 wiring vs applyPendingDecisions failure. ----
-  // DEV-only. Distinguishes (a) wiring failure (committedStep1Heads not threading)
-  // from (b) applyPendingDecisions failure (live preview itself lost the rows).
-  React.useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    console.log(
-      `[CodeCleanup/diag] committedStep1Heads=${committedStep1Heads.size} ` +
-        `committedStep2Sections=${committedStep2Sections.size}`,
-      {
-        step1: Array.from(committedStep1Heads),
-        step2: Array.from(committedStep2Sections),
-      }
-    );
-    const sample = (head: string) => {
-      const finalKeys = Object.keys(finalLaborSummary).filter(
-        k => k.trim().split(/\s+/).slice(2).join(' ') === head
-      );
-      const liveKeys = Object.keys(livePreview).filter(
-        k => k.trim().split(/\s+/).slice(2).join(' ') === head
-      );
-      const step3Keys = liveDetection.step3Candidates
-        .filter(c => c.head === head)
-        .map(c => c.key);
-      if (finalKeys.length || liveKeys.length || step3Keys.length) {
-        console.log(
-          `[CodeCleanup/diag] head=${head} ` +
-            `final=${finalKeys.length} live=${liveKeys.length} step3=${step3Keys.length} ` +
-            `committed=${committedStep1Heads.has(head) ? 'yes' : 'no'}`,
-          { finalKeys, liveKeys, step3Keys }
-        );
-      }
-    };
-    ['SNWV', 'PIDV', 'DRNS', 'COND', 'SZMC'].forEach(sample);
-  }, [
-    finalLaborSummary,
-    livePreview,
-    liveDetection,
-    committedStep1Heads,
-    committedStep2Sections,
-  ]);
-
   const delta = useMemo(
     () => previewDelta(finalLaborSummary, livePreview, thresholds),
     [finalLaborSummary, livePreview, thresholds]
@@ -211,6 +170,8 @@ export const CodeCleanupTab: React.FC = () => {
           liveDetection={liveDetection}
           decisions={pending.decisions}
           livePreview={livePreview}
+          committedStep1Heads={committedStep1Heads}
+          committedStep2Sections={committedStep2Sections}
           onChange={pending.setStep3}
         />
       </section>
