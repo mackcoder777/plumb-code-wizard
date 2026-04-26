@@ -66,12 +66,27 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
     [livePreview, candidate.sec, candidate.head]
   );
 
+  // Local "view mode" — controls which sub-block is expanded. Independent of the
+  // committed decision so the row never collapses out of the list while the PM
+  // is filling in a target. A decision is only committed when the form has
+  // enough data to be meaningful.
+  const [viewMode, setViewMode] = useState<Mode>(mode);
+
+  // Sync viewMode with external decision (e.g., Reset clears decisions).
+  React.useEffect(() => {
+    setViewMode(mode);
+  }, [mode]);
+
   const setMode = (next: Mode) => {
-    if (next === '' || next === mode) return;
+    if (next === '' || next === viewMode) return;
+    setViewMode(next);
+    // Only Accept commits immediately. Redistribute / Reroute / Custom wait for
+    // valid form input before writing a decision (writing too early moves the
+    // row's hours into a malformed key and corrupts livePreview).
     if (next === 'accept') onChange({ kind: 'accept' });
-    else if (next === 'redistribute')
+    else if (next === 'redistribute' && redistSrc && redistHrs > 0) {
       onChange({ kind: 'redistribute', sourceHead: redistSrc, hours: redistHrs });
-    else if (next === 'reroute') {
+    } else if (next === 'reroute' && rerouteTargetKey) {
       const parts = rerouteTargetKey.trim().split(/\s+/);
       onChange({
         kind: 'reroute',
@@ -79,8 +94,17 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
         targetAct: parts[1] ?? '0000',
         targetHead: parts.slice(2).join(' ') || candidate.head,
       });
-    } else if (next === 'custom') {
-      onChange({ kind: 'custom', targetSec: customSec, targetAct: customAct, targetHead: customHead });
+    } else if (next === 'custom' && customSec && customHead) {
+      onChange({
+        kind: 'custom',
+        targetSec: customSec,
+        targetAct: customAct || '0000',
+        targetHead: customHead,
+      });
+    } else {
+      // Switched into a sub-mode but not enough data yet — clear any prior
+      // decision so the row's hours stay put until the PM fills the target.
+      onChange(null);
     }
   };
 
