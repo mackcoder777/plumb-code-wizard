@@ -61,6 +61,33 @@ export const CodeCleanupTab: React.FC = () => {
     [livePreview, thresholds, committedStep1Heads]
   );
 
+  // ---- Diagnostic: surface Bug 2 wiring vs applyPendingDecisions failure. ----
+  // DEV-only. Distinguishes (a) wiring failure (committedStep1Heads not threading)
+  // from (b) applyPendingDecisions failure (live preview itself lost the rows).
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const sample = (head: string) => {
+      const finalKeys = Object.keys(finalLaborSummary).filter(
+        k => k.trim().split(/\s+/).slice(2).join(' ') === head
+      );
+      const liveKeys = Object.keys(livePreview).filter(
+        k => k.trim().split(/\s+/).slice(2).join(' ') === head
+      );
+      const step3Keys = liveDetection.step3Candidates
+        .filter(c => c.head === head)
+        .map(c => c.key);
+      if (finalKeys.length || liveKeys.length || step3Keys.length) {
+        console.log(
+          `[CodeCleanup/diag] head=${head} ` +
+            `final=${finalKeys.length} live=${liveKeys.length} step3=${step3Keys.length} ` +
+            `committed=${committedStep1Heads.has(head) ? 'yes' : 'no'}`,
+          { finalKeys, liveKeys, step3Keys }
+        );
+      }
+    };
+    ['SNWV', 'PIDV', 'DRNS', 'COND', 'SZMC'].forEach(sample);
+  }, [finalLaborSummary, livePreview, liveDetection, committedStep1Heads]);
+
   const delta = useMemo(
     () => previewDelta(finalLaborSummary, livePreview, thresholds),
     [finalLaborSummary, livePreview, thresholds]
@@ -145,6 +172,7 @@ export const CodeCleanupTab: React.FC = () => {
         <SectionTitle index={3} title="What's left" subtitle="Lines still under floor after Steps 1 + 2." />
         <Step3RowList
           detection={detection}
+          liveDetection={liveDetection}
           decisions={pending.decisions}
           livePreview={livePreview}
           onChange={pending.setStep3}

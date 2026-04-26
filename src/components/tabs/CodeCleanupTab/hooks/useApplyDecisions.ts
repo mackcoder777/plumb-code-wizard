@@ -184,6 +184,14 @@ function buildMergeRows(
       handledCombineSecs.add(decision.combineWithSec);
     }
 
+    // Honor PM edits to the fold target. Defaults: PLMB head, 0000 act,
+    // source-sec when no combine. Trade-prefix-aware defaults are out of
+    // scope here — see project plan note.
+    const editedHead = decision.targetHead?.trim();
+    const editedAct = decision.targetAct?.trim();
+    const targetHead = editedHead && editedHead.length > 0 ? editedHead : 'PLMB';
+    const targetAct = editedAct && editedAct.length > 0 ? editedAct : '0000';
+
     for (const srcSec of sourceSecs) {
       const matches = liveKeys
         .map(k => parseKey(k))
@@ -194,9 +202,9 @@ function buildMergeRows(
           sec_code: m.sec,
           merged_act: m.act,
           cost_head: m.head,
-          reassign_to_head: 'PLMB',
+          reassign_to_head: targetHead,
           reassign_to_sec: targetSec !== m.sec ? targetSec : null,
-          reassign_to_act: '0000',
+          reassign_to_act: targetAct,
           redistribute_adjustments: null,
           operation_type: opType,
           pm_email: pmEmail,
@@ -324,6 +332,11 @@ export function useApplyDecisions(): UseApplyDecisionsApi {
       return { mergeRows: mergeRows.length, redistRows: redistRows.length };
     },
     onSuccess: (result, vars) => {
+      if (import.meta.env.DEV) {
+        console.log(
+          `[CodeCleanup/apply] wrote merges=${result.mergeRows} redist=${result.redistRows} project=${vars.projectId}`
+        );
+      }
       setLastError(null);
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', vars.projectId] });
       queryClient.invalidateQueries({ queryKey: ['cleanup-merges', vars.projectId] });
