@@ -741,6 +741,33 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .select('*')
         .eq('project_id', projectId);
       if (error) { console.error('Failed to load saved merges:', error); return []; }
+      if (import.meta.env.DEV) {
+        const cleanup = data?.filter((m: any) => m.operation_type) ?? [];
+        const legacy = data?.filter((m: any) => !m.operation_type) ?? [];
+        console.log(
+          `[BudgetPanel/diag] savedMergesData loaded: total=${data?.length ?? 0} cleanup=${cleanup.length} legacy=${legacy.length}`
+        );
+      }
+      return data ?? [];
+    },
+    enabled: !!projectId && projectId !== 'default',
+  });
+
+  // Fix A: load Code Cleanup hour redistributions and feed them into the
+  // finalLaborSummary pipeline. Without this, Step 3 redistribute decisions
+  // are written to the DB but never affect the export.
+  const { data: hourRedistributionsData } = useQuery({
+    queryKey: ['hour-redistributions', projectId],
+    queryFn: async () => {
+      if (!projectId || projectId === 'default') return [];
+      const { data, error } = await supabase
+        .from('project_hour_redistributions')
+        .select('*')
+        .eq('project_id', projectId);
+      if (error) {
+        console.error('Failed to load hour redistributions:', error);
+        return [];
+      }
       return data ?? [];
     },
     enabled: !!projectId && projectId !== 'default',
@@ -769,11 +796,15 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return true;
       }).reverse();
 
-      // Delete existing entries for this project, then upsert in one go
+      // Fix C: legacy writer must NOT touch Code Cleanup-authored rows
+      // (those have a non-null `operation_type`). Inclusion check on null is
+      // forward-compatible — any new operation_type added later automatically
+      // stays protected without updating an enumerated blocklist.
       const { error: deleteError } = await supabase
         .from('project_small_code_merges')
         .delete()
-        .eq('project_id', projectId);
+        .eq('project_id', projectId)
+        .is('operation_type', null);
 
       if (deleteError) throw new Error(`Failed to clear existing merges: ${deleteError.message}`);
 
