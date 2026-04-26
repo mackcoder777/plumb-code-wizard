@@ -741,13 +741,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .select('*')
         .eq('project_id', projectId);
       if (error) { console.error('Failed to load saved merges:', error); return []; }
-      if (import.meta.env.DEV) {
-        const cleanup = data?.filter((m: any) => m.operation_type) ?? [];
-        const legacy = data?.filter((m: any) => !m.operation_type) ?? [];
-        console.log(
-          `[BudgetPanel/diag] savedMergesData loaded: total=${data?.length ?? 0} cleanup=${cleanup.length} legacy=${legacy.length}`
-        );
-      }
       return data ?? [];
     },
     enabled: !!projectId && projectId !== 'default',
