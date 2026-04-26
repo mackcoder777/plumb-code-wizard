@@ -96,6 +96,17 @@ export interface SavedMergeRecord {
   merged_act: string;
   reassign_to_head?: string | null;
   redistribute_adjustments?: Record<string, number> | null;
+  /**
+   * Cross-section reassign target. When set together with `reassign_to_act`,
+   * the helper looks for / creates `[reassign_to_sec] [reassign_to_act] [reassign_to_head]`
+   * instead of `[sec_code] 0000 [reassign_to_head]`. Drives Pool to 40 and
+   * Combine sections (spec §4.1, §10.1).
+   *
+   * When null/undefined, behavior is unchanged from prior loops — the target
+   * lives in the same section as the source.
+   */
+  reassign_to_sec?: string | null;
+  reassign_to_act?: string | null;
 }
 
 export interface StaleMergeUpdateEntry {
@@ -110,6 +121,20 @@ export interface ComputeFinalLaborSummaryInput {
   adjustedLaborSummary: Record<string, any> | null | undefined;
   savedMergesData: SavedMergeRecord[] | null | undefined;
   staleMergeUpdates: Array<StaleMergeUpdateEntry | null | undefined>;
+  /**
+   * Hour redistributions from `project_hour_redistributions` — applied
+   * post-merge as Stage 3.5. Each entry rebalances hours between two heads
+   * within the same `(sec, act)` bucket. Section total is preserved.
+   */
+  hourRedistributions?: Array<HourRedistributionEntry> | null;
+}
+
+export interface HourRedistributionEntry {
+  sec: string;
+  act: string;
+  sourceHead: string;
+  targetHead: string;
+  hoursMoved: number;
 }
 
 /**
