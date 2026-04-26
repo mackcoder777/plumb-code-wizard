@@ -1161,12 +1161,33 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   // Apply saved merges on top of adjustedLaborSummary → finalLaborSummary
   const finalLaborSummary = useMemo(() => {
-    return computeFinalLaborSummary({
+    const result = computeFinalLaborSummary({
       adjustedLaborSummary: calculations.adjustedLaborSummary,
       savedMergesData: savedMergesData as any,
       staleMergeUpdates,
+      // Fix A: feed Code Cleanup hour redistributions into Stage 3.5.
+      hourRedistributions: (hourRedistributionsData ?? []).map((r: any) => ({
+        sec: r.sec_code,
+        act: r.act_code,
+        sourceHead: r.source_head,
+        targetHead: r.target_head,
+        hoursMoved: Number(r.hours_moved) || 0,
+      })),
     });
-  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates]);
+    if (import.meta.env.DEV) {
+      const inHours = Object.values(calculations.adjustedLaborSummary ?? {})
+        .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
+      const outHours = Object.values(result ?? {})
+        .reduce((s: number, e: any) => s + (e.hours ?? 0), 0);
+      console.log(
+        `[BudgetPanel/diag] finalLaborSummary: inKeys=${Object.keys(calculations.adjustedLaborSummary ?? {}).length} ` +
+          `outKeys=${Object.keys(result ?? {}).length} ` +
+          `inHours=${inHours.toFixed(1)} outHours=${outHours.toFixed(1)} ` +
+          `redist=${(hourRedistributionsData ?? []).length}`
+      );
+    }
+    return result;
+  }, [calculations.adjustedLaborSummary, savedMergesData, staleMergeUpdates, hourRedistributionsData]);
 
   // Auto-cleanup: delete orphaned merges for fallback sections that folded to 0 hours
   const cleanupRanRef = useRef(false);
@@ -1185,7 +1206,12 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     // Only clean up merges for fallback sections where the cost head
     // has ZERO hours across ALL sections in the raw pre-merge data
+    // Fix D: skip Code Cleanup-authored rows (operation_type !== null).
+    // The orphan-cleanup is built around the legacy writer's quirks; Code
+    // Cleanup rows are managed atomically by useApplyDecisions and must not
+    // be touched here.
     const fallbackMerges = savedMergesData.filter(m =>
+      !m.operation_type &&
       FALLBACK_SECTIONS.has((m.sec_code || '').trim().toUpperCase())
     );
 
@@ -1203,6 +1229,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     // nullNullOrphans: merge records with no action AND no source in raw data
     const nullNullOrphans = savedMergesData.filter(m => {
+      if (m.operation_type) return false; // Fix D: skip Code Cleanup rows
       if (m.reassign_to_head !== null || m.redistribute_adjustments !== null) return false;
       const sec = (m.sec_code || '').trim();
       const head = (m.cost_head || '').trim();
@@ -1217,6 +1244,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     // activityOrphans: merge records whose source activity codes no longer exist
     // (e.g., after clearing all ACT to 0000 — 00L1/00L2 keys collapsed into 0000)
     const activityOrphans = savedMergesData.filter(m => {
+      if (m.operation_type) return false; // Fix D: skip Code Cleanup rows
       if (toDelete.some(d => d.id === m.id) || nullNullOrphans.some(d => d.id === m.id)) return false;
       if (m.reassign_to_head === '__keep__') return false;
 
@@ -2259,7 +2287,10 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         .delete()
         .eq('project_id', projectId)
         .eq('sec_code', targetSec)
-        .eq('cost_head', targetHead);
+        .eq('cost_head', targetHead)
+        // Fix C: legacy undo must not touch Code Cleanup rows for the same
+        // (sec, head). Code Cleanup ownership is exclusive to its own writer.
+        .is('operation_type', null);
 
       if (error) {
         console.error('[Undo] Delete failed:', error);
