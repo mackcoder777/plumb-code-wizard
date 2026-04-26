@@ -332,6 +332,11 @@ export function useApplyDecisions(): UseApplyDecisionsApi {
       return { mergeRows: mergeRows.length, redistRows: redistRows.length };
     },
     onSuccess: (result, vars) => {
+      if (import.meta.env.DEV) {
+        console.log(
+          `[CodeCleanup/apply] wrote merges=${result.mergeRows} redist=${result.redistRows} project=${vars.projectId}`
+        );
+      }
       setLastError(null);
       queryClient.invalidateQueries({ queryKey: ['small-code-merges', vars.projectId] });
       queryClient.invalidateQueries({ queryKey: ['cleanup-merges', vars.projectId] });
