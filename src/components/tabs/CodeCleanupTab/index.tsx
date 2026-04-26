@@ -153,7 +153,7 @@ export const CodeCleanupTab: React.FC = () => {
         <SectionTitle
           index={2}
           title="Section folds"
-          subtitle="List is pinned from initial detection; per-card hour previews update as Step 1 selections come in."
+          subtitle="Per-card hour previews and remaining heads update as Step 1 selections come in."
         />
         <Step2SectionCards
           detection={detection}
