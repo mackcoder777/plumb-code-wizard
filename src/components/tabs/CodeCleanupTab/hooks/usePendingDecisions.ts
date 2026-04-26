@@ -4,8 +4,13 @@
  * Holds Step 1/2/3 selections in memory. Save Draft + Apply All are owned by
  * useApplyDecisions. This hook is the in-flight view; persistence happens
  * downstream.
+ *
+ * Hydration: callers pass `initialDecisions` + `hydrationKey`. When the key
+ * changes (e.g., DB rows refresh after Apply All), in-memory state is
+ * re-seeded from the initial decisions. Mid-session edits between
+ * hydrations are preserved — only a hydrationKey change re-seeds.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   EMPTY_PENDING,
   type PendingDecisions,
@@ -23,8 +28,23 @@ export interface PendingDecisionsApi {
   count: number;
 }
 
-export function usePendingDecisions(): PendingDecisionsApi {
-  const [decisions, setDecisions] = useState<PendingDecisions>(EMPTY_PENDING);
+export function usePendingDecisions(opts?: {
+  initialDecisions?: PendingDecisions;
+  hydrationKey?: string;
+}): PendingDecisionsApi {
+  const initial = opts?.initialDecisions ?? EMPTY_PENDING;
+  const [decisions, setDecisions] = useState<PendingDecisions>(initial);
+
+  // Re-seed from hydrated state whenever the hydrationKey flips. Without this,
+  // Apply All -> pending.reset() leaves the UI showing pessimistic detection
+  // even though the DB already records committed Step 1 / Step 2 decisions.
+  const lastKeyRef = useRef<string | undefined>(opts?.hydrationKey);
+  useEffect(() => {
+    if (opts?.hydrationKey === undefined) return;
+    if (opts.hydrationKey === lastKeyRef.current) return;
+    lastKeyRef.current = opts.hydrationKey;
+    setDecisions(opts.initialDecisions ?? EMPTY_PENDING);
+  }, [opts?.hydrationKey, opts?.initialDecisions]);
 
   const setStep1 = useCallback((head: string, decision: Step1Decision | null) => {
     setDecisions(prev => {
