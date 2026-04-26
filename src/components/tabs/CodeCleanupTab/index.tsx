@@ -54,11 +54,33 @@ export const CodeCleanupTab: React.FC = () => {
     return set;
   }, [pending.decisions.step1]);
 
+  // Sections the PM has *committed* to fold/combine in Step 2. Includes the
+  // partner section on `combine` decisions so both sides drop out of Step 3
+  // (matches applyPendingDecisions, which moves both sources to the target).
+  // Symmetric to committedStep1Heads — without this, Step 3 pessimistically
+  // hides every Step 2 *candidate* section's small lines, even ones the PM
+  // hasn't decided on (e.g., 1M, 2M leaking SNWV instances).
+  const committedStep2Sections = useMemo(() => {
+    const set = new Set<string>();
+    for (const [sec, decision] of Object.entries(pending.decisions.step2)) {
+      if (decision.kind === 'fold' || decision.kind === 'combine') {
+        set.add(sec);
+        if (decision.kind === 'combine' && decision.combineWithSec) {
+          set.add(decision.combineWithSec);
+        }
+      }
+    }
+    return set;
+  }, [pending.decisions.step2]);
+
   // Step 2 + 3 re-detect against the live preview so cards reflect the
   // post-Step-1 reality (e.g., L2's DRNS vanishes if Step 1 pools DRNS).
   const liveDetection = useMemo(
-    () => detectCandidates(livePreview, thresholds, { committedStep1Heads }),
-    [livePreview, thresholds, committedStep1Heads]
+    () => detectCandidates(livePreview, thresholds, {
+      committedStep1Heads,
+      committedStep2Sections,
+    }),
+    [livePreview, thresholds, committedStep1Heads, committedStep2Sections]
   );
 
   // ---- Diagnostic: surface Bug 2 wiring vs applyPendingDecisions failure. ----
@@ -66,6 +88,14 @@ export const CodeCleanupTab: React.FC = () => {
   // from (b) applyPendingDecisions failure (live preview itself lost the rows).
   React.useEffect(() => {
     if (!import.meta.env.DEV) return;
+    console.log(
+      `[CodeCleanup/diag] committedStep1Heads=${committedStep1Heads.size} ` +
+        `committedStep2Sections=${committedStep2Sections.size}`,
+      {
+        step1: Array.from(committedStep1Heads),
+        step2: Array.from(committedStep2Sections),
+      }
+    );
     const sample = (head: string) => {
       const finalKeys = Object.keys(finalLaborSummary).filter(
         k => k.trim().split(/\s+/).slice(2).join(' ') === head
@@ -86,7 +116,13 @@ export const CodeCleanupTab: React.FC = () => {
       }
     };
     ['SNWV', 'PIDV', 'DRNS', 'COND', 'SZMC'].forEach(sample);
-  }, [finalLaborSummary, livePreview, liveDetection, committedStep1Heads]);
+  }, [
+    finalLaborSummary,
+    livePreview,
+    liveDetection,
+    committedStep1Heads,
+    committedStep2Sections,
+  ]);
 
   const delta = useMemo(
     () => previewDelta(finalLaborSummary, livePreview, thresholds),
