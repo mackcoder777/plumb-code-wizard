@@ -43,7 +43,7 @@ import {
 import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
-import { computeAdjustedLaborSummary, computeFinalLaborSummary } from '@/utils/laborSummaryComputation';
+import { computeAdjustedLaborSummary, computeFinalLaborSummary, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
