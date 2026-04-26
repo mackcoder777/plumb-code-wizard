@@ -96,6 +96,17 @@ export interface SavedMergeRecord {
   merged_act: string;
   reassign_to_head?: string | null;
   redistribute_adjustments?: Record<string, number> | null;
+  /**
+   * Cross-section reassign target. When set together with `reassign_to_act`,
+   * the helper looks for / creates `[reassign_to_sec] [reassign_to_act] [reassign_to_head]`
+   * instead of `[sec_code] 0000 [reassign_to_head]`. Drives Pool to 40 and
+   * Combine sections (spec §4.1, §10.1).
+   *
+   * When null/undefined, behavior is unchanged from prior loops — the target
+   * lives in the same section as the source.
+   */
+  reassign_to_sec?: string | null;
+  reassign_to_act?: string | null;
 }
 
 export interface StaleMergeUpdateEntry {
@@ -110,6 +121,20 @@ export interface ComputeFinalLaborSummaryInput {
   adjustedLaborSummary: Record<string, any> | null | undefined;
   savedMergesData: SavedMergeRecord[] | null | undefined;
   staleMergeUpdates: Array<StaleMergeUpdateEntry | null | undefined>;
+  /**
+   * Hour redistributions from `project_hour_redistributions` — applied
+   * post-merge as Stage 3.5. Each entry rebalances hours between two heads
+   * within the same `(sec, act)` bucket. Section total is preserved.
+   */
+  hourRedistributions?: Array<HourRedistributionEntry> | null;
+}
+
+export interface HourRedistributionEntry {
+  sec: string;
+  act: string;
+  sourceHead: string;
+  targetHead: string;
+  hoursMoved: number;
 }
 
 /**
@@ -290,7 +315,7 @@ export function computeAdjustedLaborSummary(
 export function computeFinalLaborSummary(
   input: ComputeFinalLaborSummaryInput
 ): Record<string, any> {
-  const { adjustedLaborSummary, savedMergesData, staleMergeUpdates } = input;
+  const { adjustedLaborSummary, savedMergesData, staleMergeUpdates, hourRedistributions } = input;
 
   const summary = adjustedLaborSummary;
   if (!summary || Object.keys(summary).length === 0) return summary as any;
@@ -685,10 +710,25 @@ export function computeFinalLaborSummary(
       // Resolve through any reassignment chain to find the terminal target
       const effectiveTargetHead = reassignChainMap.get(`${sec}|${head}`) ?? reassignTo;
 
-      // Reassign: move hours/dollars to the terminal target cost head in same SEC
+      // Spec §10.1: when `reassign_to_sec` is set (Pool to 40 / Combine sections),
+      // the target lives in a DIFFERENT section than the source. The helper must
+      // look for / create the target under that new section, not the source's.
+      // When null, behavior is unchanged: target lives in same section as source.
+      const targetSec = (merge as any).reassign_to_sec || sec;
+      const targetAct = (merge as any).reassign_to_act || '0000';
+
+      // Reassign: move hours/dollars to the terminal target cost head.
+      // Match exact (sec, act, head) when reassign_to_sec is set; otherwise
+      // match same-sec / same-head with any activity (legacy behavior).
+      const isCrossSection = !!(merge as any).reassign_to_sec;
       const targetKey = Object.keys(result).find(key => {
         const parts = key.trim().split(/\s+/);
-        return parts.length >= 3 && parts[0] === sec && parts.slice(2).join(' ') === effectiveTargetHead;
+        if (parts.length < 3) return false;
+        if (parts.slice(2).join(' ') !== effectiveTargetHead) return false;
+        if (isCrossSection) {
+          return parts[0] === targetSec && parts[1] === targetAct;
+        }
+        return parts[0] === sec;
       });
       // Exclude target from source keys to prevent double-counting
       const sourceKeys = targetKey ? matchingKeys.filter(k => k !== targetKey) : matchingKeys;
@@ -707,11 +747,19 @@ export function computeFinalLaborSummary(
           matchingKeys.forEach(k => delete result[k]);
           return;
         }
-        const newTargetKey = `${sec} 0000 ${effectiveTargetHead}`;
+        // §10.1: use the cross-section target when set, otherwise fall back
+        // to the legacy same-sec / 0000 target. Line 1593 of the original
+        // panel — "load-bearing for Fold to PLMB and Pool to 40."
+        const newTargetKey = `${targetSec} ${targetAct} ${effectiveTargetHead}`;
+        if (import.meta.env.DEV && isCrossSection) {
+          console.log(
+            `[finalLaborSummary] cross-section reassign: ${sec}|${head} → ${newTargetKey} (op=${(merge as any).operation_type ?? 'unknown'})`
+          );
+        }
         result[newTargetKey] = {
           code: newTargetKey,
-          sec: sec,
-          activityCode: '0000',
+          sec: targetSec,
+          activityCode: targetAct,
           head: effectiveTargetHead,
           hours: sourceHours,
           dollars: sourceDollars,
@@ -762,6 +810,67 @@ export function computeFinalLaborSummary(
     }
 
   });
+
+  // ---- Stage 3.5 — hour redistributions (spec §4.1, §10.3) ----
+  // Applied AFTER merges but BEFORE zero-hour cleanup so a redistribution
+  // can rescue a small line that would otherwise round to <0.05h.
+  // Section total is preserved by design: every hour added to target is
+  // subtracted from source.
+  if (hourRedistributions?.length) {
+    hourRedistributions.forEach(red => {
+      if (!red || !red.hoursMoved || red.hoursMoved <= 0) return;
+      const sourceKey = `${red.sec} ${red.act} ${red.sourceHead}`;
+      const targetKey = `${red.sec} ${red.act} ${red.targetHead}`;
+      const source = result[sourceKey];
+      if (!source) {
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[finalLaborSummary] redistribute skipping — source ${sourceKey} not found in result`
+          );
+        }
+        return;
+      }
+      const sourceRate = source.hours > 0 ? (source.dollars ?? 0) / source.hours : 0;
+      const movedDollars = red.hoursMoved * sourceRate;
+
+      // Cap the move at the source's available hours. Never produce negative.
+      const actualMoved = Math.min(red.hoursMoved, source.hours ?? 0);
+      if (actualMoved <= 0) return;
+      const actualDollars = actualMoved * sourceRate;
+
+      result[sourceKey] = {
+        ...source,
+        hours: (source.hours ?? 0) - actualMoved,
+        dollars: (source.dollars ?? 0) - actualDollars,
+      };
+
+      if (result[targetKey]) {
+        result[targetKey] = {
+          ...result[targetKey],
+          hours: (result[targetKey].hours ?? 0) + actualMoved,
+          dollars: (result[targetKey].dollars ?? 0) + actualDollars,
+        };
+      } else {
+        // Target line didn't exist yet — create it. Same description style
+        // as the cross-section reassign create-new path.
+        result[targetKey] = {
+          code: targetKey,
+          sec: red.sec,
+          activityCode: red.act,
+          head: red.targetHead,
+          hours: actualMoved,
+          dollars: actualDollars,
+          description: `Redistributed from ${red.sourceHead}`,
+        };
+      }
+
+      if (import.meta.env.DEV) {
+        console.log(
+          `[finalLaborSummary] redistribute ${actualMoved.toFixed(2)}h: ${sourceKey} → ${targetKey} (movedDollars=${movedDollars.toFixed(2)})`
+        );
+      }
+    });
+  }
 
   // Clean up entries with effectively zero hours after merges
   Object.keys(result).forEach(k => {

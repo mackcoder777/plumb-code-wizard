@@ -43,7 +43,7 @@ import {
 import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
-import { computeAdjustedLaborSummary, computeFinalLaborSummary } from '@/utils/laborSummaryComputation';
+import { computeAdjustedLaborSummary, computeFinalLaborSummary, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
@@ -1108,14 +1108,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
           secCode: merge.sec_code,
           oldCostHead: merge.cost_head,
           newCostHead,
-          mergeRecord: merge,
+          // Narrow the Supabase Json column to the helper's contract at the
+          // boundary. Runtime: redistribute_adjustments is always null or a
+          // {[act: string]: number} object — never a string/array — because
+          // every writer in this codebase constructs it that way. Cast keeps
+          // SavedMergeRecord's stricter type without changing behavior.
+          mergeRecord: {
+            ...merge,
+            redistribute_adjustments:
+              (merge.redistribute_adjustments as Record<string, number> | null | undefined) ?? null,
+          } as SavedMergeRecord,
         };
       }) as Array<{
         mergeId: string;
         secCode: string;
         oldCostHead: string;
         newCostHead: string | null;
-        mergeRecord: typeof savedMergesData[0];
+        mergeRecord: SavedMergeRecord;
       }>;
   }, [savedMergesData, calculations.adjustedLaborSummary]);
 

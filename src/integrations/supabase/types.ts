@@ -720,34 +720,99 @@ export type Database = {
           },
         ]
       }
+      project_hour_redistributions: {
+        Row: {
+          act_code: string
+          created_at: string
+          field_scope_note: string | null
+          hours_moved: number
+          id: string
+          operation_type: string
+          pm_email: string | null
+          project_id: string
+          sec_code: string
+          source_head: string
+          target_head: string
+        }
+        Insert: {
+          act_code?: string
+          created_at?: string
+          field_scope_note?: string | null
+          hours_moved: number
+          id?: string
+          operation_type?: string
+          pm_email?: string | null
+          project_id: string
+          sec_code: string
+          source_head: string
+          target_head: string
+        }
+        Update: {
+          act_code?: string
+          created_at?: string
+          field_scope_note?: string | null
+          hours_moved?: number
+          id?: string
+          operation_type?: string
+          pm_email?: string | null
+          project_id?: string
+          sec_code?: string
+          source_head?: string
+          target_head?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_hour_redistributions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_small_code_merges: {
         Row: {
           cost_head: string
           created_at: string
+          field_scope_note: string | null
           id: string
           merged_act: string
+          operation_type: string | null
+          pm_email: string | null
           project_id: string
+          reassign_to_act: string | null
           reassign_to_head: string | null
+          reassign_to_sec: string | null
           redistribute_adjustments: Json | null
           sec_code: string
         }
         Insert: {
           cost_head: string
           created_at?: string
+          field_scope_note?: string | null
           id?: string
           merged_act?: string
+          operation_type?: string | null
+          pm_email?: string | null
           project_id: string
+          reassign_to_act?: string | null
           reassign_to_head?: string | null
+          reassign_to_sec?: string | null
           redistribute_adjustments?: Json | null
           sec_code?: string
         }
         Update: {
           cost_head?: string
           created_at?: string
+          field_scope_note?: string | null
           id?: string
           merged_act?: string
+          operation_type?: string | null
+          pm_email?: string | null
           project_id?: string
+          reassign_to_act?: string | null
           reassign_to_head?: string | null
+          reassign_to_sec?: string | null
           redistribute_adjustments?: Json | null
           sec_code?: string
         }
