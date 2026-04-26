@@ -345,6 +345,19 @@ export function detectCandidates(
      * the right behavior there.
      */
     committedStep1Heads?: Set<string>;
+    /**
+     * Sections that the PM has *explicitly committed* to fold/combine in
+     * Step 2. When provided, Step 3 only excludes lines whose section is in
+     * this set — instead of pessimistically excluding every section that
+     * *would* surface as a Step 2 candidate. This lets small instances in
+     * pessimistic-but-undecided sections (e.g., 1M, 2M) reappear in Step 3
+     * by default, matching the spec promise that nothing is hidden until the
+     * PM commits to a fold.
+     *
+     * Omit for initial (pre-decision) detection — pessimistic default is
+     * correct there.
+     */
+    committedStep2Sections?: Set<string>;
   }
 ): DetectionResult {
   const { lineFloor, sectionThreshold } = thresholds;
@@ -459,6 +472,11 @@ export function detectCandidates(
 
   step2Candidates.sort((a, b) => a.remainingTotal - b.remainingTotal);
 
+  // For Step 3 exclusion: honor committed Step 2 decisions when supplied
+  // (live preview path). Otherwise fall back to the pessimistic set — every
+  // section that surfaces as a Step 2 candidate (initial detection path).
+  const step2ExclusionSet = options?.committedStep2Sections ?? step2Sections;
+
   // ---- Step 3: what's left (§7.3) ----
   // Per-section totals AFTER Step 1 movements (used for the healthy-section test).
   // Section health uses the same post-Step-1 view that Step 2 uses.
@@ -467,7 +485,7 @@ export function detectCandidates(
   for (const line of lines) {
     if (line.hours >= lineFloor) continue;
     if (step1ExclusionSet.has(line.head)) continue; // head being globally consolidated
-    if (step2Sections.has(line.sec)) continue; // section being folded
+    if (step2ExclusionSet.has(line.sec)) continue; // section being folded
 
     const sectionTotal = sectionRemainingHours.get(line.sec) ?? 0;
     const sectionIsHealthy = sectionTotal > sectionThreshold;
