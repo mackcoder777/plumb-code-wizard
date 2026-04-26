@@ -105,9 +105,14 @@ export const CodeCleanupTab: React.FC = () => {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle index={2} title="Section folds" subtitle="Each card recomputes live as Step 1 selections come in." />
+        <SectionTitle
+          index={2}
+          title="Section folds"
+          subtitle="List is pinned from initial detection; per-card hour previews update as Step 1 selections come in."
+        />
         <Step2SectionCards
-          detection={liveDetection}
+          detection={detection}
+          liveDetection={liveDetection}
           decisions={pending.decisions}
           onChange={pending.setStep2}
         />
@@ -116,7 +121,7 @@ export const CodeCleanupTab: React.FC = () => {
       <section className="space-y-3">
         <SectionTitle index={3} title="What's left" subtitle="Lines still under floor after Steps 1 + 2." />
         <Step3RowList
-          detection={liveDetection}
+          detection={detection}
           decisions={pending.decisions}
           livePreview={livePreview}
           onChange={pending.setStep3}
