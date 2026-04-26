@@ -350,14 +350,16 @@ export function detectCandidates(
 
     if (nSmall < 1) continue;
 
-    const smallHours = instances
-      .filter(i => i.hours < lineFloor)
-      .reduce((s, i) => s + i.hours, 0);
-    const smallShare = totalHours > 0 ? smallHours / totalHours : 0;
+    const avgPerSection = nTotal > 0 ? totalHours / nTotal : 0;
 
     // Spec §4.5 — only surface heads with a real cross-section pattern.
+    // (a) head is globally small (avg per section below the section threshold)
+    //     AND has at least 2 small instances;
+    // (b) 3+ small instances regardless of total scale;
+    // (c) sole instance and itself below the line floor.
     const surface =
-      (nSmall >= 2 && smallShare > STEP1_SMALL_SHARE_THRESHOLD) ||
+      (nSmall >= 2 && avgPerSection < sectionThreshold) ||
+      (nSmall >= STEP1_PERVASIVE_SMALL_COUNT) ||
       (nTotal === 1 && totalHours < lineFloor);
 
     if (!surface) continue;
