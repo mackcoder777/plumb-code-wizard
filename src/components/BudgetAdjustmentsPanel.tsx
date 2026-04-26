@@ -1059,7 +1059,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate, customFabCodes]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
