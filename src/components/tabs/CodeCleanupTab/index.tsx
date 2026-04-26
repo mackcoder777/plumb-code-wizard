@@ -43,11 +43,22 @@ export const CodeCleanupTab: React.FC = () => {
     [finalLaborSummary, pending.decisions]
   );
 
+  // Heads the PM has *committed* to global movement. `keep_distributed` is
+  // explicitly excluded — those heads stay distributed and their small
+  // instances should reappear in Step 3 for per-instance handling.
+  const committedStep1Heads = useMemo(() => {
+    const set = new Set<string>();
+    for (const [head, decision] of Object.entries(pending.decisions.step1)) {
+      if (decision.kind !== 'keep_distributed') set.add(head);
+    }
+    return set;
+  }, [pending.decisions.step1]);
+
   // Step 2 + 3 re-detect against the live preview so cards reflect the
   // post-Step-1 reality (e.g., L2's DRNS vanishes if Step 1 pools DRNS).
   const liveDetection = useMemo(
-    () => detectCandidates(livePreview, thresholds),
-    [livePreview, thresholds]
+    () => detectCandidates(livePreview, thresholds, { committedStep1Heads }),
+    [livePreview, thresholds, committedStep1Heads]
   );
 
   const delta = useMemo(
