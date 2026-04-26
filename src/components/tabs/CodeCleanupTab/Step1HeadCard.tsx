@@ -77,10 +77,14 @@ export const Step1HeadCard: React.FC<Props> = ({
 
   // Track which radio option the PM is *viewing*, independent of whether a
   // decision has been committed. Lets Reroute / Custom expand their inputs
-  // before the form is valid.
+  // before the form is valid. We only sync DOWN from `value` when a decision
+  // exists — clearing the decision (because the form isn't valid yet) must NOT
+  // collapse the expanded sub-controls out from under the PM.
   const [viewMode, setViewMode] = useState<RadioValue | ''>(value as RadioValue | '');
   React.useEffect(() => {
-    setViewMode(value as RadioValue | '');
+    if (value) setViewMode(value as RadioValue);
+    // If value is '' (no decision committed), preserve current viewMode so the
+    // PM keeps their open sub-control while typing the target.
   }, [value]);
 
   const onRadioChange = (v: string) => {
