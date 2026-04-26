@@ -330,7 +330,22 @@ const STEP1_PERVASIVE_SMALL_COUNT = 3;
  */
 export function detectCandidates(
   finalLaborSummary: FinalLaborSummary,
-  thresholds: CleanupThresholds
+  thresholds: CleanupThresholds,
+  options?: {
+    /**
+     * Heads that the PM has *explicitly committed* to global movement (Step 1
+     * pool / reroute / custom). When provided, Step 2/3 only exclude lines
+     * whose head is in this set — instead of pessimistically excluding every
+     * head that *would* surface in Step 1. This is what live detection passes
+     * after the PM has made selections, so `keep_distributed` heads correctly
+     * remain visible in Step 2 totals and reappear in Step 3 for per-instance
+     * handling (spec §7.1: "Defer small instances to Step 3").
+     *
+     * Omit for initial (pre-decision) detection — the pessimistic default is
+     * the right behavior there.
+     */
+    committedStep1Heads?: Set<string>;
+  }
 ): DetectionResult {
   const { lineFloor, sectionThreshold } = thresholds;
 
@@ -396,16 +411,21 @@ export function detectCandidates(
 
   step1Candidates.sort((a, b) => b.nSmall - a.nSmall || b.totalHours - a.totalHours);
 
+  // For Step 2/3 exclusion: if the caller passed `committedStep1Heads`, honor
+  // it (live preview path). Otherwise fall back to the pessimistic set —
+  // every head that surfaces in Step 1 (initial detection path).
+  const step1ExclusionSet = options?.committedStep1Heads ?? step1Heads;
+
   // ---- Step 2: section folds (§7.2) ----
   // "After subtracting hours that Step 1 will move out" — for detection-layer
-  // purposes, Step 1 moves out EVERY instance of a step1Head from its current
-  // section. The pessimistic assumption is that the PM will pool/reroute the
-  // whole head; the card recomputes live once a real selection is made.
+  // purposes, Step 1 moves out every instance whose head is in the exclusion
+  // set above (committed decisions when supplied; otherwise the pessimistic
+  // pre-decision default).
   const sectionRemainingHours = new Map<string, number>();
   const sectionRemainingHeads = new Map<string, Array<{ head: string; act: string; hours: number }>>();
 
   for (const line of lines) {
-    if (step1Heads.has(line.head)) continue; // Step 1 will move this out
+    if (step1ExclusionSet.has(line.head)) continue; // Step 1 will move this out
     sectionRemainingHours.set(
       line.sec,
       (sectionRemainingHours.get(line.sec) ?? 0) + line.hours
@@ -446,12 +466,17 @@ export function detectCandidates(
 
   for (const line of lines) {
     if (line.hours >= lineFloor) continue;
-    if (step1Heads.has(line.head)) continue;   // head being globally consolidated
+    if (step1ExclusionSet.has(line.head)) continue; // head being globally consolidated
     if (step2Sections.has(line.sec)) continue; // section being folded
 
     const sectionTotal = sectionRemainingHours.get(line.sec) ?? 0;
     const sectionIsHealthy = sectionTotal > sectionThreshold;
-    const headInStep1 = step1Heads.has(line.head); // false here by construction; explicit for spec parity
+    // Spec §7.3: "no default — PM picks" when the head is *also* a Step 1
+    // candidate (i.e., it was surfaced for global handling). Use the
+    // pessimistic step1Heads set here, NOT the committed set — even if the
+    // PM chose keep_distributed, the row is still part of a cross-section
+    // pattern and shouldn't auto-default to Accept.
+    const headInStep1 = step1Heads.has(line.head);
 
     step3Candidates.push({
       key: line.key,
