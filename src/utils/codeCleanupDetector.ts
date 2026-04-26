@@ -292,20 +292,23 @@ function isStExempt(sec: string, act: string): boolean {
  * Spec §7.1 literally says "surface if n_small ≥ 2". But §4.5 ("acceptable
  * noise") makes clear a head where 2 small instances exist in a sea of
  * healthy sections is NOT a cross-section pattern — it's stragglers in a
- * healthy distribution. Pooling them into 40 0000 HEAD would move hundreds
- * of healthy hours away from real building tracking based on a few hours
- * of noise.
+ * healthy distribution.
  *
- * Rule: a head only surfaces in Step 1 when the small instances meaningfully
- * dominate its global footprint. 0.30 chosen as the initial cutoff against
- * Pasadena: WATR (734h, ~2h small) = 0.003 → drops; DRNS (113h, ~5h small) =
- * 0.044 → also drops by share alone. The sole-below-floor branch handles the
- * "head only exists once and is itself small" case explicitly.
+ * Two-signal rule:
+ *   (a) Average hours per section is below the section threshold — the head
+ *       is globally small enough that pooling makes sense.
+ *   (b) 3+ small instances regardless of total — a real cross-section
+ *       pattern even when the head is large overall.
+ *   (c) Sole instance, below the line floor — the head only exists once
+ *       and is itself small.
  *
- * Tunable. If PMs report still seeing too much noise OR missing real cases,
- * adjust here and re-verify against a reference project.
+ * Verified on Pasadena: surfaces DRNS, SLVS, PIDV, SNWV; drops WATR, STRM,
+ * SZMC. Tunable via the constants below.
  */
-const STEP1_SMALL_SHARE_THRESHOLD = 0.30;
+// Minimum small-instance count that always triggers Step 1, independent of
+// the head's total scale. 3+ small lines of the same head is itself a
+// cross-section pattern worth the PM's attention.
+const STEP1_PERVASIVE_SMALL_COUNT = 3;
 
 /**
  * Detect cleanup candidates from finalLaborSummary.
