@@ -72,9 +72,12 @@ export const Step3Row: React.FC<Props> = ({ candidate, decision, livePreview, on
   // enough data to be meaningful.
   const [viewMode, setViewMode] = useState<Mode>(mode);
 
-  // Sync viewMode with external decision (e.g., Reset clears decisions).
+  // Sync viewMode with external decision when one is committed. We do NOT
+  // collapse back to '' when the decision is cleared (e.g., because the form
+  // isn't valid yet) — that would close the sub-control the PM just opened to
+  // type the target into.
   React.useEffect(() => {
-    setViewMode(mode);
+    if (mode) setViewMode(mode);
   }, [mode]);
 
   const setMode = (next: Mode) => {
