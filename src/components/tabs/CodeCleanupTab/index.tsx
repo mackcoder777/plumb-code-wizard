@@ -17,6 +17,7 @@ import {
 } from '@/utils/codeCleanupDetector';
 import { usePendingDecisions } from './hooks/usePendingDecisions';
 import { useApplyDecisions } from './hooks/useApplyDecisions';
+import { useHydratedDecisions } from './hooks/useHydratedDecisions';
 import { CodeCleanupHeader } from './CodeCleanupHeader';
 import { Step1HeadCards } from './Step1HeadCards';
 import { Step2SectionCards } from './Step2SectionCards';
@@ -26,8 +27,6 @@ import { AuditDrawer } from './AuditDrawer';
 
 export const CodeCleanupTab: React.FC = () => {
   const { projectId, pmEmail, finalLaborSummary, thresholds } = useCodeCleanup();
-  const pending = usePendingDecisions();
-  const apply = useApplyDecisions();
   const [auditOpen, setAuditOpen] = useState(false);
 
   // Initial detection — what the PM sees before they touch anything.
@@ -35,6 +34,17 @@ export const CodeCleanupTab: React.FC = () => {
     () => detectCandidates(finalLaborSummary, thresholds),
     [finalLaborSummary, thresholds]
   );
+
+  // Hydrate from DB so committed Step 1 / Step 2 decisions survive Apply All.
+  // Without this, pending.reset() after a successful write leaves the
+  // detector in pessimistic mode and the PM plays whack-a-mole as Step 2
+  // candidates re-surface and Step 3 rows blink in/out.
+  const hydrated = useHydratedDecisions(projectId, detection);
+  const pending = usePendingDecisions({
+    initialDecisions: hydrated.decisions,
+    hydrationKey: hydrated.hydrationKey,
+  });
+  const apply = useApplyDecisions();
 
   // Live preview after pending decisions are applied — drives Step 2/3 cards
   // recomputing as Step 1 selections come in, and the footer's delta.
@@ -116,6 +126,7 @@ export const CodeCleanupTab: React.FC = () => {
   }
 
   const handleApply = () => {
+    if (!hydrated.isReady) return; // double safety against race on first paint
     apply.applyAll(projectId, pmEmail, finalLaborSummary, pending.decisions, () => {
       pending.reset();
     });
@@ -138,6 +149,12 @@ export const CodeCleanupTab: React.FC = () => {
       </div>
 
       <CodeCleanupHeader detection={detection} />
+
+      {!hydrated.isReady && (
+        <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Loading saved decisions…
+        </div>
+      )}
 
       <section className="space-y-3">
         <SectionTitle index={1} title="Global head decisions" subtitle="One choice per cost head, applied project-wide." />
@@ -186,7 +203,7 @@ export const CodeCleanupTab: React.FC = () => {
         beforeBelowFloor={delta.beforeBelowFloor}
         afterBelowFloor={delta.afterBelowFloor}
         pendingCount={pending.count}
-        isApplying={apply.isApplying}
+        isApplying={apply.isApplying || !hydrated.isReady}
         onApplyAll={handleApply}
         onReset={pending.reset}
       />
