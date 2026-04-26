@@ -104,6 +104,16 @@ export interface Step2Decision {
   combinedSec?: string;
   /** Combine only — PM scope note for the field. */
   fieldScopeNote?: string;
+  /**
+   * Optional ACT override for the fold target. Defaults to "0000".
+   * PM may type "BLDG" or any other 4-char ACT.
+   */
+  targetAct?: string;
+  /**
+   * Optional HEAD override for the fold target. Defaults to "PLMB".
+   * PM may route the section's residual to a peer head instead.
+   */
+  targetHead?: string;
 }
 
 export type Step3Decision =
