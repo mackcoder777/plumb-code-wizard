@@ -10,7 +10,6 @@ import NotFound from "./pages/NotFound";
 import { Auth } from "./components/Auth";
 import { AdminCostCodeUpload } from "./components/AdminCostCodeUpload";
 import { AdminCostCodeManager } from "./components/AdminCostCodeManager";
-import DebugCodeCleanup from "./pages/DebugCodeCleanup";
 import { useAuth } from "./hooks/useAuth";
 import { Loader2, LogOut, Shield, Home } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -160,16 +159,6 @@ const AppContent: React.FC = () => {
           }
         />
         <Route path="/404" element={<NotFound />} />
-        {import.meta.env.DEV && (
-          <Route
-            path="/debug/code-cleanup"
-            element={
-              <ProtectedRoute>
-                <DebugCodeCleanup />
-              </ProtectedRoute>
-            }
-          />
-        )}
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
     </div>
