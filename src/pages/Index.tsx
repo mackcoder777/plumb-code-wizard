@@ -2779,7 +2779,7 @@ const EnhancedCostCodeManager = () => {
           {fileName && (
             <div className="mt-4 bg-white/20 px-4 py-2 rounded-lg inline-block">
               <span className="text-sm opacity-90">Project: </span>
-              <span className="font-semibold">{fileName.replace(/\.[^/.]+$/, '')}</span>
+              <span className="font-semibold">{currentProject?.name ?? '— No project —'}</span>
               <span className="ml-6 text-sm opacity-90">Items: </span>
               <span className="font-semibold">{estimateData.length}</span>
             </div>

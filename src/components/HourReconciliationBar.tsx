@@ -61,10 +61,14 @@ export const HourReconciliationBar: React.FC<HourReconciliationBarProps> = ({
   const uncodedDelta = metrics.estimateHours - metrics.codedHours;
 
   let status: 'green' | 'yellow' | 'red' = 'green';
-  if (hasExportData && metrics.delta > 0.5) {
-    status = 'red';
-  } else if (uncodedDelta > 0.5) {
+  // Diagnose uncoded items first — when items lack cost codes, the reconciliation
+  // gap and the uncoded delta are the same number, and we want users to fix
+  // assignments before chasing pipeline drift. Red is reserved for true drift
+  // (export totals != coded totals) where no uncoded items explain the gap.
+  if (uncodedDelta > 0.5) {
     status = 'yellow';
+  } else if (hasExportData && metrics.delta > 0.5) {
+    status = 'red';
   }
 
   const statusColors = {
