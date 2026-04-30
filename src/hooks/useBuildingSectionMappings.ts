@@ -329,6 +329,23 @@ export function resolveFloorMappingStatic(
       return { section: canonicalSection, activity, buildingActivity: activity, hasExplicitMapping };
     }
 
+    // Priority 2.5: Drawing-based building inference for standalone floors.
+    // Symmetric with the non-standalone branch's drawing fallback (line ~380).
+    // Handles cases like zone="Roof" (mirrors floor, no building info) but
+    // drawing="M-2-325 - BLDG 2 - Roof" — getBuildingFromDrawing returns "2",
+    // which lets us recover the canonical section and surface a non-null activity.
+    // floorActivity is already computed above via deriveStandaloneActivity
+    // ('00RF' for Roof, '00UG' for UG, etc.) — no new constants invented here.
+    const drawingBuilding = getBuildingFromDrawing(drawing);
+    if (drawingBuilding) {
+      return {
+        section: getCanonicalSectionForBuilding(drawingBuilding, floorMappings, buildingMappings),
+        activity: floorActivity,
+        buildingActivity: floorActivity,
+        hasExplicitMapping: false
+      };
+    }
+
     // Priority 3: Zone resolution failed for standalone floor
     // If user has an explicit floor mapping (e.g., Site → SITE), honor it
     if (hasExplicitMapping) {
