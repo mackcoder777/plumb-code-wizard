@@ -43,7 +43,7 @@ import {
 import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
-import { computeAdjustedLaborSummary, computeFinalLaborSummary, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
+import { computeAdjustedLaborSummary, computeFinalLaborSummary, FALLBACK_ACTIVITY_CODES, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
@@ -392,6 +392,12 @@ interface BudgetAdjustmentsPanelProps {
   // copy via the currentAdjustments round-trip.
   consolidationThresholds: ConsolidationThresholds;
   onConsolidationThresholdsChange: (next: ConsolidationThresholds) => void;
+  // Code format mode + trade prefix from Index.tsx. Used by the per-building
+  // fab-strip exclusion feature to parse building IDs out of full code keys.
+  // Standard mode: SEC = building (parts[0]). Multitrade mode: building lives
+  // in parts[1] (the ACT segment), either as flat "00BA" or level-split "BA01".
+  codeFormatMode?: 'standard' | 'multitrade';
+  tradePrefix?: string;
 }
 
 const FAB_SECTION = 'FP';
