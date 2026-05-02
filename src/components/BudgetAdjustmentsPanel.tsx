@@ -635,6 +635,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [budgetRateInput, setBudgetRateInput] = useState('85');
   const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>({});
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
+  // Per-building fab-strip exclusions. Building IDs whose hours stay in the
+  // field budget even when their cost head has a global fab strip enabled.
+  const [excludedSections, setExcludedSections] = useState<string[]>([]);
 
   // Track whether we've loaded DB settings for this project
   const settingsLoadedForRef = useRef<string | null>(null);
