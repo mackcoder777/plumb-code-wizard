@@ -900,6 +900,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   useEffect(() => {
     if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('fab_excluded_sections', excludedSections);
+  }, [excludedSections]);
+
+  useEffect(() => {
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
     saveSetting('fab_lrcn_enabled', fabLrcnEnabled);
   }, [fabLrcnEnabled]);
 
