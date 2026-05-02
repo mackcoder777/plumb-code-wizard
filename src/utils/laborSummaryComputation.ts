@@ -175,6 +175,7 @@ export function computeAdjustedLaborSummary(
     customFabCodes,
     shopRate,
     budgetRate,
+    excludedCodeKeys,
   } = input;
 
   const originalTotalHours = Object.values(laborSummary)
@@ -206,7 +207,9 @@ export function computeAdjustedLaborSummary(
     const fabEnabled = fabConfig?.enabled || false;
     const fabPercent = fabConfig?.percentage || 0;
 
-    if (fabEnabled && fabPercent > 0) {
+    // Optional-chained access: if excludedCodeKeys is undefined, ?.has → undefined,
+    // !undefined → true, branch unchanged. Empty set ≡ baseline behavior.
+    if (fabEnabled && fabPercent > 0 && !excludedCodeKeys?.has(code)) {
       const fabHours = hoursAfterForeman * (fabPercent / 100);
       const fieldHours = hoursAfterForeman - fabHours;
 
