@@ -680,6 +680,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setFabCodeMap({ ...DEFAULT_FAB_CODE_MAP, ...savedFabCodeMap });
     setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
     setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
+    setExcludedSections(getSetting<string[]>('fab_excluded_sections', []));
 
     // All setState calls complete — defer setting initialized=true until AFTER
     // React processes the re-render so save effects skip the load-triggered updates
