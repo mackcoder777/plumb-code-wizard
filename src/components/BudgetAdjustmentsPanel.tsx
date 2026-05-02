@@ -1097,6 +1097,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       customFabCodes,
       shopRate,
       budgetRate,
+      excludedCodeKeys,
     });
 
     // Note: FCNT (Foreman Contingency) is now a MATERIAL line item, not labor
@@ -1149,7 +1150,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate, customFabCodes]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate, customFabCodes, excludedCodeKeys]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
