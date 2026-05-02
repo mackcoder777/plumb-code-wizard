@@ -948,6 +948,55 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return grouped;
   }, [laborSummary]);
 
+  // ── Per-building fab-strip exclusion: building extraction ──────────────────
+  // Single source of truth for parsing a building ID out of a full cost code key.
+  // Mirrors the strip-leading-zeros + length-based slice pattern at Index.tsx:966-978
+  // (the assembly-side gate). Standard mode: SEC = parts[0] = building.
+  // Multitrade mode: building lives in parts[1] (the 4-char ACT segment).
+  // Shapes handled:
+  //   "00BA"  → strip → "BA"  (len 2) → "BA"   ✓
+  //   "BA01"  → strip → "BA01"(len 4) → "BA"   ✓ (slice(0,2))
+  //   "0B12"  → strip → "B12" (len 3) → "B12"  ✓ (3-char building IDs kept whole)
+  //   "00CS"  → fallback activity → null (no building identity)
+  const extractBuildingId = useCallback((
+    code: string,
+    mode: 'standard' | 'multitrade',
+  ): string | null => {
+    const parts = code.trim().split(/\s+/);
+    if (mode === 'multitrade') {
+      const act = parts[1];
+      if (!act || act.length !== 4) return null;
+      if (FALLBACK_ACTIVITY_CODES.has(act)) return null;
+      const stripped = act.replace(/^0+/, '');
+      if (!stripped) return null;
+      if (stripped.length <= 3) return stripped;  // BA, B12, MOD kept whole
+      return stripped.slice(0, 2);                 // BA01 → BA
+    }
+    return parts[0] || null;
+  }, []);
+
+  // Available building IDs derived from the labor summary keys (drives the UI chip list).
+  const availableBuildings = useMemo(() => {
+    const set = new Set<string>();
+    Object.keys(laborSummary).forEach(code => {
+      const bid = extractBuildingId(code, codeFormatMode);
+      if (bid) set.add(bid);
+    });
+    return Array.from(set).sort();
+  }, [laborSummary, codeFormatMode, extractBuildingId]);
+
+  // Set of full code keys whose fab strip is skipped. Drives both the helper
+  // gate and the per-row UI annotation — single computation, no duplication.
+  const excludedCodeKeys = useMemo(() => {
+    const out = new Set<string>();
+    if (excludedSections.length === 0) return out;
+    Object.keys(laborSummary).forEach(code => {
+      const bid = extractBuildingId(code, codeFormatMode);
+      if (bid && excludedSections.includes(bid)) out.add(code);
+    });
+    return out;
+  }, [laborSummary, excludedSections, codeFormatMode, extractBuildingId]);
+
   const taxInfo = useMemo(() => {
     if (customTaxRate !== null) {
       return { rate: customTaxRate, jurisdiction: 'Custom Rate' };
