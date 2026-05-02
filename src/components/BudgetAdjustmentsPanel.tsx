@@ -3112,8 +3112,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     const originalHours = group.totalHours;
                     const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
                     const hoursAfterForeman = originalHours - foremanStripHours;
-                    const fabHours = isEnabled ? hoursAfterForeman * (fabPercent / 100) : 0;
+                    // Account for per-building exclusions: fab strip applies only to
+                    // the non-excluded share of this cost head's hours.
+                    let excludedShareHrsAfterForeman = 0;
+                    if (isEnabled && excludedCodeKeys.size > 0) {
+                      const foremanRatio = originalHours > 0 ? hoursAfterForeman / originalHours : 1;
+                      group.fullCodes.forEach(fc => {
+                        if (excludedCodeKeys.has(fc)) {
+                          excludedShareHrsAfterForeman += (laborSummary[fc]?.fieldHours || 0) * foremanRatio;
+                        }
+                      });
+                    }
+                    const fabbableHours = hoursAfterForeman - excludedShareHrsAfterForeman;
+                    const fabHours = isEnabled ? fabbableHours * (fabPercent / 100) : 0;
                     const finalFieldHours = hoursAfterForeman - fabHours;
+                    const keptHrs = isEnabled
+                      ? excludedShareHrsAfterForeman * (fabPercent / 100)
+                      : 0;
 
                     return (
                       <TableRow key={costHead} className={isEnabled ? 'bg-purple-50/30 dark:bg-purple-950/30' : ''}>
@@ -3159,7 +3174,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                           )}
                         </TableCell>
                         <TableCell className="text-right font-mono text-purple-600 bg-purple-50/50 dark:bg-purple-950/50">
-                          {isEnabled ? `-${fabHours.toFixed(1)}` : '—'}
+                          {isEnabled ? (
+                            <>
+                              -{fabHours.toFixed(1)}
+                              {keptHrs > 0.05 && (
+                                <div className="text-[10px] text-blue-600 dark:text-blue-400 font-normal">
+                                  +{keptHrs.toFixed(1)} hrs kept as field
+                                </div>
+                              )}
+                            </>
+                          ) : '—'}
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-green-600">
                           {finalFieldHours.toFixed(1)}
