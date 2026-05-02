@@ -19,6 +19,7 @@ const SETTINGS_KEYS = [
   'fab_rates',
   'custom_fab_codes',
   'consolidation_thresholds',
+  'fab_excluded_sections',
 ] as const;
 
 export type SettingsKey = typeof SETTINGS_KEYS[number];

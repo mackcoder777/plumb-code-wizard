@@ -43,7 +43,7 @@ import {
 import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
-import { computeAdjustedLaborSummary, computeFinalLaborSummary, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
+import { computeAdjustedLaborSummary, computeFinalLaborSummary, FALLBACK_ACTIVITY_CODES, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
 
 // Function to get tax rate by ZIP code using ranges
 const getTaxRateByZip = (zipCode: string): { rate: number; jurisdiction: string } => {
@@ -392,6 +392,12 @@ interface BudgetAdjustmentsPanelProps {
   // copy via the currentAdjustments round-trip.
   consolidationThresholds: ConsolidationThresholds;
   onConsolidationThresholdsChange: (next: ConsolidationThresholds) => void;
+  // Code format mode + trade prefix from Index.tsx. Used by the per-building
+  // fab-strip exclusion feature to parse building IDs out of full code keys.
+  // Standard mode: SEC = building (parts[0]). Multitrade mode: building lives
+  // in parts[1] (the ACT segment), either as flat "00BA" or level-split "BA01".
+  codeFormatMode?: 'standard' | 'multitrade';
+  tradePrefix?: string;
 }
 
 const FAB_SECTION = 'FP';
@@ -601,6 +607,8 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   systemMappings = [],
   consolidationThresholds,
   onConsolidationThresholdsChange,
+  codeFormatMode = 'standard',
+  tradePrefix = 'PL',
 }) => {
   // ── Budget settings persistence (DB-backed with localStorage cache) ──
   const { dbSettings, isLoading: settingsLoading, saveSetting, getSetting } = useBudgetSettings(projectId);
@@ -627,6 +635,9 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
   const [budgetRateInput, setBudgetRateInput] = useState('85');
   const [customFabCodes, setCustomFabCodes] = useState<Record<string, string>>({});
   const [customFabEntry, setCustomFabEntry] = useState<{ costHead: string; code: string; desc: string } | null>(null);
+  // Per-building fab-strip exclusions. Building IDs whose hours stay in the
+  // field budget even when their cost head has a global fab strip enabled.
+  const [excludedSections, setExcludedSections] = useState<string[]>([]);
 
   // Track whether we've loaded DB settings for this project
   const settingsLoadedForRef = useRef<string | null>(null);
@@ -669,6 +680,7 @@ const BudgetAdjustmentsPanel: React.FC<BudgetAdjustmentsPanelProps> = ({
     setFabCodeMap({ ...DEFAULT_FAB_CODE_MAP, ...savedFabCodeMap });
     setFabRates(getSetting<Record<string, { bidRate: string; budgetRate: string }>>('fab_rates', {}));
     setCustomFabCodes(getSetting<Record<string, string>>('custom_fab_codes', {}));
+    setExcludedSections(getSetting<string[]>('fab_excluded_sections', []));
 
     // All setState calls complete — defer setting initialized=true until AFTER
     // React processes the re-render so save effects skip the load-triggered updates
@@ -888,6 +900,11 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
   useEffect(() => {
     if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
+    saveSetting('fab_excluded_sections', excludedSections);
+  }, [excludedSections]);
+
+  useEffect(() => {
+    if (!settingsInitializedRef.current || !projectId || projectId === 'default') return;
     saveSetting('fab_lrcn_enabled', fabLrcnEnabled);
   }, [fabLrcnEnabled]);
 
@@ -930,6 +947,55 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     return grouped;
   }, [laborSummary]);
+
+  // ── Per-building fab-strip exclusion: building extraction ──────────────────
+  // Single source of truth for parsing a building ID out of a full cost code key.
+  // Mirrors the strip-leading-zeros + length-based slice pattern at Index.tsx:966-978
+  // (the assembly-side gate). Standard mode: SEC = parts[0] = building.
+  // Multitrade mode: building lives in parts[1] (the 4-char ACT segment).
+  // Shapes handled:
+  //   "00BA"  → strip → "BA"  (len 2) → "BA"   ✓
+  //   "BA01"  → strip → "BA01"(len 4) → "BA"   ✓ (slice(0,2))
+  //   "0B12"  → strip → "B12" (len 3) → "B12"  ✓ (3-char building IDs kept whole)
+  //   "00CS"  → fallback activity → null (no building identity)
+  const extractBuildingId = useCallback((
+    code: string,
+    mode: 'standard' | 'multitrade',
+  ): string | null => {
+    const parts = code.trim().split(/\s+/);
+    if (mode === 'multitrade') {
+      const act = parts[1];
+      if (!act || act.length !== 4) return null;
+      if (FALLBACK_ACTIVITY_CODES.has(act)) return null;
+      const stripped = act.replace(/^0+/, '');
+      if (!stripped) return null;
+      if (stripped.length <= 3) return stripped;  // BA, B12, MOD kept whole
+      return stripped.slice(0, 2);                 // BA01 → BA
+    }
+    return parts[0] || null;
+  }, []);
+
+  // Available building IDs derived from the labor summary keys (drives the UI chip list).
+  const availableBuildings = useMemo(() => {
+    const set = new Set<string>();
+    Object.keys(laborSummary).forEach(code => {
+      const bid = extractBuildingId(code, codeFormatMode);
+      if (bid) set.add(bid);
+    });
+    return Array.from(set).sort();
+  }, [laborSummary, codeFormatMode, extractBuildingId]);
+
+  // Set of full code keys whose fab strip is skipped. Drives both the helper
+  // gate and the per-row UI annotation — single computation, no duplication.
+  const excludedCodeKeys = useMemo(() => {
+    const out = new Set<string>();
+    if (excludedSections.length === 0) return out;
+    Object.keys(laborSummary).forEach(code => {
+      const bid = extractBuildingId(code, codeFormatMode);
+      if (bid && excludedSections.includes(bid)) out.add(code);
+    });
+    return out;
+  }, [laborSummary, excludedSections, codeFormatMode, extractBuildingId]);
 
   const taxInfo = useMemo(() => {
     if (customTaxRate !== null) {
@@ -1031,6 +1097,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       customFabCodes,
       shopRate,
       budgetRate,
+      excludedCodeKeys,
     });
 
     // Note: FCNT (Foreman Contingency) is now a MATERIAL line item, not labor
@@ -1083,7 +1150,7 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       totalMaterialPreTax,
       generatedFabCodes
     };
-  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate, customFabCodes]);
+  }, [laborSummary, materialSummary, foremanBonusEnabled, foremanBonusPercent, fabricationConfigs, materialTaxOverrides, taxInfo, budgetRate, shopRate, fabCodeMap, fabRates, computedBidLaborRate, customFabCodes, excludedCodeKeys]);
 
   // Fab LRCN calculations
   const fabLrcnCalculations = useMemo(() => {
@@ -2940,6 +3007,63 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       </Card>
 
       {/* Fabrication Hours Strip */}
+      {/* Field-Build Buildings — exclude specific buildings from fab strips */}
+      {availableBuildings.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Wrench className="h-5 w-5 text-blue-500" />
+              Field-Build Buildings (No Fab Strip)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>
+                      Toggle a building to keep its hours in the field budget instead of routing
+                      to FP fab codes — even when that cost head has a global fab strip enabled.
+                      Use when the foreman confirms specific buildings will be field-built.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {availableBuildings.map(bid => {
+                const isExcluded = excludedSections.includes(bid);
+                return (
+                  <button
+                    key={bid}
+                    type="button"
+                    onClick={() =>
+                      setExcludedSections(prev =>
+                        prev.includes(bid) ? prev.filter(s => s !== bid) : [...prev, bid]
+                      )
+                    }
+                    className={cn(
+                      'px-3 py-1.5 rounded-md font-mono text-sm border transition-colors',
+                      isExcluded
+                        ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+                        : 'bg-background border-border hover:bg-muted'
+                    )}
+                  >
+                    {bid}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              {excludedSections.length === 0
+                ? 'All buildings fabricated normally. Toggle a building to exclude it from every fab strip.'
+                : `${excludedSections.length} building${excludedSections.length === 1 ? '' : 's'} excluded — hours stay in the field budget. Total project cost is unchanged when GC FLD CONT has cushion to absorb the shift.`}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -2988,8 +3112,23 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                     const originalHours = group.totalHours;
                     const foremanStripHours = foremanBonusEnabled ? originalHours * (foremanBonusPercent / 100) : 0;
                     const hoursAfterForeman = originalHours - foremanStripHours;
-                    const fabHours = isEnabled ? hoursAfterForeman * (fabPercent / 100) : 0;
+                    // Account for per-building exclusions: fab strip applies only to
+                    // the non-excluded share of this cost head's hours.
+                    let excludedShareHrsAfterForeman = 0;
+                    if (isEnabled && excludedCodeKeys.size > 0) {
+                      const foremanRatio = originalHours > 0 ? hoursAfterForeman / originalHours : 1;
+                      group.fullCodes.forEach(fc => {
+                        if (excludedCodeKeys.has(fc)) {
+                          excludedShareHrsAfterForeman += (laborSummary[fc]?.fieldHours || 0) * foremanRatio;
+                        }
+                      });
+                    }
+                    const fabbableHours = hoursAfterForeman - excludedShareHrsAfterForeman;
+                    const fabHours = isEnabled ? fabbableHours * (fabPercent / 100) : 0;
                     const finalFieldHours = hoursAfterForeman - fabHours;
+                    const keptHrs = isEnabled
+                      ? excludedShareHrsAfterForeman * (fabPercent / 100)
+                      : 0;
 
                     return (
                       <TableRow key={costHead} className={isEnabled ? 'bg-purple-50/30 dark:bg-purple-950/30' : ''}>
@@ -3035,7 +3174,16 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
                           )}
                         </TableCell>
                         <TableCell className="text-right font-mono text-purple-600 bg-purple-50/50 dark:bg-purple-950/50">
-                          {isEnabled ? `-${fabHours.toFixed(1)}` : '—'}
+                          {isEnabled ? (
+                            <>
+                              -{fabHours.toFixed(1)}
+                              {keptHrs > 0.05 && (
+                                <div className="text-[10px] text-blue-600 dark:text-blue-400 font-normal">
+                                  +{keptHrs.toFixed(1)} hrs kept as field
+                                </div>
+                              )}
+                            </>
+                          ) : '—'}
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-green-600">
                           {finalFieldHours.toFixed(1)}
