@@ -21,7 +21,7 @@ const FAB_SECTION = 'FP';
 const FAB_ACTIVITY = '0000';
 
 const FALLBACK_SECTIONS = new Set(['CS', 'UG', 'RF', 'AG']);
-const FALLBACK_ACTIVITY_CODES = new Set(['00CS', '00UG', '00RF', '00AG']);
+export const FALLBACK_ACTIVITY_CODES = new Set(['00CS', '00UG', '00RF', '00AG']);
 
 const FAB_COST_HEAD_DESCRIPTIONS: Record<string, string> = {
   COPR: 'FABRICATION - COPPER',
@@ -77,6 +77,13 @@ export interface ComputeAdjustedLaborSummaryInput {
   customFabCodes: Record<string, string>;
   shopRate: number;
   budgetRate: number;
+  /**
+   * Optional set of full-code keys whose fab strip should be skipped. The panel
+   * computes this from the user's "field-build buildings" selection, applying
+   * the mode-aware building parse exactly once. The helper stays format-
+   * agnostic — empty/undefined set ≡ current behavior, byte-identical.
+   */
+  excludedCodeKeys?: Set<string>;
 }
 
 export interface ComputeAdjustedLaborSummaryResult {
