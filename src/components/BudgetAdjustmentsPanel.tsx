@@ -3007,6 +3007,63 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       </Card>
 
       {/* Fabrication Hours Strip */}
+      {/* Field-Build Buildings — exclude specific buildings from fab strips */}
+      {availableBuildings.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Wrench className="h-5 w-5 text-blue-500" />
+              Field-Build Buildings (No Fab Strip)
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>
+                      Toggle a building to keep its hours in the field budget instead of routing
+                      to FP fab codes — even when that cost head has a global fab strip enabled.
+                      Use when the foreman confirms specific buildings will be field-built.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {availableBuildings.map(bid => {
+                const isExcluded = excludedSections.includes(bid);
+                return (
+                  <button
+                    key={bid}
+                    type="button"
+                    onClick={() =>
+                      setExcludedSections(prev =>
+                        prev.includes(bid) ? prev.filter(s => s !== bid) : [...prev, bid]
+                      )
+                    }
+                    className={cn(
+                      'px-3 py-1.5 rounded-md font-mono text-sm border transition-colors',
+                      isExcluded
+                        ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+                        : 'bg-background border-border hover:bg-muted'
+                    )}
+                  >
+                    {bid}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              {excludedSections.length === 0
+                ? 'All buildings fabricated normally. Toggle a building to exclude it from every fab strip.'
+                : `${excludedSections.length} building${excludedSections.length === 1 ? '' : 's'} excluded — hours stay in the field budget. Total project cost is unchanged when GC FLD CONT has cushion to absorb the shift.`}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
