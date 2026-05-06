@@ -2392,6 +2392,49 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     const summaryFabHours = Object.values(summary)
       .filter((i: any) => i?.type === 'fab')
       .reduce((s, i: any) => s + (i?.hours ?? 0), 0);
+
+    if (import.meta.env.DEV) {
+      // Per-entry: catches mismatched hours×rate vs dollars
+      const offenders: any[] = [];
+      Object.entries(summary).forEach(([code, e]: [string, any]) => {
+        const hours = e?.hours ?? 0;
+        const rate = e?.rate ?? 0;
+        const dollars = e?.dollars ?? 0;
+        const expected = hours * rate;
+        if (Math.abs(expected - dollars) > 0.5) {
+          offenders.push({ code, hours, rate, expected, actual: dollars, type: e?.type });
+        }
+      });
+      if (offenders.length) {
+        // eslint-disable-next-line no-console
+        console.warn('[hours/dollars decoupled]', {
+          count: offenders.length,
+          totalHourGap: offenders.reduce((s, o) => s + o.hours, 0),
+          totalDollarGap: offenders.reduce((s, o) => s + (o.expected - o.actual), 0),
+          entries: offenders,
+        });
+      }
+
+      // Aggregate: catches the rate=0 + dollars=0 ghost case the per-entry
+      // check is blind to. Hamilton HVAC expected to fire here at ~$26,500 gap.
+      const sumHours = Object.values(summary).reduce((s, e: any) => s + (e?.hours ?? 0), 0);
+      const sumDollars = Object.values(summary).reduce((s, e: any) => s + (e?.dollars ?? 0), 0);
+      const sumExpected = Object.values(summary).reduce(
+        (s, e: any) => s + (e?.hours ?? 0) * (e?.rate ?? 0), 0
+      );
+      if (Math.abs(sumExpected - sumDollars) > 1) {
+        // eslint-disable-next-line no-console
+        console.warn('[summary aggregate $ gap]', {
+          sumHours,
+          sumDollars,
+          sumExpected,
+          gap: sumExpected - sumDollars,
+          offendersFound: offenders.length,
+          offenderHourTotal: offenders.reduce((s, o) => s + o.hours, 0),
+        });
+      }
+    }
+
     return {
       jobsiteZipCode,
       taxRate: taxInfo.rate,
