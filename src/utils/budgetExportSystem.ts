@@ -2240,10 +2240,18 @@ export function computeGcFldCont(ba: BudgetAdjustments | null | undefined): numb
     (ba.bidRates?.shiftTime?.hours || 0) +
     (ba.bidRates?.overtime?.hours || 0) +
     (ba.bidRates?.doubleTime?.hours || 0);
+  const bidShopHours = ba.bidRates?.shop?.hours || 0;
   const budgetFieldHours = ba.totalFieldHours || 0;
+  const budgetFabHours = ba.totalFabHours || 0;
   const foremanHours = ba.foremanBonusHours || 0;
   const budgetRateVal = ba.budgetRate || 0;
-  const effectiveBudgetFieldHours = budgetFieldHours + foremanHours;
+  // Fab hours that exceed the shop bid bucket originated as field hours in the
+  // bid before the fab strip reclassified them. Credit that spillover against
+  // the field side so we don't overstate the unbudgeted-field-volume gap.
+  // When bidShopHours fully covers budgetFabHours, this term is 0 and
+  // GC 0FAB CONT handles any shop-side imbalance instead — no double counting.
+  const fabSpillIntoField = Math.max(0, budgetFabHours - bidShopHours);
+  const effectiveBudgetFieldHours = budgetFieldHours + foremanHours + fabSpillIntoField;
   if (bidFieldHours <= 0 || effectiveBudgetFieldHours <= 0 || budgetRateVal <= 0) return 0;
   const amount = (bidFieldHours - effectiveBudgetFieldHours) * budgetRateVal;
   return amount > 0 ? Math.round(amount * 100) / 100 : 0;

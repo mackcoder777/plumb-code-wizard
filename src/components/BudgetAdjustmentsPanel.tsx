@@ -2381,6 +2381,17 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
   // Guarantees the readout shows exactly what the export receives.
   const currentAdjustments = useMemo<BudgetAdjustments>(() => {
     const summary = finalLaborSummary ?? calculations.adjustedLaborSummary;
+    // CRITICAL: derive field/fab totals from the SAME summary that feeds the
+    // labor breakdown. Using calculations.* (pre-merge) here while the labor
+    // section uses summary (post-merge) breaks the reconciliation identity by
+    // exactly the merge drift × budgetRate. Match the type-split convention
+    // used by the bidReconciliation readout below: anything not 'fab' is field.
+    const summaryFieldHours = Object.values(summary)
+      .filter((i: any) => i?.type !== 'fab')
+      .reduce((s, i: any) => s + (i?.hours ?? 0), 0);
+    const summaryFabHours = Object.values(summary)
+      .filter((i: any) => i?.type === 'fab')
+      .reduce((s, i: any) => s + (i?.hours ?? 0), 0);
     return {
       jobsiteZipCode,
       taxRate: taxInfo.rate,
@@ -2398,8 +2409,8 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       // The field is not renamed to avoid breaking downstream references, but consumers should be
       // aware this reflects post-merge (final) values, not just pre-merge adjusted values.
       adjustedLaborSummary: summary,
-      totalFieldHours: calculations.totalFieldHours,
-      totalFabHours: calculations.totalFabHours,
+      totalFieldHours: summaryFieldHours,
+      totalFabHours: summaryFabHours,
       totalLaborDollars: Object.values(summary).reduce((s, i) => s + (i.dollars ?? 0), 0),
       totalMaterialWithTax: calculations.totalMaterialWithTax,
       totalMaterialPreTax: calculations.totalMaterialPreTax,
@@ -2472,6 +2483,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
       if (Math.abs(lineSum - exportTotal) > 1) {
         // eslint-disable-next-line no-console
         console.warn('[BidReconciliation] Breakdown drift', { lineSum, exportTotal, diff: lineSum - exportTotal });
+      }
+      // Reconciliation identity: when LRCN is on and there is a field bid,
+      // GC 0FLD CONT is sized to absorb the bid-vs-budget volume gap and the
+      // export total should land within rounding of the bid total. Threshold
+      // is $50 to ignore Math.round(amount * 100)/100 artifacts in the
+      // contingency helpers compounding against unrounded line items on
+      // multi-million-dollar totals; anything larger is a logic regression.
+      if (lrcnEnabled && hasFieldBid && Math.abs(delta) >= 50) {
+        // eslint-disable-next-line no-console
+        console.warn('[BidReconciliation] Identity drift — GC 0FLD CONT not absorbing the gap', {
+          bidTotal, exportTotal, delta, gcFldCont, gcFabCont,
+        });
       }
     }
 
