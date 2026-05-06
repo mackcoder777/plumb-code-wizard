@@ -2484,6 +2484,18 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         // eslint-disable-next-line no-console
         console.warn('[BidReconciliation] Breakdown drift', { lineSum, exportTotal, diff: lineSum - exportTotal });
       }
+      // Reconciliation identity: when LRCN is on and there is a field bid,
+      // GC 0FLD CONT is sized to absorb the bid-vs-budget volume gap and the
+      // export total should land within rounding of the bid total. Threshold
+      // is $50 to ignore Math.round(amount * 100)/100 artifacts in the
+      // contingency helpers compounding against unrounded line items on
+      // multi-million-dollar totals; anything larger is a logic regression.
+      if (lrcnEnabled && hasFieldBid && Math.abs(delta) >= 50) {
+        // eslint-disable-next-line no-console
+        console.warn('[BidReconciliation] Identity drift — GC 0FLD CONT not absorbing the gap', {
+          bidTotal, exportTotal, delta, gcFldCont, gcFabCont,
+        });
+      }
     }
 
     return { budgetField, budgetFab, budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, contingencies, exportTotal, bidTotal, delta, hasFieldBid };
