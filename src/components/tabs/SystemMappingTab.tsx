@@ -116,13 +116,28 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
 
-  // Track unapplied changes
+  // Track unapplied changes against ACTUAL item state (not a bookkeeping timestamp).
+  // A system is "unapplied" only when it has a mapped code and at least one of its
+  // items carries a different (or empty) cost-head segment. This self-heals after the
+  // background auto-apply pass and can never latch on for a fully-coded project.
   const hasUnappliedChanges = useMemo(() => {
-    return Object.keys(mappings).some(system => {
-      const applied = appliedSystems[system];
-      return mappings[system]?.laborCode && applied?.appliedLaborCode !== mappings[system]?.laborCode;
-    });
-  }, [mappings, appliedSystems]);
+    const mappedSystems = Object.keys(mappings).filter(s => mappings[s]?.laborCode);
+    if (mappedSystems.length === 0) return false;
+
+    // Per system: does every item already carry the mapped cost head?
+    const mismatch = new Set<string>();
+    for (const item of data) {
+      const systemKey = normalizeSystemKey(item.system);
+      const mapped = mappings[systemKey]?.laborCode;
+      if (!mapped) continue;
+      if (mismatch.has(systemKey)) continue;
+      const code = (item.costCode || '').trim();
+      const head = code ? code.split(/\s+/).pop() : '';
+      if (head !== mapped) mismatch.add(systemKey);
+    }
+
+    return mismatch.size > 0;
+  }, [mappings, data]);
 
   useEffect(() => {
     onUnappliedChangesUpdate?.(hasUnappliedChanges);
