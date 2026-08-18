@@ -1,124 +1,35 @@
-## Diagnosis confirmed
+# Fix the false "unapplied system mapping changes" banner
 
-Your read is exactly right. I traced both suspect paths against `HourReconciliationBar.tsx:30` (the `entry.type === 'field'` filter) and `laborSummaryComputation.ts:58` (the `SummaryEntry.type` field declaration), and there are exactly two places where new entries get inserted into `result` via a bare object literal — both omit `type`. Every other `result[k] = { ... }` site either spreads an existing entry (which carries `type` forward) or just updates an existing entry's hours/dollars.
+## What's actually happening
 
-**The 35.4h gap is structural and surgical: untyped entries silently drop out of `exportFieldHours`.**
+The banner is not driven by whether systems are mapped. It compares two pieces of state:
 
-### Site 1 — Cross-section reassign create-new-key (`src/utils/laborSummaryComputation.ts:759-767`)
+- `mappings[system].laborCode` — the code currently shown in the dropdown
+- `appliedSystems[system].appliedLaborCode` — the code that was in effect the last time items were re-coded
 
-This is the MZ path. Fires when `reassign_to_sec` is set and no existing target key matches:
+If those differ for any system, the banner appears — even when every system has a code and every item already carries that code.
 
-```ts
-result[newTargetKey] = {
-  code: newTargetKey,
-  sec: targetSec,
-  activityCode: targetAct,
-  head: effectiveTargetHead,
-  hours: sourceHours,
-  dollars: sourceDollars,
-  description: `Reassigned from ${head}`,
-  // ❌ no `type` field
-};
-```
+Confirmed by reading `src/components/tabs/SystemMappingTab.tsx`:
 
-When 1M + 2M combined to MZ on Pasadena, this path created `MZ 0000 SNWV`, `MZ 0000 PIDV`, etc. — all without `type`. They live in `finalLaborSummary` with the right hours, but the reconciliation strip can't see them. That's the 35.4h.
+- `hasUnappliedChanges` (line ~120) is that comparison.
+- `appliedSystems` is only written in three places: DB load (line ~246), Apply All (line ~788), Apply single system (line ~885).
+- Every other path that changes a code — dropdown change (`handleMappingChange`, ~383), bulk assign (~470), accept suggestion (~926), apply a smart suggestion (~553) — writes `mappings` and saves to the database, but never touches `appliedSystems`. So the banner latches on immediately and never clears until the user presses Apply, regardless of whether items were already re-coded by the background auto-apply pass in `Index.tsx`.
 
-### Site 2 — Stage 3.5 redistribute create-target-key (`src/utils/laborSummaryComputation.ts:856-864`)
-
-Same class of bug, inert today because Pasadena has 0 redistributions, but it'll bite the moment a PM uses Step 3 Redistribute:
-
-```ts
-result[targetKey] = {
-  code: targetKey,
-  sec: red.sec,
-  activityCode: red.act,
-  head: red.targetHead,
-  hours: actualMoved,
-  dollars: actualDollars,
-  description: `Redistributed from ${red.sourceHead}`,
-  // ❌ no `type` field
-};
-```
-
-The comment on line 854 even says "same description style as the cross-section reassign create-new path" — confirms these two sites were authored as a pair and drift together.
-
-### Why other paths are safe
-
-I audited all 21 `result[...] = {` sites:
-
-- **Spreads from existing entries** (`...item`, `...result[k]`, `...fbEntry`, `...group[0]`, `...source`) — carry `type` forward. Safe.
-- **Hours/dollars updates on existing keys** — `type` already set. Safe.
-- **Only the two flagged sites** build a new entry from scratch with field-by-field assignment. Both miss `type`.
+Database check across all projects: every `system_mappings` row already has `applied_at` set (0 rows unapplied), which confirms the persisted state is fine — the banner is purely a client-side staleness artifact.
 
 ## The fix
 
-### File 1: `src/utils/laborSummaryComputation.ts`
+1. **Clear the stale flag when the code round-trips to the database.** In `handleMappingChange`, `handleBulkAssign`, `handleAcceptSuggestion`, and `applySystemSuggestions`, do not mark applied — instead recompute the banner against real item state (below), so no path can leave the flag stuck.
 
-Add `type: 'field' as const,` (or just `type: 'field',` since the surrounding object satisfies the discriminated union) to both new-entry literals:
+2. **Base the banner on actual item coding, not on a bookkeeping timestamp.** Replace the `appliedLaborCode` comparison with a check over the loaded estimate items: a system counts as unapplied only when at least one item of that system has a `costCode` whose cost-head segment differs from the mapped code (or is empty). This is derived from data that already exists in the component (`data` prop), so it self-heals after the background auto-apply pass and cannot go stale.
 
-**Line 759-767** — cross-section reassign create-new-key:
-```ts
-result[newTargetKey] = {
-  code: newTargetKey,
-  sec: targetSec,
-  activityCode: targetAct,
-  head: effectiveTargetHead,
-  hours: sourceHours,
-  dollars: sourceDollars,
-  type: 'field',                          // ← add
-  description: `Reassigned from ${head}`,
-};
-```
+3. **Keep the guard rails.** The unload warning and the tab-leave prompt in `Index.tsx` continue to use the same value, so they stay accurate rather than firing on a fully-coded project.
 
-**Line 856-864** — Stage 3.5 redistribute create-target-key:
-```ts
-result[targetKey] = {
-  code: targetKey,
-  sec: red.sec,
-  activityCode: red.act,
-  head: red.targetHead,
-  hours: actualMoved,
-  dollars: actualDollars,
-  type: 'field',                          // ← add
-  description: `Redistributed from ${red.sourceHead}`,
-};
-```
+4. **Unmapped is a separate signal.** The "1 unmapped" system (Soft Cold Wtr in the screenshot) stays a normal unmapped indicator and must never trigger the "unapplied changes" banner.
 
-That's the entire reconciliation fix. Two added lines.
+## Technical notes
 
-### File 2: `src/components/tabs/CodeCleanupTab/index.tsx`
-
-Subtitle copy fix at line 156. Current text says the Step 2 list is "pinned from initial detection," but after the recent Step 2 leak fix it actually iterates `liveDetection`. Realign copy to truth:
-
-```tsx
-// before
-subtitle="List is pinned from initial detection; per-card hour previews update as Step 1 selections come in."
-// after
-subtitle="Per-card hour previews and remaining heads update as Step 1 selections come in."
-```
-
-No behavior change; just stops misleading the reader of the source.
-
-## Verification
-
-User runs the lightweight check on Pasadena — no full re-run of the six scenarios needed:
-
-1. Reload the page (clears any cached state).
-2. Re-apply the same scenario that produced 35.4h missing (combine 1M + 2M into MZ, custom on PIDV, keep distributed on SNWV/SLVS, Apply All).
-3. Watch the **Hour Reconciliation strip** at the top of Pasadena.
-
-**Expected result:** strip drops to **0h missing** (or under 1h of rounding noise).
-
-If the strip still shows 35.4h, the type fix didn't reach the path that produced those hours — paste back the breakdown and we triage. If it shows ~0h, **Phase 2's core flow is shipped end-to-end** and the remaining items (Step 2/3 inline UI polish, audit drawer, old-surface deletion) are punch-list, not blockers.
-
-## Scope discipline
-
-Only these two files change. Specifically NOT touching:
-
-- `applyPendingDecisions` — no behavior change needed.
-- Initial pessimistic detection — stays pessimistic by design.
-- Step 3 row union logic — already shipped and verified.
-- The reconciliation bar filter itself — `entry.type === 'field'` is correct; the bug is upstream entries not declaring their type.
-- Any merge/reassign control flow — the fix is one extra field in two object literals.
-
-Approve and I'll switch to default mode and ship the two-file patch.
+- Files touched: `src/components/tabs/SystemMappingTab.tsx` only.
+- The cost-head segment is the last space-delimited token of `costCode` (`SEC ACT HEAD`); compare that, not the full code, so section/activity re-resolution doesn't produce false positives.
+- Systems with zero items are ignored in the comparison.
+- No schema change, no change to how codes are assigned — PM authority rule untouched, nothing is auto-assigned.
