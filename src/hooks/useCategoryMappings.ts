@@ -2,6 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMemo } from 'react';
 import { EstimateItem } from '@/types/estimate';
+import {
+  CategoryMaterialDescOverride,
+  getLaborCodeFromMaterialDesc,
+} from '@/hooks/useCategoryMaterialDescOverrides';
 
 // Special value indicating category should use system mapping
 export const SYSTEM_MAPPING_VALUE = '__SYSTEM__';
@@ -255,21 +259,19 @@ export function resolveExpectedLaborHead(
   item: Pick<EstimateItem, 'system' | 'reportCat' | 'materialDesc'>,
   systemMappings: SystemLaborMappings,
   categoryMappings: CategoryLaborMapping[],
-  materialDescOverrides: Array<{ category_name: string; material_description: string; labor_code: string }>,
+  materialDescOverrides: CategoryMaterialDescOverride[],
   options: { includeSystem?: boolean } = {}
 ): ResolvedLaborHead {
   const { includeSystem = true } = options;
 
   // Tier 0
-  const categoryName = item.reportCat || '';
-  const materialDescription = item.materialDesc || '';
-  if (categoryName && materialDescription && materialDescOverrides.length > 0) {
-    const match = materialDescOverrides.find(
-      o => o.category_name === categoryName && o.material_description === materialDescription
-    );
-    if (match && match.labor_code !== '__CATEGORY__') {
-      return { head: match.labor_code, source: 'material-desc' };
-    }
+  const materialDescCode = getLaborCodeFromMaterialDesc(
+    item.reportCat || '',
+    item.materialDesc || '',
+    materialDescOverrides
+  );
+  if (materialDescCode) {
+    return { head: materialDescCode, source: 'material-desc' };
   }
 
   // Tier 1
