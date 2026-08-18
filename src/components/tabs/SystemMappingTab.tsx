@@ -126,12 +126,10 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
 
     // Per system: does every item already carry the mapped cost head?
     const mismatch = new Set<string>();
-    const seen = new Set<string>();
     for (const item of data) {
       const systemKey = normalizeSystemKey(item.system);
       const mapped = mappings[systemKey]?.laborCode;
       if (!mapped) continue;
-      seen.add(systemKey);
       if (mismatch.has(systemKey)) continue;
       const code = (item.costCode || '').trim();
       const head = code ? code.split(/\s+/).pop() : '';
