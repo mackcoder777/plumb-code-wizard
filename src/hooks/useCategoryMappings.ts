@@ -203,3 +203,88 @@ export function getLaborCodeFromCategory(
   
   return null;
 }
+
+// ============================================================================
+// Shared labor-head resolution (single source of truth)
+//
+// Every consumer of the assignment hierarchy MUST use these exports:
+//   - SystemMappingTab: applyMappings, applySystemMapping,
+//     handleApplySectionCodes, and the hasUnappliedChanges banner memo.
+// Defining a local copy of this chain inside a component is the drift these
+// exports exist to prevent (same rule as computeGcFabCont / computeGcFldCont).
+//
+// PM AUTHORITY: this resolver has NO hardcoded defaults. Every tier reads
+// PM-authored, project-scoped database rows. It returns null when nothing is
+// mapped — it never guesses a cost head.
+// ============================================================================
+
+export const normalizeSystemKey = (system: string | null | undefined): string =>
+  (system || 'Unknown').toLowerCase().trim();
+
+export type SystemLaborMappings = Record<string, { laborCode?: string }>;
+
+export type LaborHeadSource = 'material-desc' | 'category' | 'system';
+
+export interface ResolvedLaborHead {
+  head: string | null;
+  source: LaborHeadSource | null;
+}
+
+/**
+ * Extract the cost-head token from a full cost code.
+ * Handles "SEC ACT HEAD" and a bare "HEAD". Returns null (never '') for an
+ * uncoded item so callers can distinguish "no code" from "wrong code".
+ */
+export function parseCostHead(costCode: string | null | undefined): string | null {
+  const trimmed = (costCode || '').trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(/\s+/);
+  return parts[parts.length - 1] || null;
+}
+
+/**
+ * Resolve the labor cost head an item SHOULD carry, following the hierarchy:
+ *   Tier 0  material description override (within category)
+ *   Tier 1  category labor mapping
+ *   Tier 2  system mapping                (skipped when includeSystem = false)
+ *
+ * Pure. No item-type tier here — that tier is conditional on the item having no
+ * code at all and stays at the call site.
+ */
+export function resolveExpectedLaborHead(
+  item: Pick<EstimateItem, 'system' | 'reportCat' | 'materialDesc'>,
+  systemMappings: SystemLaborMappings,
+  categoryMappings: CategoryLaborMapping[],
+  materialDescOverrides: Array<{ category_name: string; material_description: string; labor_code: string }>,
+  options: { includeSystem?: boolean } = {}
+): ResolvedLaborHead {
+  const { includeSystem = true } = options;
+
+  // Tier 0
+  const categoryName = item.reportCat || '';
+  const materialDescription = item.materialDesc || '';
+  if (categoryName && materialDescription && materialDescOverrides.length > 0) {
+    const match = materialDescOverrides.find(
+      o => o.category_name === categoryName && o.material_description === materialDescription
+    );
+    if (match && match.labor_code !== '__CATEGORY__') {
+      return { head: match.labor_code, source: 'material-desc' };
+    }
+  }
+
+  // Tier 1
+  const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
+  if (categoryLaborCode) {
+    return { head: categoryLaborCode, source: 'category' };
+  }
+
+  // Tier 2
+  if (includeSystem) {
+    const systemLaborCode = systemMappings[normalizeSystemKey(item.system)]?.laborCode;
+    if (systemLaborCode) {
+      return { head: systemLaborCode, source: 'system' };
+    }
+  }
+
+  return { head: null, source: null };
+}
