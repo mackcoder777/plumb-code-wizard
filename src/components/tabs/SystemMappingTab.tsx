@@ -731,46 +731,25 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let changed = false;
       let assignmentSource: 'item-type-override' | 'category' | 'system' | 'itemType' | null = null;
       
-      // Tier 0: Material description override within category (highest priority)
-      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
-      if (materialDescCode) {
-        const existingParts = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== materialDescCode) {
-          costHead = materialDescCode;
+      // Tiers 0-2 come from the shared resolver (useCategoryMappings.ts) so this
+      // path can never drift from the banner or the other apply handlers.
+      const expected = resolveExpectedLaborHead(item, mappings, categoryMappings, materialDescOverrides);
+      if (expected.head) {
+        const existingCostHead = parseCostHead(item.costCode) ?? '';
+        if (existingCostHead !== expected.head) {
+          costHead = expected.head;
           changed = true;
-          assignmentSource = 'item-type-override';
+          assignmentSource =
+            expected.source === 'material-desc' ? 'item-type-override'
+            : expected.source === 'category' ? 'category'
+            : 'system';
         }
       }
-      // Tier 1: Check category mapping (highest priority after item-type override)
-      // Category mappings ALWAYS override existing codes (they take precedence)
-      else {
-        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-        if (categoryLaborCode) {
-          const existingParts = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-          if (existingCostHead !== categoryLaborCode) {
-            costHead = categoryLaborCode;
-            changed = true;
-            assignmentSource = 'category';
-          }
-        }
-        // Tier 2: Fall back to system mapping
-        else if (systemMapping?.laborCode) {
-          const existingParts = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-          if (existingCostHead !== systemMapping.laborCode) {
-            costHead = systemMapping.laborCode;
-            changed = true;
-            assignmentSource = 'system';
-          }
-        }
-        // Tier 3: Fall back to item type mapping (only for items without codes)
-        else if (itemTypeMapping?.laborCode && !item.costCode) {
-          costHead = itemTypeMapping.laborCode;
-          changed = true;
-          assignmentSource = 'itemType';
-        }
+      // Tier 3: Fall back to item type mapping (only for items without codes)
+      else if (itemTypeMapping?.laborCode && !item.costCode) {
+        costHead = itemTypeMapping.laborCode;
+        changed = true;
+        assignmentSource = 'itemType';
       }
       
       if (changed && costHead) {
