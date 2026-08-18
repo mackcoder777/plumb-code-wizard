@@ -6,7 +6,7 @@ import { useLaborCodes } from '@/hooks/useCostCodes';
 import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping, useBatchSaveMappings } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatterns } from '@/hooks/useMappingPatterns';
-import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping } from '@/hooks/useCategoryMappings';
+import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping, resolveExpectedLaborHead, parseCostHead, normalizeSystemKey } from '@/hooks/useCategoryMappings';
 import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -100,8 +100,6 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
   height: size,
   transform: `translateY(${start}px)`,
 });
-
-const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
 
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [], codeFormatMode = 'standard', tradePrefix }) => {
   const [searchTerm, setSearchTerm] = useState('');
