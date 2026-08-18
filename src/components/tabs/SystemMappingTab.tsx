@@ -822,39 +822,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     let itemsAffected = 0;
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
-      
-      // Tier 0: Material description override within category
-      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
-      
-      // Determine the cost head to use
-      let costHead: string | undefined;
-      
-      if (materialDescCode) {
-        const existingParts = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== materialDescCode) {
-          costHead = materialDescCode;
-        }
-      } else {
-        // Check if category has a specific mapping (not deferred to system)
-        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-        
-        if (categoryLaborCode) {
-          // Category mapping takes priority and can OVERRIDE existing codes
-          const existingParts = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-          if (existingCostHead !== categoryLaborCode) {
-            costHead = categoryLaborCode;
-          }
-        } else if (systemMapping.laborCode) {
-          const existingParts2 = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead2 = existingParts2.length >= 1 ? existingParts2[existingParts2.length - 1] : '';
-          if (existingCostHead2 !== systemMapping.laborCode) {
-            costHead = systemMapping.laborCode;
-          }
-        }
-      }
-      
+
+      // Shared resolver (useCategoryMappings.ts) — Tier 0 material desc, Tier 1
+      // category, Tier 2 system. No local copy of the hierarchy.
+      const expected = resolveExpectedLaborHead(item, mappings, categoryMappings, materialDescOverrides);
+      const existingCostHead = parseCostHead(item.costCode) ?? '';
+      const costHead = expected.head && existingCostHead !== expected.head ? expected.head : undefined;
+
       if (costHead) {
         itemsAffected++;
         const fullCode = buildFullLaborCode(costHead, { floor: item.floor || '', drawing: item.drawing, zone: item.zone, system: item.system });
