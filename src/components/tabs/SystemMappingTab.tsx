@@ -114,44 +114,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
 
-  // Track unapplied changes against ACTUAL item state (not a bookkeeping timestamp).
-  // A system is "unapplied" only when it has a mapped code and at least one of its
-  // items carries a different (or empty) cost-head segment. This self-heals after the
-  // background auto-apply pass and can never latch on for a fully-coded project.
-  const hasUnappliedChanges = useMemo(() => {
-    const mappedSystems = Object.keys(mappings).filter(s => mappings[s]?.laborCode);
-    if (mappedSystems.length === 0) return false;
-
-    // Per system: does every item already carry the mapped cost head?
-    const mismatch = new Set<string>();
-    for (const item of data) {
-      const systemKey = normalizeSystemKey(item.system);
-      const mapped = mappings[systemKey]?.laborCode;
-      if (!mapped) continue;
-      if (mismatch.has(systemKey)) continue;
-      const code = (item.costCode || '').trim();
-      const head = code ? code.split(/\s+/).pop() : '';
-      if (head !== mapped) mismatch.add(systemKey);
-    }
-
-    return mismatch.size > 0;
-  }, [mappings, data]);
-
-  useEffect(() => {
-    onUnappliedChangesUpdate?.(hasUnappliedChanges);
-  }, [hasUnappliedChanges, onUnappliedChangesUpdate]);
-
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (hasUnappliedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [hasUnappliedChanges]);
-
   const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set());
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   
@@ -202,7 +164,39 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   
   // Material description overrides within categories (highest priority)
   const { data: materialDescOverrides = [] } = useCategoryMaterialDescOverrides(projectId);
-  
+
+  // Track unapplied changes against ACTUAL item state (not a bookkeeping timestamp).
+  // Hierarchy-aware: an item is only "unapplied" when its current cost head differs
+  // from the head the shared resolver says it should carry, so PM-authored category
+  // and material-description overrides no longer read as system-mapping mismatches.
+  // Uncoded items are ignored here — they are surfaced by the mapping progress stats,
+  // not by this banner, so one uncodeable item can never latch it on.
+  const hasUnappliedChanges = useMemo(() => {
+    for (const item of data) {
+      const expected = resolveExpectedLaborHead(item, mappings, categoryMappings, materialDescOverrides);
+      if (!expected.head) continue;
+      const current = parseCostHead(item.costCode);
+      if (!current) continue;
+      if (current !== expected.head) return true;
+    }
+    return false;
+  }, [mappings, data, categoryMappings, materialDescOverrides]);
+
+  useEffect(() => {
+    onUnappliedChangesUpdate?.(hasUnappliedChanges);
+  }, [hasUnappliedChanges, onUnappliedChangesUpdate]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnappliedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnappliedChanges]);
+
   // Learning system hooks
   const { data: mappingPatterns = [] } = useMappingPatterns();
   const recordMappingPattern = useRecordMappingPattern();
