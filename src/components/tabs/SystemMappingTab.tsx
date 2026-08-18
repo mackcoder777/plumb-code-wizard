@@ -624,17 +624,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Format: "SECTION ACTIVITY COSTHEAD" or just "COSTHEAD"
       const parts = item.costCode.trim().split(/\s+/);
       let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
-      
-      // Tier 0: Material description override within category
-      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
-      if (materialDescCode) {
-        costHead = materialDescCode;
-      } else {
-        // Tier 1: Check if category has a specific mapping that should override the costHead
-        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-        if (categoryLaborCode) {
-          costHead = categoryLaborCode;
-        }
+      // NOTE (logged, not fixed here): the parse above treats the ACT segment as the
+      // cost head on a 2-token code, unlike every other site which always takes the
+      // last token. Left untouched so this PR produces byte-identical re-apply output.
+
+      // Tiers 0-1 only: this handler re-applies SECTION/ACTIVITY and must not
+      // re-assign heads from system mappings. includeSystem: false preserves that.
+      const overrideHead = resolveExpectedLaborHead(
+        item, mappings, categoryMappings, materialDescOverrides, { includeSystem: false }
+      ).head;
+      if (overrideHead) {
+        costHead = overrideHead;
       }
       
       // Get new section and activity from zone-aware resolver with cost-head override support
