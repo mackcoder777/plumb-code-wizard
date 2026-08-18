@@ -713,7 +713,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, materialDescOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides, onDataUpdate]);
+  }, [data, mappings, categoryMappings, materialDescOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
