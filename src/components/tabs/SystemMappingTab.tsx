@@ -6,8 +6,8 @@ import { useLaborCodes } from '@/hooks/useCostCodes';
 import { useSystemMappings, useUpdateAppliedStatus, useBatchUpdateAppliedStatus, useSaveMapping, useDeleteMapping, useBatchSaveMappings } from '@/hooks/useEstimateProjects';
 import { useSystemIndex } from '@/hooks/useSystemIndex';
 import { useMappingPatterns, useRecordMappingPattern, useBatchRecordMappingPatterns } from '@/hooks/useMappingPatterns';
-import { useCategoryMappings, getLaborCodeFromCategory, isUsingSystemMapping } from '@/hooks/useCategoryMappings';
-import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
+import { useCategoryMappings, isUsingSystemMapping, resolveExpectedLaborHead, parseCostHead, normalizeSystemKey } from '@/hooks/useCategoryMappings';
+import { useCategoryMaterialDescOverrides } from '@/hooks/useCategoryMaterialDescOverrides';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -101,8 +101,6 @@ const getVirtualRowStyle = (start: number, size: number): React.CSSProperties =>
   transform: `translateY(${start}px)`,
 });
 
-const normalizeSystemKey = (system: string | null | undefined) => (system || 'Unknown').toLowerCase().trim();
-
 export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onDataUpdate, onNavigateToEstimates, projectId, floorSectionMappings = [], systemActivityMappings = [], buildingSectionMappings = [], onBuildingMappingsChanged, importedCostCodes = [], datasetProfile, onProfileOverride, onReanalyzeProfile, onUnappliedChangesUpdate, costHeadActivityOverrides = [], suggestedBuildingMappings = [], codeFormatMode = 'standard', tradePrefix }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [mappings, setMappings] = useState<Record<string, { laborCode?: string }>>({});
@@ -115,44 +113,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   const [showAllSystems, setShowAllSystems] = useState(false);
   const [isAutoSuggestLoading, setIsAutoSuggestLoading] = useState(false);
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; appliedItemCount: number; appliedLaborCode?: string; isVerified?: boolean }>>({});
-
-  // Track unapplied changes against ACTUAL item state (not a bookkeeping timestamp).
-  // A system is "unapplied" only when it has a mapped code and at least one of its
-  // items carries a different (or empty) cost-head segment. This self-heals after the
-  // background auto-apply pass and can never latch on for a fully-coded project.
-  const hasUnappliedChanges = useMemo(() => {
-    const mappedSystems = Object.keys(mappings).filter(s => mappings[s]?.laborCode);
-    if (mappedSystems.length === 0) return false;
-
-    // Per system: does every item already carry the mapped cost head?
-    const mismatch = new Set<string>();
-    for (const item of data) {
-      const systemKey = normalizeSystemKey(item.system);
-      const mapped = mappings[systemKey]?.laborCode;
-      if (!mapped) continue;
-      if (mismatch.has(systemKey)) continue;
-      const code = (item.costCode || '').trim();
-      const head = code ? code.split(/\s+/).pop() : '';
-      if (head !== mapped) mismatch.add(systemKey);
-    }
-
-    return mismatch.size > 0;
-  }, [mappings, data]);
-
-  useEffect(() => {
-    onUnappliedChangesUpdate?.(hasUnappliedChanges);
-  }, [hasUnappliedChanges, onUnappliedChangesUpdate]);
-
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (hasUnappliedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [hasUnappliedChanges]);
 
   const [selectedSystems, setSelectedSystems] = useState<Set<string>>(new Set());
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
@@ -204,7 +164,39 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
   
   // Material description overrides within categories (highest priority)
   const { data: materialDescOverrides = [] } = useCategoryMaterialDescOverrides(projectId);
-  
+
+  // Track unapplied changes against ACTUAL item state (not a bookkeeping timestamp).
+  // Hierarchy-aware: an item is only "unapplied" when its current cost head differs
+  // from the head the shared resolver says it should carry, so PM-authored category
+  // and material-description overrides no longer read as system-mapping mismatches.
+  // Uncoded items are ignored here — they are surfaced by the mapping progress stats,
+  // not by this banner, so one uncodeable item can never latch it on.
+  const hasUnappliedChanges = useMemo(() => {
+    for (const item of data) {
+      const expected = resolveExpectedLaborHead(item, mappings, categoryMappings, materialDescOverrides);
+      if (!expected.head) continue;
+      const current = parseCostHead(item.costCode);
+      if (!current) continue;
+      if (current !== expected.head) return true;
+    }
+    return false;
+  }, [mappings, data, categoryMappings, materialDescOverrides]);
+
+  useEffect(() => {
+    onUnappliedChangesUpdate?.(hasUnappliedChanges);
+  }, [hasUnappliedChanges, onUnappliedChangesUpdate]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnappliedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnappliedChanges]);
+
   // Learning system hooks
   const { data: mappingPatterns = [] } = useMappingPatterns();
   const recordMappingPattern = useRecordMappingPattern();
@@ -632,17 +624,17 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       // Format: "SECTION ACTIVITY COSTHEAD" or just "COSTHEAD"
       const parts = item.costCode.trim().split(/\s+/);
       let costHead = parts.length >= 3 ? parts[parts.length - 1] : parts[0];
-      
-      // Tier 0: Material description override within category
-      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
-      if (materialDescCode) {
-        costHead = materialDescCode;
-      } else {
-        // Tier 1: Check if category has a specific mapping that should override the costHead
-        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-        if (categoryLaborCode) {
-          costHead = categoryLaborCode;
-        }
+      // NOTE (logged, not fixed here): the parse above treats the ACT segment as the
+      // cost head on a 2-token code, unlike every other site which always takes the
+      // last token. Left untouched so this PR produces byte-identical re-apply output.
+
+      // Tiers 0-1 only: this handler re-applies SECTION/ACTIVITY and must not
+      // re-assign heads from system mappings. includeSystem: false preserves that.
+      const overrideHead = resolveExpectedLaborHead(
+        item, mappings, categoryMappings, materialDescOverrides, { includeSystem: false }
+      ).head;
+      if (overrideHead) {
+        costHead = overrideHead;
       }
       
       // Get new section and activity from zone-aware resolver with cost-head override support
@@ -721,7 +713,7 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     });
     
     return itemsUpdated;
-  }, [data, categoryMappings, materialDescOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides, onDataUpdate]);
+  }, [data, mappings, categoryMappings, materialDescOverrides, floorSectionMappings, systemActivityMappings, buildingSectionMappings, datasetProfile, costHeadActivityOverrides, onDataUpdate]);
 
   const applyMappings = useCallback(() => {
     let itemsAffected = 0;
@@ -739,46 +731,25 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
       let changed = false;
       let assignmentSource: 'item-type-override' | 'category' | 'system' | 'itemType' | null = null;
       
-      // Tier 0: Material description override within category (highest priority)
-      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
-      if (materialDescCode) {
-        const existingParts = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== materialDescCode) {
-          costHead = materialDescCode;
+      // Tiers 0-2 come from the shared resolver (useCategoryMappings.ts) so this
+      // path can never drift from the banner or the other apply handlers.
+      const expected = resolveExpectedLaborHead(item, mappings, categoryMappings, materialDescOverrides);
+      if (expected.head) {
+        const existingCostHead = parseCostHead(item.costCode) ?? '';
+        if (existingCostHead !== expected.head) {
+          costHead = expected.head;
           changed = true;
-          assignmentSource = 'item-type-override';
+          assignmentSource =
+            expected.source === 'material-desc' ? 'item-type-override'
+            : expected.source === 'category' ? 'category'
+            : 'system';
         }
       }
-      // Tier 1: Check category mapping (highest priority after item-type override)
-      // Category mappings ALWAYS override existing codes (they take precedence)
-      else {
-        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-        if (categoryLaborCode) {
-          const existingParts = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-          if (existingCostHead !== categoryLaborCode) {
-            costHead = categoryLaborCode;
-            changed = true;
-            assignmentSource = 'category';
-          }
-        }
-        // Tier 2: Fall back to system mapping
-        else if (systemMapping?.laborCode) {
-          const existingParts = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-          if (existingCostHead !== systemMapping.laborCode) {
-            costHead = systemMapping.laborCode;
-            changed = true;
-            assignmentSource = 'system';
-          }
-        }
-        // Tier 3: Fall back to item type mapping (only for items without codes)
-        else if (itemTypeMapping?.laborCode && !item.costCode) {
-          costHead = itemTypeMapping.laborCode;
-          changed = true;
-          assignmentSource = 'itemType';
-        }
+      // Tier 3: Fall back to item type mapping (only for items without codes)
+      else if (itemTypeMapping?.laborCode && !item.costCode) {
+        costHead = itemTypeMapping.laborCode;
+        changed = true;
+        assignmentSource = 'itemType';
       }
       
       if (changed && costHead) {
@@ -851,39 +822,13 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     let itemsAffected = 0;
     const updatedData = data.map(item => {
       if (normalizeSystemKey(item.system) !== systemKey) return item;
-      
-      // Tier 0: Material description override within category
-      const materialDescCode = getLaborCodeFromMaterialDesc(item.reportCat || '', item.materialDesc || '', materialDescOverrides);
-      
-      // Determine the cost head to use
-      let costHead: string | undefined;
-      
-      if (materialDescCode) {
-        const existingParts = item.costCode?.trim().split(/\s+/) || [];
-        const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-        if (existingCostHead !== materialDescCode) {
-          costHead = materialDescCode;
-        }
-      } else {
-        // Check if category has a specific mapping (not deferred to system)
-        const categoryLaborCode = getLaborCodeFromCategory(item.reportCat, categoryMappings);
-        
-        if (categoryLaborCode) {
-          // Category mapping takes priority and can OVERRIDE existing codes
-          const existingParts = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead = existingParts.length >= 1 ? existingParts[existingParts.length - 1] : '';
-          if (existingCostHead !== categoryLaborCode) {
-            costHead = categoryLaborCode;
-          }
-        } else if (systemMapping.laborCode) {
-          const existingParts2 = item.costCode?.trim().split(/\s+/) || [];
-          const existingCostHead2 = existingParts2.length >= 1 ? existingParts2[existingParts2.length - 1] : '';
-          if (existingCostHead2 !== systemMapping.laborCode) {
-            costHead = systemMapping.laborCode;
-          }
-        }
-      }
-      
+
+      // Shared resolver (useCategoryMappings.ts) — Tier 0 material desc, Tier 1
+      // category, Tier 2 system. No local copy of the hierarchy.
+      const expected = resolveExpectedLaborHead(item, mappings, categoryMappings, materialDescOverrides);
+      const existingCostHead = parseCostHead(item.costCode) ?? '';
+      const costHead = expected.head && existingCostHead !== expected.head ? expected.head : undefined;
+
       if (costHead) {
         itemsAffected++;
         const fullCode = buildFullLaborCode(costHead, { floor: item.floor || '', drawing: item.drawing, zone: item.zone, system: item.system });
