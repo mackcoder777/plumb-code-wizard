@@ -47,6 +47,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+/**
+ * Surface the underlying Postgres/PostgREST failure in the toast.
+ * Every material writer swallowed this, which turned a one-line diagnosis
+ * (e.g. 22P02 invalid input syntax for type uuid) into a database audit.
+ */
+function dbErrorDetail(error: unknown): string {
+  const e = error as { code?: string; message?: string; details?: string } | null;
+  if (!e) return '';
+  const parts = [e.code, e.message || e.details].filter(Boolean);
+  return parts.length > 0 ? ` (${parts.join(': ')})` : '';
+}
+
+
+
 interface MaterialMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
@@ -684,7 +698,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         console.error('Failed to save material codes:', error);
         toast({
           title: 'Save Failed',
-          description: 'Changes applied locally but failed to save to database. Please try again.',
+          description: `Changes applied locally but failed to save to database. Please try again.${dbErrorDetail(error)}`,
           variant: 'destructive',
         });
       } finally {
@@ -762,7 +776,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         console.error('Failed to dismiss items:', error);
         toast({
           title: 'Operation Failed',
-          description: 'Failed to update items. Please try again.',
+          description: `Failed to update items. Please try again.${dbErrorDetail(error)}`,
           variant: 'destructive',
         });
       } finally {
@@ -817,7 +831,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         console.error('Failed to save material codes:', error);
         toast({
           title: 'Save Failed',
-          description: 'Changes applied locally but failed to save to database. Please try again.',
+          description: `Changes applied locally but failed to save to database. Please try again.${dbErrorDetail(error)}`,
           variant: 'destructive',
         });
       } finally {
@@ -899,7 +913,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         console.error('Failed to save material codes:', error);
         toast({
           title: 'Save Failed',
-          description: 'Changes applied locally but failed to save to database.',
+          description: `Changes applied locally but failed to save to database.${dbErrorDetail(error)}`,
           variant: 'destructive',
         });
       } finally {
@@ -998,7 +1012,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
       });
     } catch (error) {
       console.error('Smart assign failed:', error);
-      toast({ title: 'Smart Assign Failed', description: 'Please try again.', variant: 'destructive' });
+      toast({ title: 'Smart Assign Failed', description: `Please try again.${dbErrorDetail(error)}`, variant: 'destructive' });
     } finally {
       setIsSaving(false);
       setSmartAssignPreview(null);
@@ -1084,7 +1098,7 @@ export const MaterialMappingTab: React.FC<MaterialMappingTabProps> = ({
         console.error('Failed to save material codes:', error);
         toast({
           title: 'Save Failed',
-          description: 'Some changes may not have been saved. Please try again.',
+          description: `Some changes may not have been saved. Please try again.${dbErrorDetail(error)}`,
           variant: 'destructive',
         });
       } finally {

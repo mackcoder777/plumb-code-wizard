@@ -2727,7 +2727,11 @@ const EnhancedCostCodeManager = () => {
     
     // Save to database using the mutation
     const itemsToSave = transformedItems.map((item, index) => ({
-      row_number: index + 1,
+      // PR 2: 0-based, matching saveItemsToDb and the in-memory `id: index`
+      // stamped above. The 1-based base here wrote every row one off relative
+      // to the labor writer's numeric-id key.
+      row_number: index,
+
       drawing: item.drawing || '',
       system: item.system || '',
       floor: item.floor || '',
