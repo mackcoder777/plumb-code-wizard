@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useCallback } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,7 +34,10 @@ export function useBudgetSettings(projectId: string | undefined) {
   const queryClient = useQueryClient();
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const queryKey = ['budget-settings', projectId];
+  // Stable identity: an array literal here re-created saveSetting/getSetting
+  // every render, which re-fired the settings save effects in a loop.
+  const queryKey = useMemo(() => ['budget-settings', projectId], [projectId]);
+
 
   const { data: dbSettings, isLoading } = useQuery({
     queryKey,
