@@ -650,7 +650,7 @@ const EnhancedCostCodeManager = () => {
   const [bidLaborRateInput, setBidLaborRateInput] = useState('85'); // String for input
 
   // Database hooks for persistence
-  const activeProjectId = currentProject?.id || pendingProjectId;
+  const activeProjectId = currentProject?.id;
 
   // ── Consolidation thresholds: single owner ──────────────────────────
   // Lifted out of BudgetAdjustmentsPanel to fix dual-ownership stale-state bug
