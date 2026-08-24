@@ -2773,10 +2773,24 @@ const EnhancedCostCodeManager = () => {
       source_file: fileName
     }));
     
-    await saveEstimateItems.mutateAsync({
+    const result = await saveEstimateItems.mutateAsync({
       projectId: currentProject.id,
       items: itemsToSave
     });
+
+    // PR 3: same positional stamp on the Replace Data path — transformedItems[i]
+    // was written with row_number i (PR 2 unified the base).
+    const hydrated = stampIds(transformedItems, result.insertedIds);
+    if (hydrated) {
+      setEstimateData(hydrated);
+      setFilteredData(hydrated);
+    } else {
+      showNotification(
+        'Items saved but IDs not synced — reload the project before assigning material codes.',
+        'error'
+      );
+    }
+
     
     // Update project file name
     updateProject.mutate({
