@@ -47,6 +47,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+/**
+ * Surface the underlying Postgres/PostgREST failure in the toast.
+ * Every material writer swallowed this, which turned a one-line diagnosis
+ * (e.g. 22P02 invalid input syntax for type uuid) into a database audit.
+ */
+function dbErrorDetail(error: unknown): string {
+  const e = error as { code?: string; message?: string; details?: string } | null;
+  if (!e) return '';
+  const parts = [e.code, e.message || e.details].filter(Boolean);
+  return parts.length > 0 ? ` (${parts.join(': ')})` : '';
+}
+
+
+
 interface MaterialMappingTabProps {
   data: EstimateItem[];
   onDataUpdate: (data: EstimateItem[]) => void;
