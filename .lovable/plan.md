@@ -1,78 +1,37 @@
-# Fix the persistent "Unapplied System Mapping Changes" warning — with cited source
+# Material tab: "Save Failed" and nothing persists after a fresh upload
 
-## Answers to the five questions, from the files
+## What is actually happening (verified)
 
-### 1. There is only one latch, and it is the memo
+The other user (cnaik@murraycompany.com) created their own LBTP project (`bcfa2e36…`) at 20:53 today. Its 1,944 rows exist in the database, but **every single one has an empty `material_cost_code`** — no material assignment has ever landed. The owner check is not the problem: they own the project and RLS allows their updates.
 
-- `SystemMappingTab.tsx:123-140` defines `hasUnappliedChanges`.
-- `:142-144` pushes it up via `onUnappliedChangesUpdate`.
-- `Index.tsx:3404` binds that to `setHasUnappliedMappingChanges`.
-- `Index.tsx:550` gates the tab-leave modal on `hasUnappliedMappingChanges`; `SystemMappingTab.tsx:991` gates the amber banner on `hasUnappliedChanges`. Same value, one hop apart.
-- `beforeunload` (`:146-155`) uses the same value.
+The failure is an ID-type mismatch:
 
-`appliedSystems` no longer gates anything. Remaining uses:
-- write on DB load `:261-289`, write in Apply All `:820`, write in single-system apply `:900-907`
-- read only at `:329` (`appliedInfo` for the per-system card display) and `:331`
+- `FileUpload.tsx:210` gives every parsed row a **numeric** id (`0, 1, 2, …`) while the workbook is still in memory.
+- `useSaveEstimateItems` (`useEstimateProjects.ts:475+`) deletes and re-inserts the rows; the database generates **UUID** primary keys, and the in-memory rows are never refreshed with them.
+- Every material save path in `MaterialMappingTab.tsx` (group assign :666, bulk assign :807, item-level :880, smart assign :977, apply-suggestions :1064) calls `useBatchUpdateMaterialCostCodes`, which filters with `.in('id', batchIds)` (`useEstimateProjects.ts:776`).
 
-`Index.tsx:596` declares a **separate** `appliedSystems` state for its own UI; it is not the tab's. So fixing the memo fixes banner and modal together. My previous plan listed them as two verification outcomes — that was sloppy wording, not evidence of a second mechanism.
+So in a session that uploaded the file (rather than re-opening a saved project), the request sends `id=in.(0,1,2,…)` against a `uuid` column. Postgres rejects it, the mutation throws, and the tab shows "Save Failed — changes applied locally but failed to save to database." That is exactly the state in the screenshot, and it explains why jrubin never sees it: his sessions load projects from the database, so his rows already carry UUIDs.
 
-### 2. Where Apply All lives — your objection is correct, and worse than stated
+The same trap exists in `useDismissFromMaterialBudget` if it also filters by `id` — to be confirmed while patching.
 
-The priority chain is **already duplicated three times**, all component-local, none in a util:
+## The fix
 
-- `applyMappings` (Apply All) — `:726-844`, chain at `:742-781`
-- `applySystemMapping` (single system) — `:846-934`, chain at `:855-885`
-- `handleApplySectionCodes` (re-apply sections) — `:621-724`, chain at `:636-646`
+**1. Make the material batch writer key on `row_number`, not `id`.**
+`row_number` is already the project's stable identifier and is the mechanism the labor-side writer (`batchUpdateSilent`, `useEstimateProjects.ts:589+`) uses for exactly this reason. Change `useBatchUpdateMaterialCostCodes` to accept row numbers and filter with `.eq('project_id', …).in('row_number', …)`, keeping the 100-per-batch chunking.
 
-A fourth component-local copy for the banner is the bug reintroduced. This plan extracts one pure exported helper and routes all four through it.
+**2. Update the five call sites in `MaterialMappingTab.tsx`** to pass `item.rowNumber` instead of `String(item.id)`. Local state updates continue to key on `id` — only the database filter changes.
 
-### 3. Token parser
+**3. Apply the same treatment to `useDismissFromMaterialBudget`** if it filters by `id`, so the "dismiss from material budget" action does not fail in the same session.
 
-- Banner memo `:135`: `code.split(/\s+/).pop()`
-- Apply sites `:768-769`, `:862-863`, `:873-874`: `parts[parts.length - 1]`
-- `handleApplySectionCodes` `:633-634` differs: `parts.length >= 3 ? parts[last] : parts[0]` — it accepts a bare head with no SEC/ACT.
+**4. Surface the real error.** The catch blocks swallow the Postgres message. Include `error.message` in the destructive toast so the next database rejection is diagnosable from a screenshot instead of requiring a database audit.
 
-Last-token and `pop()` agree on `SEC ACT HEAD`. They disagree with the fourth site on a bare 1-token code, and all of them return `''` for an uncoded item. The helper below fixes the parse in one place with explicit handling for both shapes.
+## Verification
 
-### 4. PM authority — verified, these are DB rows
-
-`getLaborCodeFromCategory` is `useCategoryMappings.ts:183-205`; `getLaborCodeFromMaterialDesc` is `useCategoryMaterialDescOverrides.ts:130-143`. Both are pure lookups over query results with no fallback constants; both return `null` on sentinel (`__SYSTEM__`, `__CATEGORY__`).
-
-Rows come from `category_labor_mappings` (`useCategoryMappings.ts:35-52`) and `category_material_desc_overrides` (`useCategoryMaterialDescOverrides.ts:15-29`) filtered by `project_id`.
-
-Live LBTP rows, with authoring timestamps:
-
-```text
-Supports            -> HNGS   2026-08-18 23:09:28
-Fixtures            -> FNSH   2026-08-18 23:10:34
-Valves              -> VALV   2026-08-18 23:10:40
-Sleeves             -> SLVS   2026-08-18 23:10:45
-Drains/Cleanouts    -> DRNS   2026-08-18 23:10:48
-Plumbing Equipment  -> SEQP   2026-08-18 23:10:50
-PlumbingSpecialties -> SPCL   2026-08-18 23:11:03
-HVAC Equipment      -> SEQP   2026-08-18 23:11:13
-```
-
-You authored these minutes before the report. The HNGS recode is your `Supports -> HNGS` row, not a hardcoded rule. Nothing is being silenced except a comparison that ignores your own overrides.
-
-### 5. Consumers of appliedSystems outside the tab
-
-None. `Index.tsx:596` is a distinct state object; `Index.tsx:843-846` populates it from `system_mappings.applied_at` for Index's own display. No cross-component read of the tab's copy.
-
-## What to change
-
-1. **New pure helper, exported** — `src/utils/laborHeadResolution.ts`:
-   - `parseCostHead(costCode)` — returns the head token, handling `SEC ACT HEAD`, bare `HEAD`, and empty/uncoded (returns `null`, never `''`).
-   - `resolveExpectedHead(item, { materialDescOverrides, categoryMappings, systemMappings })` — Tier 0 material desc, Tier 1 category, Tier 2 system, else `null`. Pure, no defaults, no auto-assignment.
-
-2. **Route all four sites through it** — `applyMappings`, `applySystemMapping`, `handleApplySectionCodes`, and the banner memo. This removes the three existing duplicate chains rather than adding a fourth.
-
-3. **Rewrite the banner memo** (`:123-140`) as: unapplied iff some item's `parseCostHead(item.costCode)` differs from `resolveExpectedHead(item, ...)` where the expected head is non-null. Items with no resolvable head are ignored (they are the "unmapped" signal, counted separately).
-
-4. **Leave `appliedSystems` alone.** It stays display-only. No timestamp logic returns.
-
-5. **Verify on LBTP**: banner and modal both clear; 26/26 systems, 1944/1944 items still coded; `01 0000 HNGS` still present; pre/post-merge totals stay 4176.00 h with 0.000 drift. Then break it deliberately — change one system mapping without applying — and confirm the banner returns.
+- Confirm the writer chunking still holds for a 613-item group (7 requests).
+- Re-run a group assign in a fresh-upload session and confirm `material_cost_code` is non-empty in the database afterward.
+- Re-open an existing project (jrubin's LBTP, UUID ids) and confirm group assign, item-level assign, and Smart Assign all still persist — the row-number path must work for both session shapes.
+- Confirm no labor-side code path is touched and no cost-code assignment authority changes.
 
 ## Scope
 
-Files: new `src/utils/laborHeadResolution.ts`, `src/components/tabs/SystemMappingTab.tsx`. No database change, no change to which code any item receives, no new assignment authority.
+`src/hooks/useEstimateProjects.ts` (material batch writer, dismiss writer), `src/components/tabs/MaterialMappingTab.tsx` (call sites + error text). No database migration, no schema change.
