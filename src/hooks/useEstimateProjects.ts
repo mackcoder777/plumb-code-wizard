@@ -434,8 +434,44 @@ export const useEstimateItems = (projectId: string | null) => {
   });
 };
 
+/**
+ * PR 3: stamp database UUIDs onto in-memory rows.
+ *
+ * The mapping is POSITIONAL, not by any field on the row — in-memory items
+ * have no row_number. `rows[i]` was written to the database with
+ * `row_number: i` at the call site, so `insertedIds` (keyed by row_number)
+ * is read back at index i.
+ *
+ * Returns null on any integrity failure (length mismatch or a gap in the
+ * returned row_numbers, e.g. a truncated batch read). Callers MUST branch on
+ * null and surface it — a partial stamp is worse than a uniform failure.
+ * Abort is signalled by null, never by reference identity.
+ */
+export const stampIds = <T extends { id: number | string }>(
+  rows: T[],
+  insertedIds: Map<number, string>
+): T[] | null => {
+  if (insertedIds.size !== rows.length) {
+    console.error(
+      `stampIds: id count mismatch — ${insertedIds.size} returned for ${rows.length} rows`
+    );
+    return null;
+  }
+  const stamped: T[] = new Array(rows.length);
+  for (let i = 0; i < rows.length; i++) {
+    const uuid = insertedIds.get(i);
+    if (!uuid) {
+      console.error(`stampIds: no id returned for row_number ${i}`);
+      return null;
+    }
+    stamped[i] = { ...rows[i], id: uuid };
+  }
+  return stamped;
+};
+
 // Save estimate items in batches
 export const useSaveEstimateItems = () => {
+
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -480,9 +516,12 @@ export const useSaveEstimateItems = () => {
       
       if (deleteError) throw deleteError;
 
-      // Insert in batches of 500
+      // Insert in batches of 500, reading back the generated UUIDs.
+      // This is the insert response, not a refetch — the double-load the
+      // note below guards against does not return.
       const BATCH_SIZE = 500;
       const totalBatches = Math.ceil(items.length / BATCH_SIZE);
+      const insertedIds = new Map<number, string>();
       
       for (let i = 0; i < items.length; i += BATCH_SIZE) {
         const batch = items.slice(i, i + BATCH_SIZE).map(item => ({
@@ -512,11 +551,18 @@ export const useSaveEstimateItems = () => {
           source_file: item.source_file || null,
         }));
 
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from('estimate_items')
-          .insert(batch);
+          .insert(batch)
+          .select('id, row_number');
 
         if (error) throw error;
+
+        (inserted || []).forEach(r => {
+          if (r.row_number !== null && r.row_number !== undefined) {
+            insertedIds.set(r.row_number, r.id);
+          }
+        });
 
         // Report progress
         if (onProgress) {
@@ -525,7 +571,8 @@ export const useSaveEstimateItems = () => {
         }
       }
 
-      return { success: true, count: items.length };
+      return { success: true, count: items.length, insertedIds };
+
     },
     // No onSuccess invalidation — caller already has data in memory,
     // re-fetching what was just written causes a double-load cycle
