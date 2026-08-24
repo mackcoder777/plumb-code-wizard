@@ -534,6 +534,9 @@ const EnhancedCostCodeManager = () => {
   // Gated on isFetched (not length) so the zero-project case still clears.
   useEffect(() => {
     if (currentProject || !projectsFetched) return;
+    // Never act on a list fetched before the session attached: RLS would have
+    // returned [] legitimately and we'd delete a valid user's stored id.
+    if (authLoading || !user) return;
     const lastId = pendingProjectId || localStorage.getItem('lastSelectedProjectId');
     if (!lastId) return;
     const match = projects.find(p => p.id === lastId);
@@ -544,7 +547,8 @@ const EnhancedCostCodeManager = () => {
       console.log('[Restore] Stored project id not owned by user, clearing:', lastId);
       localStorage.removeItem('lastSelectedProjectId');
     }
-  }, [projects, projectsFetched, currentProject, pendingProjectId]);
+  }, [projects, projectsFetched, currentProject, pendingProjectId, authLoading, user]);
+
 
   
   // Estimate data
