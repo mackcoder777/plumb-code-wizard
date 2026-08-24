@@ -518,7 +518,7 @@ const EnhancedCostCodeManager = () => {
   const [pendingProjectId] = useState<string | null>(
     () => localStorage.getItem('lastSelectedProjectId')
   );
-  const { data: projects = [] } = useEstimateProjects();
+  const { data: projects = [], isFetched: projectsFetched } = useEstimateProjects();
 
   // Persist selected project to localStorage
   useEffect(() => {
@@ -531,8 +531,9 @@ const EnhancedCostCodeManager = () => {
   // Restore project selection on mount / after auth refresh.
   // Only restore ids that actually belong to the signed-in user; otherwise
   // clear the stale entry (e.g. after signing in as a different account).
+  // Gated on isFetched (not length) so the zero-project case still clears.
   useEffect(() => {
-    if (currentProject || projects.length === 0) return;
+    if (currentProject || !projectsFetched) return;
     const lastId = pendingProjectId || localStorage.getItem('lastSelectedProjectId');
     if (!lastId) return;
     const match = projects.find(p => p.id === lastId);
@@ -543,7 +544,8 @@ const EnhancedCostCodeManager = () => {
       console.log('[Restore] Stored project id not owned by user, clearing:', lastId);
       localStorage.removeItem('lastSelectedProjectId');
     }
-  }, [projects, currentProject, pendingProjectId]);
+  }, [projects, projectsFetched, currentProject, pendingProjectId]);
+
   
   // Estimate data
   const [estimateData, setEstimateData] = useState([]);
