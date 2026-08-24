@@ -1,37 +1,55 @@
-# Material tab: "Save Failed" and nothing persists after a fresh upload
+# Material saves fail after a fresh upload — corrected plan
 
-## What is actually happening (verified)
+Your three findings are confirmed against the source. The previous plan's fix is withdrawn.
 
-The other user (cnaik@murraycompany.com) created their own LBTP project (`bcfa2e36…`) at 20:53 today. Its 1,944 rows exist in the database, but **every single one has an empty `material_cost_code`** — no material assignment has ever landed. The owner check is not the problem: they own the project and RLS allows their updates.
+## What holds
 
-The failure is an ID-type mismatch:
+`useSaveEstimateItems` (`useEstimateProjects.ts:438`) deletes by `project_id`, inserts in 500-row batches with no `.select()` (`:515-517`), and explicitly declines invalidation at `:530-531`. The client is never handed the generated UUIDs. `useBatchUpdateMaterialCostCodes:776` filters `.in('id', batchIds)`; in a fresh-upload session those ids are the integers from `FileUpload.tsx:210`. A `uuid` column rejects them — 22P02. Confirmed by data: cnaik's LBTP (`bcfa2e36…`, created 20:53 today) has 1,944 rows with `material_cost_code = ''` across the board, and they own the project, so RLS is not involved.
 
-- `FileUpload.tsx:210` gives every parsed row a **numeric** id (`0, 1, 2, …`) while the workbook is still in memory.
-- `useSaveEstimateItems` (`useEstimateProjects.ts:475+`) deletes and re-inserts the rows; the database generates **UUID** primary keys, and the in-memory rows are never refreshed with them.
-- Every material save path in `MaterialMappingTab.tsx` (group assign :666, bulk assign :807, item-level :880, smart assign :977, apply-suggestions :1064) calls `useBatchUpdateMaterialCostCodes`, which filters with `.in('id', batchIds)` (`useEstimateProjects.ts:776`).
+## What was wrong
 
-So in a session that uploaded the file (rather than re-opening a saved project), the request sends `id=in.(0,1,2,…)` against a `uuid` column. Postgres rejects it, the mutation throws, and the tab shows "Save Failed — changes applied locally but failed to save to database." That is exactly the state in the screenshot, and it explains why jrubin never sees it: his sessions load projects from the database, so his rows already carry UUIDs.
+1. `rowNumber` does not exist on `EstimateItem` (`src/types/estimate.ts:1-27`) and `FileUpload.tsx` never sets it. The proposed patch would have shipped `.in('row_number', [undefined, …])` into the exact session it was meant to fix.
+2. There is no unique constraint on `(project_id, row_number)`. Calling it "the stable identifier" was an assertion, not a schema fact.
+3. Six call sites, not five. `dismissFromBudget` (`MaterialMappingTab.tsx:752`) passes `String(item.id)` into `useDismissFromMaterialBudget:882`, which filters `.in('id', …)`.
 
-The same trap exists in `useDismissFromMaterialBudget` if it also filters by `id` — to be confirmed while patching.
+The base disagreement is real: `saveItemsToDb` (`Index.tsx:2055`) writes `row_number: index`, `handleReplaceData` (`Index.tsx:2731`) writes `index + 1` while setting in-memory `id: index` at `:2722`, and the labor writer at `Index.tsx:2405` keys on `typeof item.id === 'number' ? item.id : …`.
 
-## The fix
+## Audit result — PR 2 is smaller than feared
 
-**1. Make the material batch writer key on `row_number`, not `id`.**
-`row_number` is already the project's stable identifier and is the mechanism the labor-side writer (`batchUpdateSilent`, `useEstimateProjects.ts:589+`) uses for exactly this reason. Change `useBatchUpdateMaterialCostCodes` to accept row numbers and filter with `.eq('project_id', …).in('row_number', …)`, keeping the 100-per-batch chunking.
+Every project currently in the database is 0-based and gap-free:
 
-**2. Update the five call sites in `MaterialMappingTab.tsx`** to pass `item.rowNumber` instead of `String(item.id)`. Local state updates continue to key on `id` — only the database filter changes.
+```text
+project                          rows    min_rn  max_rn  distinct_rn
+LBTP (cnaik, bcfa2e36)           1944    0       1943    1944
+LBTP (jrubin, 83ab6db1)          1944    0       1943    1944
+HAMILTON HVAC                    1919    0       1918    1919
+PASADENA CENTRAL LIBRARY         1559    0       1558    1559
+25053 - HAMILTON HIGH PLUMBING  12846    0       12845  12846
+ROSE BOWL - BAFO                 1033    0       1032    1033
+ROSE BOWL - REV 02                839    0        838     839
+HAMILTON HIGH - PLUMBING        12846    0       12845  12846
+RELATIVITY BAY 5                  444    0        443     444
+```
 
-**3. Apply the same treatment to `useDismissFromMaterialBudget`** if it filters by `id`, so the "dismiss from material budget" action does not fail in the same session.
+No project shows `min_rn = 1`. Nothing live went through `handleReplaceData`'s 1-based path, so **no labor codes are currently written one row off and there is no data repair to schedule**. PR 2 becomes hygiene — close the trap before someone uses Replace Data — not remediation.
 
-**4. Surface the real error.** The catch blocks swallow the Postgres message. Include `error.message` in the destructive toast so the next database rejection is diagnosable from a screenshot instead of requiring a database audit.
+## Sequence
+
+**PR 1 — error surfacing only.** Append `error.message` to the destructive toast in the four `MaterialMappingTab.tsx` catch blocks (`:686`, `:819`, `:901`, `:1086`) plus the dismiss catch. No behavior change. Then have cnaik reproduce and confirm the code is 22P02 before any writer is touched.
+
+**PR 2 — unify the row_number base.** Make `handleReplaceData` (`Index.tsx:2731`) write `row_number: index`, matching `saveItemsToDb` (`:2055`) and the in-memory `id: index` it already sets at `:2722`. No migration, no backfill — the audit above says nothing needs repairing.
+
+**PR 3 — hydrate ids at the source.** Change `useSaveEstimateItems` to `.insert(batch).select('id, row_number')`, return the mapping, and have the caller stamp the returned UUIDs onto the in-memory rows keyed by `row_number`. Safe without a unique constraint because the save is a full delete-and-replace, so row numbers are unique by construction within that one write. This is one change that fixes all six material sites, the dismiss path, and every other id-keyed writer. Reading the insert response is not a refetch, so the double-load the `:530` comment guards against does not return.
+
+No row-number refactor at the call sites. No migration in any of the three.
 
 ## Verification
 
-- Confirm the writer chunking still holds for a 613-item group (7 requests).
-- Re-run a group assign in a fresh-upload session and confirm `material_cost_code` is non-empty in the database afterward.
-- Re-open an existing project (jrubin's LBTP, UUID ids) and confirm group assign, item-level assign, and Smart Assign all still persist — the row-number path must work for both session shapes.
-- Confirm no labor-side code path is touched and no cost-code assignment authority changes.
+- After PR 3, in a fresh-upload session: group assign, item-level assign, Smart Assign, apply-suggestions, and dismiss all persist; confirm non-empty `material_cost_code` in the database.
+- Re-open an existing project (UUID ids already loaded) and confirm the same five actions still persist — the hydration path must not disturb the load-from-database shape.
+- Confirm the 100-per-batch chunking still holds on a 613-item group.
+- Confirm no labor-side cost code changes value before/after PR 2 on an existing project.
 
 ## Scope
 
-`src/hooks/useEstimateProjects.ts` (material batch writer, dismiss writer), `src/components/tabs/MaterialMappingTab.tsx` (call sites + error text). No database migration, no schema change.
+`src/components/tabs/MaterialMappingTab.tsx` (PR 1 toasts), `src/pages/Index.tsx` (PR 2 base), `src/hooks/useEstimateProjects.ts` plus its callers in `Index.tsx` (PR 3 hydration). No schema change.
