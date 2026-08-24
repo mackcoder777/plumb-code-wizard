@@ -528,7 +528,9 @@ const EnhancedCostCodeManager = () => {
     }
   }, [currentProject?.id]);
 
-  // Restore project selection on mount / after auth refresh
+  // Restore project selection on mount / after auth refresh.
+  // Only restore ids that actually belong to the signed-in user; otherwise
+  // clear the stale entry (e.g. after signing in as a different account).
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
     const lastId = pendingProjectId || localStorage.getItem('lastSelectedProjectId');
@@ -537,6 +539,9 @@ const EnhancedCostCodeManager = () => {
     if (match) {
       console.log('[Restore] Auto-selecting project from localStorage:', match.name);
       setCurrentProject(match);
+    } else {
+      console.log('[Restore] Stored project id not owned by user, clearing:', lastId);
+      localStorage.removeItem('lastSelectedProjectId');
     }
   }, [projects, currentProject, pendingProjectId]);
   
