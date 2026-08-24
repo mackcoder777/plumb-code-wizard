@@ -434,8 +434,44 @@ export const useEstimateItems = (projectId: string | null) => {
   });
 };
 
+/**
+ * PR 3: stamp database UUIDs onto in-memory rows.
+ *
+ * The mapping is POSITIONAL, not by any field on the row — in-memory items
+ * have no row_number. `rows[i]` was written to the database with
+ * `row_number: i` at the call site, so `insertedIds` (keyed by row_number)
+ * is read back at index i.
+ *
+ * Returns null on any integrity failure (length mismatch or a gap in the
+ * returned row_numbers, e.g. a truncated batch read). Callers MUST branch on
+ * null and surface it — a partial stamp is worse than a uniform failure.
+ * Abort is signalled by null, never by reference identity.
+ */
+export const stampIds = <T extends { id: number | string }>(
+  rows: T[],
+  insertedIds: Map<number, string>
+): T[] | null => {
+  if (insertedIds.size !== rows.length) {
+    console.error(
+      `stampIds: id count mismatch — ${insertedIds.size} returned for ${rows.length} rows`
+    );
+    return null;
+  }
+  const stamped: T[] = new Array(rows.length);
+  for (let i = 0; i < rows.length; i++) {
+    const uuid = insertedIds.get(i);
+    if (!uuid) {
+      console.error(`stampIds: no id returned for row_number ${i}`);
+      return null;
+    }
+    stamped[i] = { ...rows[i], id: uuid };
+  }
+  return stamped;
+};
+
 // Save estimate items in batches
 export const useSaveEstimateItems = () => {
+
   const queryClient = useQueryClient();
 
   return useMutation({
