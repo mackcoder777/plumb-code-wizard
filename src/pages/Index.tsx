@@ -2082,13 +2082,28 @@ const EnhancedCostCodeManager = () => {
                 setLoadingMessage(`Saving ${itemsToSave.length.toLocaleString()} items to database...`);
                 setLoadingProgress(90);
                 
-                await saveEstimateItems.mutateAsync({
+                const result = await saveEstimateItems.mutateAsync({
                   projectId,
                   items: itemsToSave,
                   onProgress: (progress) => {
                     setLoadingProgress(90 + Math.round(progress * 0.08));
                   }
                 });
+
+                // PR 3: stamp the generated UUIDs onto the in-memory rows.
+                // Positional: processedData[i] was written with row_number i.
+                // Only on full success — a partial stamp is worse than none.
+                const hydrated = stampIds(processedData, result.insertedIds);
+                if (hydrated) {
+                  setEstimateData(hydrated);
+                  setFilteredData(hydrated);
+                } else {
+                  showNotification(
+                    'Items saved but IDs not synced — reload the project before assigning material codes.',
+                    'error'
+                  );
+                }
+
               } catch (error) {
                 console.error('Failed to save items:', error);
                 showNotification('Warning: Items loaded but not saved to database', 'error');
