@@ -2172,6 +2172,14 @@ const EnhancedCostCodeManager = () => {
                 total_items: processedData.length
               });
               await saveItemsToDb(currentProject.id);
+            } else {
+              console.warn('[upload] Auth session was not ready; skipping project creation and item persistence.');
+              setLoadingProgress(100);
+              setLoadingMessage(`Loaded ${processedData.length.toLocaleString()} items locally, but they were not saved`);
+              setLoading(false);
+              setActiveTab('estimates');
+              showNotification('Not signed in yet; items loaded but not saved', 'error');
+              return;
             }
             
             const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
