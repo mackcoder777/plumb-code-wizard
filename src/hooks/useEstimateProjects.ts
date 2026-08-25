@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface EstimateProject {
   id: string;
@@ -71,10 +72,28 @@ export interface EstimateItem {
   updated_at: string;
 }
 
-// Fetch all projects for current user
+// Fetch all projects for current user.
+//
+// The query is gated on a resolved session and keyed by user id. Both matter:
+//
+//   enabled — without it the SELECT fires on mount, before the Supabase client
+//   has attached the session. RLS then returns [] legitimately, and React Query
+//   caches that empty list as a settled answer. Nothing invalidates it when auth
+//   lands, so the signed-in user sees zero projects and any consumer reading
+//   `isFetched` acts on a list that was never actually theirs. The window is
+//   widest on Lovable preview surfaces, where `brokeredPreviewStorage` resolves
+//   the session over postMessage with a 2s timeout.
+//
+//   user id in the key — signing in as a different account would otherwise be
+//   served the previous user's cached list under the shared key.
+//
+// Existing `invalidateQueries({ queryKey: ['estimate_projects'] })` calls still
+// match: React Query matches query keys by prefix.
 export const useEstimateProjects = () => {
+  const { user, loading: authLoading } = useAuth();
+
   return useQuery({
-    queryKey: ['estimate_projects'],
+    queryKey: ['estimate_projects', user?.id ?? null],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('estimate_projects')
@@ -84,6 +103,7 @@ export const useEstimateProjects = () => {
       if (error) throw error;
       return data as EstimateProject[];
     },
+    enabled: !authLoading && !!user,
   });
 };
 

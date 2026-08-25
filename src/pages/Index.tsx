@@ -534,8 +534,12 @@ const EnhancedCostCodeManager = () => {
   // Gated on isFetched (not length) so the zero-project case still clears.
   useEffect(() => {
     if (currentProject || !projectsFetched) return;
-    // Never act on a list fetched before the session attached: RLS would have
-    // returned [] legitimately and we'd delete a valid user's stored id.
+    // The clear-on-no-match branch below is destructive, so it may only run
+    // against a list fetched WITH the user's session. This check alone does not
+    // establish that — it defers the effect but does nothing about an already
+    // cached pre-auth []. `useEstimateProjects` supplies the actual guarantee:
+    // it is `enabled` only once auth resolves, so `projectsFetched` cannot be
+    // true for a list fetched before the session attached.
     if (authLoading || !user) return;
     const lastId = pendingProjectId || localStorage.getItem('lastSelectedProjectId');
     if (!lastId) return;
