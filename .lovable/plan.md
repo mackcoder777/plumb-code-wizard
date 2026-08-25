@@ -12,8 +12,8 @@
 
 - Add an `onError` callback to the fresh-upload `createProject.mutate` call.
 - Log the complete error for diagnostics and show a destructive notification containing its safe code/message.
-- Reset the upload loading state/progress so a failed create does not look successful or leave the workflow stuck.
-- Do not call `saveItemsToDb`, report upload success, or navigate to Estimates after project creation fails.
+- Do not call `saveItemsToDb` after a create failure; it already lives only inside `onSuccess`.
+- Leave the existing completion block (`setLoading(false)`, `setActiveTab('estimates')`, success notification) where it is. Because `createProject.mutate` is fire-and-forget, that block runs before the POST response returns. The error notification will overwrite the success notification once the POST fails, and the console will hold the full error for reading.
 
 ## Deferred until after capture
 
