@@ -451,7 +451,22 @@ export const stampIds = <T extends { id: number | string }>(
   rows: T[],
   insertedIds: Map<number, string>
 ): T[] | null => {
+  // Reports the actual counts rather than leaving them to be reconstructed from
+  // the network log. Emitted on every exit path, exactly one line per save, so a
+  // multi-batch run can be checked by reading the console instead of counting
+  // POSTs — and it still lands in the console buffer when the main thread is
+  // unresponsive and DevTools shows no traffic. Deliberately not DEV-gated:
+  // preview surfaces are production builds, which is where multi-batch runs
+  // are observed.
+  const report = (aborted: boolean) =>
+    console.info('[stampIds]', {
+      sent: rows.length,
+      returned: insertedIds.size,
+      aborted,
+    });
+
   if (insertedIds.size !== rows.length) {
+    report(true);
     console.error(
       `stampIds: id count mismatch — ${insertedIds.size} returned for ${rows.length} rows`
     );
@@ -461,11 +476,13 @@ export const stampIds = <T extends { id: number | string }>(
   for (let i = 0; i < rows.length; i++) {
     const uuid = insertedIds.get(i);
     if (!uuid) {
+      report(true);
       console.error(`stampIds: no id returned for row_number ${i}`);
       return null;
     }
     stamped[i] = { ...rows[i], id: uuid };
   }
+  report(false);
   return stamped;
 };
 
