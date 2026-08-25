@@ -1505,11 +1505,12 @@ const EnhancedCostCodeManager = () => {
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
-        // Find row_number — it may be on the item from the DB load
-        const rowNum = item.row_number ?? item.id;
-        if (typeof rowNum === 'number') {
-          itemsToUpdate.push({ row_number: rowNum, cost_code: newCode });
-        }
+        // Was `item.row_number ?? item.id` behind a `typeof === 'number'` guard.
+        // DB-loaded items have no row_number and a UUID id, so the guard rejected
+        // every one of them, itemsToUpdate stayed empty, and the block below —
+        // which commits updatedEstimate to state as well as persisting — never
+        // ran. The recalculation was computed and then discarded.
+        itemsToUpdate.push({ row_number: item.rowNumber, cost_code: newCode });
         return { ...item, costCode: newCode };
       }
       return item;
@@ -1605,10 +1606,9 @@ const EnhancedCostCodeManager = () => {
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
-        const rowNum = item.row_number ?? item.id;
-        if (typeof rowNum === 'number') {
-          itemsToUpdate.push({ row_number: rowNum, cost_code: newCode });
-        }
+        // Same defect as the material-desc recalc above: the numeric guard
+        // rejected every DB-loaded item, so the whole recalculation was dropped.
+        itemsToUpdate.push({ row_number: item.rowNumber, cost_code: newCode });
         return { ...item, costCode: newCode };
       }
       return item;
