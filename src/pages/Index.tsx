@@ -2173,12 +2173,17 @@ const EnhancedCostCodeManager = () => {
               });
               await saveItemsToDb(currentProject.id);
             } else {
-              console.warn('[upload] Auth session was not ready; skipping project creation and item persistence.');
+              const unsavedReason = authLoading
+                ? 'Still signing in — try again in a moment. Items loaded but not saved.'
+                : 'Sign in to save this estimate. Items loaded but not saved.';
+              console.warn('[upload] No authenticated user was available; skipping project creation and item persistence.', {
+                authLoading
+              });
               setLoadingProgress(100);
               setLoadingMessage(`Loaded ${processedData.length.toLocaleString()} items locally, but they were not saved`);
               setLoading(false);
               setActiveTab('estimates');
-              showNotification('Not signed in yet; items loaded but not saved', 'error');
+              showNotification(unsavedReason, 'error');
               return;
             }
             
@@ -2229,7 +2234,7 @@ const EnhancedCostCodeManager = () => {
     };
     
     reader.readAsArrayBuffer(file);
-  }, [generateCostCode]);
+  }, [generateCostCode, user, authLoading, currentProject]);
 
   // Update all items when mappings change
   useEffect(() => {
