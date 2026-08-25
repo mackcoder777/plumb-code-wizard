@@ -1,35 +1,49 @@
-# Diagnose fresh-upload project creation
+# PR 3 End-to-End Verification
 
 ## Confirmed current state
 
-- The affected account currently owns zero projects, so the upload shown did not create a database project.
-- Fresh upload puts parsed rows into memory before project creation. Item persistence and `stampIds` run only from the create mutation's `onSuccess`; therefore this session did not exercise PR 3.
-- The create call has no `onError`, while the mutation throws both auth and database errors. A create failure is therefore invisible in the UI.
-- The project insert supplies `user_id`, `name`, `file_name`, and `total_items`. All other non-null columns have database defaults, and the insert policy checks `auth.uid() = user_id`. Neither the schema nor the policy alone identifies the observed failure.
-- The available request snapshot contains project-list GETs only; it does not include the failed create POST. The exact failure remains unconfirmed until a fresh upload is captured.
+- Fresh uploads are written in 500-row batches. Every insert batch returns `id` and `row_number`, and `useSaveEstimateItems` accumulates those values into one `Map<number, string>` across the full mutation.
+- `stampIds` rejects an incomplete map before changing any row, then stamps each in-memory row from the UUID stored under its zero-based position.
+- Both fresh-upload and Replace Data paths call `stampIds`; neither currently logs the sent count, returned count, or abort result in one structured diagnostic.
+- Material assignment writes by UUID through `useBatchUpdateMaterialCostCodes`, so a successful assignment after a fresh upload directly exercises the hydrated IDs.
+- The Hamilton-size multi-batch upload and material-assignment-survives-reload checks have not yet been completed. The prior 13k-row run reached no item POSTs because the main thread remained occupied before persistence began; that run was inconclusive for PR 3 but is a reproducible input for a separate performance investigation.
 
-## Change 1 — expose project-creation failures
+## Change 1 — add narrow stamping instrumentation
 
-- Add an `onError` callback to the fresh-upload `createProject.mutate` call.
-- Log the complete error for diagnostics and show a destructive notification containing its safe code/message.
-- Do not call `saveItemsToDb` after a create failure; it already lives only inside `onSuccess`.
-- Leave the existing completion block (`setLoading(false)`, `setActiveTab('estimates')`, success notification) where it is. Because `createProject.mutate` is fire-and-forget, that block runs before the POST response returns. The error notification will overwrite the success notification once the POST fails, and the console will hold the full error for reading.
+- Add a single structured `console.info('[stampIds]', { sent, returned, aborted })` diagnostic inside `stampIds`.
+- Emit it on both success and integrity-abort paths, using the actual row and map sizes rather than inferred request counts.
+- Keep the helper’s return values and abort behavior unchanged; this is diagnostics only.
 
-## Deferred until after capture
+## Verification 1 — Hamilton multi-batch upload
 
-- Do not restructure upload completion in this diagnostic patch. The unconditional completion/success path is a confirmed bug, but changing it before capturing the failed create could alter the behavior being observed.
-- After the POST error is known, define the smallest persistence-aware completion fix separately; moving completion into `onSuccess` may be sufficient.
-- Investigate upload slowness separately. Classify it first as idle render activity, upload-time worker/computation, or interaction-time derivation using Network, console, and a Performance recording. Do not combine a performance fix with this diagnostic patch.
+- Upload the real Hamilton 12,846-row AutoBid export through the normal fresh-project flow.
+- Wait for persistence to finish rather than inferring completion from the early upload UI.
+- Confirm 26 item insert batches complete and the diagnostic reports exactly:
+  - `sent: 12846`
+  - `returned: 12846`
+  - `aborted: false`
+- Confirm the loaded in-memory rows use database UUIDs and no `stampIds` mismatch/gap error appears.
+- If the diagnostic reports an abort, stop there, preserve the logs, and do not attempt a material assignment with partially hydrated IDs.
 
-## Verification
+## Verification 2 — material assignment survives reload
 
-1. Re-upload the same 1,944-row file while signed in to the zero-project account.
-2. Capture the `POST /estimate_projects` status and response body plus the related console error. Use that evidence to fix the actual auth, policy, grant, or payload problem only if one is confirmed.
-3. Confirm the new error notification includes the same safe code/message as the failed POST and the full error is available in the console.
-4. Confirm `saveItemsToDb` and `stampIds` do not run after the create failure.
-5. Separately classify slowness without changing code: slow while idle with quiet Network, slow only during upload, or slow only on tab/filter interaction.
-6. Run the project QC checks: labor-hour totals unchanged, no sentinel keys, and no mapping or export behavior changed.
+- In the freshly uploaded Hamilton project, choose one identifiable material group or item and record its current code plus a stable source fingerprint such as row number, material spec, item type, and description.
+- Assign a different valid material code through the Material Mapping tab and confirm the update request succeeds and returns the expected affected row count.
+- Reload the project from the backend, locate the same source item/group, and confirm the assigned material code remains present.
+- Query the persisted row by project and UUID/row number to verify the UI result matches the database value.
+
+## Regression checks
+
+- Confirm the upload row count, total material dollars, and total labor hours are unchanged after UUID stamping.
+- Run the project QC checks: labor totals reconcile, no sentinel keys appear, and mapping/export behavior is unchanged.
+- Remove or DEV-gate the temporary diagnostic after evidence is captured so production consoles are not permanently noisy.
+
+## Explicitly separate follow-up
+
+- Do not optimize parsing or processing in this PR. Preserve the 13k-row reproduction and investigate the minutes-long pre-network main-thread block as a dedicated performance task after PR 3 verification.
+- Keep the remaining queue unchanged: empty upload filename, user-scoped project query key, real `rowNumber` cleanup, append invalidation-key consistency, and upload completion/recovery restructuring.
 
 ## Files
 
-- `src/pages/Index.tsx` — create error handling and loading-state cleanup only.
+- `src/hooks/useEstimateProjects.ts` — diagnostic only.
+- No production behavior changes are planned unless the end-to-end run exposes a concrete failure.
