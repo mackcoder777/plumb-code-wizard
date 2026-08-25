@@ -2144,6 +2144,13 @@ const EnhancedCostCodeManager = () => {
                       mappings: mappingsToSave
                     });
                   }
+                },
+                onError: (error) => {
+                  console.error('[createProject] Project creation failed:', error);
+                  showNotification(
+                    `Failed to create project: ${(error as any)?.code || 'unknown'} — ${(error as any)?.message || 'See console for details'}`,
+                    'error'
+                  );
                 }
               });
             } else if (currentProject) {
