@@ -2234,7 +2234,7 @@ const EnhancedCostCodeManager = () => {
     };
     
     reader.readAsArrayBuffer(file);
-  }, [generateCostCode]);
+  }, [generateCostCode, user, authLoading, currentProject]);
 
   // Update all items when mappings change
   useEffect(() => {
