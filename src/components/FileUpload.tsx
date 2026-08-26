@@ -208,6 +208,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       
       const item: EstimateItem = {
         id: i - headerRowIndex - 1,
+        // Dense position in `items`, deliberately NOT `i - headerRowIndex - 1`.
+        // The two `continue`s above skip rows, so the sheet-relative expression
+        // used for `id` has gaps; row_number is assigned from the dense array
+        // index at save, so only the dense position round-trips.
+        rowNumber: items.length,
         drawing: String(row[colMap.drawing] || ''),
         system: String(system || ''),
         floor: String(row[colMap.floor] || ''),

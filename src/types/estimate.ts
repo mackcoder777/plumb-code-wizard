@@ -1,5 +1,8 @@
 export interface EstimateItem {
   id: number | string;  // number for freshly uploaded, string (UUID) for database items
+  rowNumber: number;    // 0-based position in the source file; the stable key for
+                        // DB writes. Distinct from `id`, which becomes a UUID once
+                        // persisted and so cannot carry position.
   drawing: string;
   system: string;
   floor: string;

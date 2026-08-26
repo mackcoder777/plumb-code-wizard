@@ -1226,6 +1226,7 @@ const EnhancedCostCodeManager = () => {
       const transformedItems = savedItems.map((item) => {
         const baseItem = {
           id: item.id,
+          rowNumber: item.row_number,
           drawing: item.drawing || '',
           system: item.system || '',
           floor: item.floor || '',
@@ -1519,11 +1520,12 @@ const EnhancedCostCodeManager = () => {
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
-        // Find row_number — it may be on the item from the DB load
-        const rowNum = item.row_number ?? item.id;
-        if (typeof rowNum === 'number') {
-          itemsToUpdate.push({ row_number: rowNum, cost_code: newCode });
-        }
+        // Was `item.row_number ?? item.id` behind a `typeof === 'number'` guard.
+        // DB-loaded items have no row_number and a UUID id, so the guard rejected
+        // every one of them, itemsToUpdate stayed empty, and the block below —
+        // which commits updatedEstimate to state as well as persisting — never
+        // ran. The recalculation was computed and then discarded.
+        itemsToUpdate.push({ row_number: item.rowNumber, cost_code: newCode });
         return { ...item, costCode: newCode };
       }
       return item;
@@ -1619,10 +1621,9 @@ const EnhancedCostCodeManager = () => {
       const newCode = `${section} ${activity} ${head}`;
       
       if (newCode !== item.costCode) {
-        const rowNum = item.row_number ?? item.id;
-        if (typeof rowNum === 'number') {
-          itemsToUpdate.push({ row_number: rowNum, cost_code: newCode });
-        }
+        // Same defect as the material-desc recalc above: the numeric guard
+        // rejected every DB-loaded item, so the whole recalculation was dropped.
+        itemsToUpdate.push({ row_number: item.rowNumber, cost_code: newCode });
         return { ...item, costCode: newCode };
       }
       return item;
@@ -1962,6 +1963,10 @@ const EnhancedCostCodeManager = () => {
             // Worker already processed and filtered data - just add IDs and source file
             const processedChunk = chunk.map((row: any, index: number) => ({
               id: processedItemsCount + index,
+              // Same dense counter as `id`, kept as its own field because `id`
+              // becomes a UUID once stampIds runs and can no longer carry
+              // position. Matches `row_number: index` in saveItemsToDb.
+              rowNumber: processedItemsCount + index,
               drawing: row.drawing,
               system: row.system,
               floor: row.floor,
@@ -2463,11 +2468,13 @@ const EnhancedCostCodeManager = () => {
         // Build the FULL assembled labor code with section and activity
         const fullLaborCode = (laborCode && activity) ? `${section} ${activity} ${laborCode}` : item.costCode;
         
-        // Track this item for database update using row_number (ALWAYS available)
-        // row_number is set during upload and stored in DB - it's the stable identifier
-        const rowNumber = typeof item.id === 'number' ? item.id : item.row_number ?? index;
+        // row_number carried on the item itself. Previously derived as
+        // `typeof item.id === 'number' ? item.id : item.row_number ?? index`,
+        // which post-PR-3 always fell through to `index` — correct only because
+        // this maps unfiltered estimateData. Any filtered map here would have
+        // written labor codes to the wrong rows, silently.
         itemUpdates.push({
-          row_number: rowNumber,
+          row_number: item.rowNumber,
           cost_code: fullLaborCode || undefined,
           material_cost_code: materialCode || undefined
         });
@@ -2781,6 +2788,8 @@ const EnhancedCostCodeManager = () => {
     const transformedItems = items.map((item, index) => ({
       ...item,
       id: index,
+      // Mirrors the `row_number: index` this path saves with below.
+      rowNumber: index,
       suggestedCode: generateCostCode(item)
     }));
     

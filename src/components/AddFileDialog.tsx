@@ -43,6 +43,7 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
       // Transform preloaded items to EstimateItem format if needed
       const transformedItems: EstimateItem[] = preloadedItems.map((item, index) => ({
         id: item.id || `preloaded-${index}`,
+        rowNumber: item.rowNumber ?? index,
         drawing: item.drawing || '',
         system: item.system || '',
         floor: item.floor || '',
@@ -222,6 +223,11 @@ const AddFileDialog: React.FC<AddFileDialogProps> = ({
         totalMaterial += materialDollars;
 
         items.push({
+          // Dense position within THIS file. useAppendEstimateItems re-bases it
+          // to `startRowNumber + index` at insert, so this value is not the
+          // persisted row_number; appended rows re-enter memory via the DB load
+          // mapper, which reads the real column.
+          rowNumber: items.length,
           id: `new-${items.length}`,
           drawing: row[colMap.drawing] || '',
           system: system || '',
