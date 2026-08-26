@@ -906,24 +906,6 @@ const EnhancedCostCodeManager = () => {
     }
   }, [bidLaborRate, currentProject?.id]);
 
-  // Helper function for auto-detecting cost codes
-  const autoDetectCostCode = (description: string): string => {
-    const desc = description.toLowerCase();
-    
-    // Pattern matching for auto-detection
-    if (desc.includes('snow') || desc.includes('snwv')) return 'SNWV';
-    if (desc.includes('storm') || desc.includes('strm')) return 'STRM';
-    if (desc.includes('sani') || desc.includes('sanitary')) return 'SNWV';
-    if (desc.includes('water') || desc.includes('dwtr')) return 'DWTR';
-    if (desc.includes('seismic') || desc.includes('szmc')) return 'SZMC';
-    if (desc.includes('fire') || desc.includes('firewater')) return 'FNSH';
-    if (desc.includes('gas') || desc.includes('natural')) return 'NGAS';
-    if (desc.includes('drain') || desc.includes('drns')) return 'DRNS';
-    
-    // Default fallback
-    return 'SNWV';
-  };
-
   // Count total codes in database
   const getTotalCodes = () => {
     let total = 0;
