@@ -9,6 +9,7 @@ import { ProjectSelector } from '@/components/ProjectSelector';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { ProjectInfo, FloorSectionMap } from '@/utils/budgetExportSystem';
 import BudgetAdjustmentsPanel, { BudgetAdjustments, ConsolidationThresholds, DEFAULT_THRESHOLDS } from '@/components/BudgetAdjustmentsPanel';
+import { budgetAdjustmentsEqual } from '@/lib/budgetAdjustmentsEqual';
 import { useBudgetSettings } from '@/hooks/useBudgetSettings';
 import SourceFileSummary from '@/components/SourceFileSummary';
 import { 
@@ -664,6 +665,23 @@ const EnhancedCostCodeManager = () => {
 
   // Budget adjustments state
   const [budgetAdjustments, setBudgetAdjustments] = useState<BudgetAdjustments | null>(null);
+
+  // BudgetAdjustmentsPanel re-emits currentAdjustments from an effect keyed on
+  // that memo, so a recompute that produces an identical object would otherwise
+  // set state and re-render for nothing. Compare structurally and return `prev`
+  // when nothing changed: React bails out of the re-render natively.
+  //
+  // The guard lives in the setter, not in the panel's effect, so it holds for
+  // every caller rather than one call site.
+  //
+  // Deps MUST stay empty. This function goes into the panel's emit-effect dep
+  // array, where the raw setState it replaces had a stable identity. A callback
+  // that changed identity per render would re-fire that effect every render --
+  // creating the very loop this guards against. The functional update is what
+  // makes empty deps correct: it reads `prev` from React, never from scope.
+  const handleAdjustmentsChange = useCallback((next: BudgetAdjustments) => {
+    setBudgetAdjustments(prev => (budgetAdjustmentsEqual(prev, next) ? prev : next));
+  }, []);
   const [bidLaborRate, setBidLaborRate] = useState(() => {
     // Will be updated by useEffect when currentProject loads
     return 85;
@@ -3615,7 +3633,7 @@ const EnhancedCostCodeManager = () => {
                   materialSummary={memoizedMaterialSummary}
                   bidLaborRate={bidLaborRate}
                   projectId={activeProjectId || 'default'}
-                  onAdjustmentsChange={setBudgetAdjustments}
+                  onAdjustmentsChange={handleAdjustmentsChange}
                   estimateData={estimateData}
                   systemMappings={savedMappings.map(m => ({ system: m.system_name, laborCode: (m.cost_head || '').split('|')[1] || (m.cost_head || '') }))}
                   consolidationThresholds={consolidationThresholds}
