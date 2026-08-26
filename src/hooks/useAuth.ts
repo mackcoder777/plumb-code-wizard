@@ -41,9 +41,19 @@ export const useAuth = () => {
         .eq('role', 'admin')
         .maybeSingle();
 
+      // A failed request is not the same as "not an admin", even though both
+      // end up as isAdmin: false. Report it, so a real admin seeing the Access
+      // Denied screen can tell a permissions answer from a broken one.
+      if (error) {
+        console.error(
+          '[useAuth] admin check failed - treating as non-admin:',
+          { status: error.code, message: error.message, details: error.details },
+        );
+      }
+
       setIsAdmin(!!data && !error);
     } catch (error) {
-      console.error('Error checking admin status:', error);
+      console.error('[useAuth] admin check threw:', error);
       setIsAdmin(false);
     } finally {
       setLoading(false);
