@@ -10,7 +10,7 @@ import NotFound from "./pages/NotFound";
 import { Auth } from "./components/Auth";
 import { AdminCostCodeUpload } from "./components/AdminCostCodeUpload";
 import { AdminCostCodeManager } from "./components/AdminCostCodeManager";
-import { useAuth } from "./hooks/useAuth";
+import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { Loader2, LogOut, Shield, Home } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
@@ -167,15 +167,19 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
+    {/* AuthProvider wraps everything: all five useAuth consumers -- ProtectedRoute,
+        AdminRoute, AppContent, Index and useEstimateProjects -- render beneath it. */}
+    <AuthProvider>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
