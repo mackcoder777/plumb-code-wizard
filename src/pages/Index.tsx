@@ -2778,7 +2778,7 @@ const EnhancedCostCodeManager = () => {
     });
     
     // Refresh the items from database
-    queryClient.invalidateQueries({ queryKey: ['estimate-items', currentProject.id] });
+    queryClient.invalidateQueries({ queryKey: ['estimate_items', currentProject.id] });
     
     showNotification(`Added ${items.length.toLocaleString()} items from ${fileName}`, 'success');
   };
@@ -3563,14 +3563,14 @@ const EnhancedCostCodeManager = () => {
                     projectId={currentProject?.id || 'default'}
                     dismissedFlags={dismissedDuplicateFlags}
                     onDismissFlag={(flag) => setDismissedDuplicateFlags(prev => [...prev, flag])}
-                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
+                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small-code-merges'] })}
                   />
                   <JobWideConsolidation
                     finalLaborSummary={budgetAdjustments.adjustedLaborSummary}
                     projectId={currentProject?.id || 'default'}
                     tradePrefix={tradePrefix}
                     codeFormatMode={codeFormatMode}
-                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small_code_merges'] })}
+                    onMergesChanged={() => queryClient.invalidateQueries({ queryKey: ['small-code-merges'] })}
                     savedMerges={budgetAdjustments.savedMerges?.map((m, i) => ({ id: String(i), ...m })) || []}
                     threshold={consolidationThresholds.jobWide}
                     onThresholdChange={(next) => updateConsolidationThresholds({ ...consolidationThresholds, jobWide: next })}
