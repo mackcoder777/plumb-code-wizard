@@ -2879,7 +2879,6 @@ const EnhancedCostCodeManager = () => {
         {/* Data Integrity Safeguards */}
         <CorruptCodeBanner
           systemMappings={savedMappings as any}
-          projectId={activeProjectId}
         />
         <HourReconciliationBar
           estimateData={estimateData}
