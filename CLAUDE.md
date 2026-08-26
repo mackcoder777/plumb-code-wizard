@@ -618,7 +618,19 @@ Review Heuristics (apply to every change, not just the checklist above)
    running in production" (the preview is the Vite dev server, not a
    build). Establish that the thing happened before explaining it.
 
-3. Case count is not coverage. Mutation-test anything guarding export math.
+3. The ticket is a HYPOTHESIS about where the problem is, not a description
+   of it. Scope the reported symptom before fixing it; the surrounding read
+   is where the larger bug usually is. Four times in one night the scoping
+   found more than the ticket did: "projects get named wrong" was
+   source_file written empty on every row, silently breaking the Source File
+   Audit tab; "add a test runner" turned up composeMultitradeActivity
+   returning a 3-char ACT against its own docstring; "clean up lint" turned
+   up the only rules-of-hooks violation in the repo, a conditionally-called
+   useMemo reachable by pressing Apply Section Codes; and mutation-testing a
+   comparator turned up the one check protecting the export having no test.
+   None was the reported problem. Each was found by looking around it.
+
+4. Case count is not coverage. Mutation-test anything guarding export math.
    budgetAdjustmentsEqual had 49 written cases across two rounds before a
    mutation run showed the one check actually protecting the export —
    hasOwnProperty — had no test at all. Every other case reached false by a
