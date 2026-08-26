@@ -28,6 +28,7 @@ import { useFloorSectionMappings } from '@/hooks/useFloorSectionMappings';
 import { resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
 import { composeMultitradeActivity } from '@/lib/utils';
+import { describeRowCountMismatch } from '@/lib/uploadIntegrity';
 import { profileDataset, DatasetProfile, getProfileFromOverride } from '@/utils/datasetProfiler';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
@@ -1973,6 +1974,26 @@ const EnhancedCostCodeManager = () => {
             // Clean up worker
             worker?.terminate();
             URL.revokeObjectURL(workerUrl);
+
+            // Reconcile what we assembled against what the parser reported.
+            // The worker's totalRows is its POST-filter count and the chunk
+            // mapper is 1:1, so these must agree exactly; a mismatch means a
+            // chunk was lost or applied twice. Abort rather than warn: a short
+            // dataset produces a smaller budget and an export indistinguishable
+            // from a correct one, which is the failure this guards against.
+            const mismatch = describeRowCountMismatch(processedData.length, totalRows);
+            if (mismatch) {
+              console.error('[upload] row count reconciliation failed', {
+                assembled: processedData.length,
+                reported: totalRows,
+                chunksSeen: chunkNumber,
+                totalChunks,
+              });
+              showNotification(mismatch, 'error');
+              setLoading(false);
+              setLoadingProgress(0);
+              return;
+            }
             
             // All processing already done incrementally - just finalize
             setLoadingProgress(85);
