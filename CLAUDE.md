@@ -596,6 +596,35 @@ BudgetAdjustmentsPanel always in DOM (check React DevTools)
 No unguarded console calls in finalLaborSummary useMemo
 Auto-suggestions never produce accepted as a target
 All peer-merge targets have hours >= minHoursThreshold
+
+Review Heuristics (apply to every change, not just the checklist above)
+
+1. Ask what a guard makes INVISIBLE, not just what it prevents.
+   A guard that swallows the signal is as easily introduced by a fix as
+   found in one. For any guard, ask three things: what does it prevent,
+   what does it hide, and does anyone know it is load-bearing?
+   Index.tsx :820 and :1541 each prevent a real render loop and hide
+   nothing — but neither was written for loop safety, so nobody knows they
+   are the only thing holding it. The old CorruptCodeBanner "Fix All" is
+   the other end: it stripped non-alphanumerics, so {"laborCode":"STRM"}
+   became laborCodeSTRM — alphanumeric, and therefore invisible to the
+   very banner that flagged it. It hid what it claimed to repair.
+
+2. Verify the failure EXISTS before diagnosing why it happens.
+   A well-posed question can rest on a false premise, and the diagnosis
+   will then be confidently wrong. Three from one night: "why did the POST
+   fail" (there was no POST — createProject never fired); "why did onError
+   not fire" (the mutation never ran); "why is this DEV-gated block
+   running in production" (the preview is the Vite dev server, not a
+   build). Establish that the thing happened before explaining it.
+
+3. Case count is not coverage. Mutation-test anything guarding export math.
+   budgetAdjustmentsEqual had 49 written cases across two rounds before a
+   mutation run showed the one check actually protecting the export —
+   hasOwnProperty — had no test at all. Every other case reached false by a
+   different path. For any comparator, guard, or reconciliation on the
+   export path: break it deliberately, and confirm the suite notices.
+
 18. Key Files Reference
 File Purpose
 ALL budget adjustment logic,
