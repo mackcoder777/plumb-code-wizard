@@ -575,15 +575,28 @@ import.meta.env.DEV guard
 assigns DWTR before user mappings
 4. BudgetAdjustmentsPanel conditional render: Index.tsx ~line 2816 only renders when
 estimateData.length > 0
-5. Three copies of the level-prefix extractor exist (FloorSectionMapping
-   extractMultitradeLevelPrefix, SystemMappingTab extractMultitradeLevelPrefix,
-   Index.tsx extractLevelPrefixForSummary). Bodies are textually identical for the
-   two extractMultitradeLevelPrefix copies; Index.tsx's variant adds 0B/0M cases.
-   A separate extractLevelPrefixFromPattern in Index.tsx parses floor pattern text
-   (different input domain). Consolidate the three activity-code extractors after
-   verifying identical output for known inputs; rename for clarity:
-   extractLevelFromActivityCode (act → prefix) vs extractLevelFromFloorPattern
-   (pattern text → prefix).
+5. TWO live copies of the level-prefix extractor exist — not three, as this
+   entry previously said. They are FloorSectionMapping extractMultitradeLevelPrefix
+   (:371, used at :853 and :1354) and SystemMappingTab extractMultitradeLevelPrefix
+   (:84, used at :593 and :654). Their bodies are textually identical.
+
+   The third named here, Index.tsx extractLevelPrefixForSummary, had exactly one
+   occurrence repo-wide — its own declaration. It was dead, and was removed along
+   with the equally dead deriveFloorLevelActivityForSummary beside it.
+
+   THAT CORRECTION CHANGES THE FIX. This entry used to note that "Index.tsx's
+   variant adds 0B/0M cases". Those cases lived only in the dead copy, so they are
+   in no live path. Consolidating "the three" would have merged them into live
+   code and ADDED behaviour nothing has today — a behaviour change disguised as
+   deduplication. Consolidate the two live copies only, and do not carry the
+   0B/0M cases across without a separate decision that they are wanted.
+
+   extractLevelPrefixFromPattern (Index.tsx, live, used at :1002) parses floor
+   pattern text rather than an activity code. Different input domain; correctly
+   excluded from the consolidation.
+
+   Renaming for clarity is still worth doing: extractLevelFromActivityCode
+   (act → prefix) vs extractLevelFromFloorPattern (pattern text → prefix).
 6. Format logging during export: emit the composed ACT format (building-first vs
    legacy) in the export audit log so any future regression is visible in
    shipped packets.
