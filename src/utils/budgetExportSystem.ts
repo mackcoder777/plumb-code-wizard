@@ -5,7 +5,7 @@
 
 import * as XLSX from 'xlsx';
 import { BudgetAdjustments } from '../components/BudgetAdjustmentsPanel';
-import { BuildingSectionMapping, resolveSectionStatic, getSectionFromFloorNullable, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
+import { BuildingSectionMapping, resolveSectionStatic } from '@/hooks/useBuildingSectionMappings';
 import { FloorSectionMapping } from '@/hooks/useFloorSectionMappings';
 import { DatasetProfile } from '@/utils/datasetProfiler';
 

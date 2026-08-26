@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, ArrowUpAZ, ArrowDownAZ, Filter, X, Check } from 'lucide-react';
+import { ChevronDown, ArrowUpAZ, ArrowDownAZ, Filter } from 'lucide-react';
 import {
   Popover,
   PopoverContent,

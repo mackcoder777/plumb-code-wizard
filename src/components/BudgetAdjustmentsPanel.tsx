@@ -40,7 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { roundHoursPreservingTotal, computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
+import { computeGcFabCont, computeGcFldCont } from '@/utils/budgetExportSystem';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CodeHistoryDetail } from '@/components/CodeHistoryDetail';
 import { computeAdjustedLaborSummary, computeFinalLaborSummary, FALLBACK_ACTIVITY_CODES, type SavedMergeRecord } from '@/utils/laborSummaryComputation';
@@ -1977,7 +1977,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
     return { preTotal, postTotal, drift, driftOk: Math.abs(drift) < 0.5, mergeLog, newKeys, newKeyHours };
   }, [finalLaborSummary, calculations.adjustedLaborSummary, savedMergesData]);
 
-
   // Filtered view for standalone hour threshold
   const filteredSmallCodeAnalysis = useMemo(() => {
     return smallCodeAnalysis.filter(row => {
@@ -2092,7 +2091,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
         return a.combinedHours - b.combinedHours;
       });
   }, [finalLaborSummary, minHoursThreshold, acceptedKeys, savedMergeKeySet]);
-
 
   const handleConsolidate = async () => {
     if (!projectId || projectId === 'default') {
@@ -2543,7 +2541,6 @@ const [smallCodeTab, setSmallCodeTab] = useState<'merge' | 'standalone'>('merge'
 
     return { budgetField, budgetFab, budgetLabor, fcnt, lrcn, fabLrcn, gcFabCont, gcFldCont, contingencies, exportTotal, bidTotal, delta, hasFieldBid };
   }, [currentAdjustments, finalLaborSummary, calculations.foremanBonusDollars, lrcnCalculations, fabLrcnCalculations, lrcnEnabled, fabLrcnEnabled, bidRates]);
-
 
   const toggleFabForCode = (code: string, enabled: boolean) => {
     setFabricationConfigs(prev => ({

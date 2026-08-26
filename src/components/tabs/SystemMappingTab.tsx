@@ -21,7 +21,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn, normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
-import { Search, Check, X, AlertCircle, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, Sparkles, ChevronRight, Activity, Building2 } from 'lucide-react';
+import { Search, Check, X, AlertTriangle, LayoutGrid, Table as TableIcon, Layers, Loader2, CheckSquare, Square, ChevronDown, ChevronRight, Activity, Building2 } from 'lucide-react';
 import { SystemMappingHeader } from './SystemMappingTab/SystemMappingHeader';
 import { FilterCards } from './SystemMappingTab/FilterCards';
 import { SystemCard } from './SystemMappingTab/SystemCard';
@@ -247,8 +247,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
     
     return suggestions;
   }, [mappingPatterns, systemIndex, mappings]);
-
-
 
   useEffect(() => {
     if (dbMappings.length > 0) {
@@ -1100,7 +1098,6 @@ export const SystemMappingTab: React.FC<SystemMappingTabProps> = ({ data, onData
             suggestions={learnedSuggestions}
             onAcceptSuggestion={handleAcceptSuggestion}
           />
-
 
           {/* System Mapping Content */}
           <Card>

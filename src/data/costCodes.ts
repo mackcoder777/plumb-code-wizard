@@ -1,4 +1,4 @@
-import { CostCodeEntry, AutomationRule } from "@/types/estimate";
+import { AutomationRule } from "@/types/estimate";
 
 // NOTE: This file contains ONLY fallback/example codes.
 // Real cost codes are loaded from the database (cost_codes table).
