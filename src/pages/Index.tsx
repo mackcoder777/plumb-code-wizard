@@ -2024,27 +2024,22 @@ const EnhancedCostCodeManager = () => {
             
             await new Promise(resolve => setTimeout(resolve, 0));
             
-            // Initialize mappings
-            const systems = [...new Set(processedData.map(item => 
-              item.system.toLowerCase().trim()
-            ))].filter(Boolean);
-            
+            // A fresh upload starts with NO cost-head mappings, deliberately.
+            //
+            // This previously auto-assigned { laborCode: 'STRM' } to any system whose
+            // name contained "storm" or "overflow", with a fabricated history entry
+            // attributed to user: 'system'. That violates CLAUDE.md §20 — the PM is the
+            // sole authority on cost-head assignment — and it was worse than a silent
+            // guess: the consumer below tags a customMappings hit as source 'custom' /
+            // 'Manual mapping', so the guess was presented to the PM as their own
+            // decision.
+            //
+            // With no entry, those systems fall through the normal priority chain and
+            // end up either smart-matched or uncoded. Uncoded is the correct outcome:
+            // it is a state the PM can see and act on.
             const mappings: Record<string, { materialCode?: string; laborCode?: string }> = {};
             const history: Record<string, any[]> = {};
-            
-            systems.forEach(system => {
-              if (system.includes('storm') || system.includes('overflow')) {
-                mappings[system] = { laborCode: 'STRM' };
-                history[system] = [{
-                  timestamp: new Date().toISOString(),
-                  user: 'system',
-                  from: 'SNWV',
-                  to: 'STRM',
-                  reason: 'Auto-detected storm/overflow drain'
-                }];
-              }
-            });
-            
+
             setCustomMappings(mappings);
             setMappingHistory(history);
             setEstimateData(processedData);
@@ -2157,9 +2152,14 @@ const EnhancedCostCodeManager = () => {
                   await saveItemsToDb(newProject.id);
                   // Save initial mappings to database
                   if (Object.keys(mappings).length > 0) {
-                    const mappingsToSave = Object.entries(mappings).map(([systemName, costHead]) => ({
+                    const mappingsToSave = Object.entries(mappings).map(([systemName, codes]) => ({
                       systemName,
-                      costHead: costHead as string
+                      // `mappings` values are objects; cost_head is a string in the
+                      // documented "material|labor" form the apply path writes. The
+                      // previous `costHead: costHead as string` was an ASSERTION, not a
+                      // conversion — it silenced the compiler and let the object reach
+                      // the database, where it serialized as {"laborCode":"STRM"}.
+                      costHead: `${codes.materialCode || ''}|${codes.laborCode || ''}`
                     }));
                     batchSaveMappings.mutate({
                       projectId: newProject.id,
