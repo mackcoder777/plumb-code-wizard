@@ -3,7 +3,7 @@ import { EstimateItem } from '@/types/estimate';
 import type { CategoryMaterialDescOverride } from '@/hooks/useCategoryMaterialDescOverrides';
 import type { MaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
 import type { CategoryItemNameOverride } from '@/hooks/useCategoryItemNameOverrides';
-import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, CategoryLaborMapping as CategoryMapping, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
+import { useCategoryMappings, useSaveCategoryMapping, useDeleteCategoryMapping, useCategoryIndex, isUsingSystemMapping, SYSTEM_MAPPING_VALUE } from '@/hooks/useCategoryMappings';
 import { useLaborCodes } from '@/hooks/useCostCodes';
 import {
   useCategoryMaterialDescOverrides,
@@ -16,19 +16,19 @@ import {
   useDeleteCategoryItemNameOverride,
 } from '@/hooks/useCategoryItemNameOverrides';
 import { useMaterialDescLaborPatterns, useRecordMaterialDescLaborPattern } from '@/hooks/useMaterialDescLaborPatterns';
-import { useCategoryLaborPatterns, useRecordCategoryLaborPattern, getSuggestionForCategory, MIN_SUGGESTION_CONFIDENCE } from '@/hooks/useCategoryLaborPatterns';
+import { useCategoryLaborPatterns, useRecordCategoryLaborPattern, getSuggestionForCategory } from '@/hooks/useCategoryLaborPatterns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator } from '@/components/ui/command';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
 import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronRight, Tag, Check, X, Loader2, AlertCircle, Link2, ExternalLink, Layers, ChevronsUpDown, CheckCircle2, Sparkles } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { TableRowCombobox } from '@/components/tabs/SystemMappingTab/TableRowCombobox';
+
 import { MaterialDescSection } from '@/components/CategoryLaborMapping/MaterialDescSection';
 
 interface CategoryLaborMappingPanelProps {

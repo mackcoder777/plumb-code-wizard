@@ -20,7 +20,7 @@ import {
 } from '@/hooks/useFloorSectionMappings';
 import { BuildingSectionMapping, resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 import { supabase } from '@/integrations/supabase/client';
-import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel, getProfileFromOverride } from '@/utils/datasetProfiler';
+import { DatasetProfile, describeProfile, PatternOverride, getPatternLabel } from '@/utils/datasetProfiler';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

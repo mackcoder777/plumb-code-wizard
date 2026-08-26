@@ -5,11 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, ChevronDown, ChevronRight, Globe, Undo2, Eye, Merge } from 'lucide-react';
+
+import { Globe, Undo2, Eye, Merge } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
-import { cn } from '@/lib/utils';
 
 interface JobWideConsolidationProps {
   finalLaborSummary: Record<string, { code: string; hours: number; dollars: number; description?: string }> | null;

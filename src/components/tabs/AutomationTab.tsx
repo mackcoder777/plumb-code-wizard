@@ -4,7 +4,7 @@ import { AUTOMATION_RULES } from '@/data/costCodes';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Settings, TestTube, Rocket } from 'lucide-react';
+import { Settings, TestTube, Rocket } from 'lucide-react';
 import { useCostCodes } from '@/hooks/useCostCodes';
 import { getCodeDescription, getCodeDescriptionShort } from '@/utils/codeDescriptions';
 

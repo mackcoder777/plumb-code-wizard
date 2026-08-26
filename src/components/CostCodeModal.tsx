@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import { EstimateItem } from '@/types/estimate';
-import { COST_CODES_DB } from '@/data/costCodes';
+
 import { CostCodeLibraryManager, CostCode } from '@/components/CostCodeLibraryManager';
 import {
   Dialog,

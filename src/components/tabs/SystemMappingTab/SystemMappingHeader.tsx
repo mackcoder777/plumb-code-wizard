@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { CheckCircle, Circle, Upload, MapPin, Download } from 'lucide-react';
+import { CheckCircle, Upload, MapPin, Download } from 'lucide-react';
 
 interface SystemMappingHeaderProps {
   stats: {

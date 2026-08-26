@@ -36,7 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCostCodes, useLaborCodes, useMaterialCodes } from '@/hooks/useCostCodes';
+import { useLaborCodes, useMaterialCodes } from '@/hooks/useCostCodes';
 
 interface LaborPattern {
   id: string;
@@ -222,7 +222,6 @@ export const PatternManagement: React.FC = () => {
     },
     onError: (err: any) => toast.error(err.message || 'Failed to add pattern')
   });
-
 
   // Filter patterns based on search
   const filteredLaborPatterns = laborPatterns.filter(p =>
