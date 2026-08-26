@@ -935,8 +935,6 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
       .sort((a, b) => b.hours - a.hours);
   }, [costHeadBuildingHours]);
 
-  if (costHeadSummary.length === 0) return null;
-
   const hasOverrideChanges = (() => {
     const savedSet = new Set(
       costHeadActivityOverrides.filter(o => o.use_level_activity).map(o => makeKey(o.cost_head, o.building_identifier))
@@ -1041,6 +1039,13 @@ const CostHeadOverrideSection: React.FC<CostHeadOverrideSectionProps> = ({
     });
     return result;
   }, [costHeadSummary, costHeadBuildingHours, hourThreshold]);
+
+  // Early return AFTER every hook. React requires an unchanging hook order,
+  // and this component is rendered unconditionally while costHeadSummary is
+  // still empty -- it fills in only once items carry cost codes. Returning
+  // above the autoExpandedHeads useMemo meant the render that followed
+  // "Apply Section Codes" ran one more hook than the one before it.
+  if (costHeadSummary.length === 0) return null;
 
   const activeCount = localOverrides.size;
 
