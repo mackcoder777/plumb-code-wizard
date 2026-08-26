@@ -2107,7 +2107,7 @@ const EnhancedCostCodeManager = () => {
                   labor_dollars: item.laborDollars || 0,
                   cost_code: item.costCode || '',
                   material_cost_code: item.materialCostCode || '',
-                  source_file: fileName,
+                  source_file: file.name,
                 }));
                 
                 setLoadingMessage(`Saving ${itemsToSave.length.toLocaleString()} items to database...`);
@@ -2143,10 +2143,14 @@ const EnhancedCostCodeManager = () => {
             
             // Auto-create project if user is logged in and no project selected
             if (user && !currentProject) {
-              const projectName = fileName.replace(/\.[^/.]+$/, '') || `Estimate ${new Date().toLocaleDateString()}`;
+              // Use file.name, not the fileName state. setFileName(file.name) runs earlier
+              // in THIS invocation, so the captured `fileName` is still the previous render's
+              // value — empty on a first upload, the prior file's name afterwards. `file` is
+              // the actual upload and is already in scope (see sourceFile at the chunk mapper).
+              const projectName = file.name.replace(/\.[^/.]+$/, '') || `Estimate ${new Date().toLocaleDateString()}`;
               createProject.mutate({
                 name: projectName,
-                fileName: fileName,
+                fileName: file.name,
                 totalItems: processedData.length
               }, {
                 onSuccess: async (newProject) => {
@@ -2178,7 +2182,7 @@ const EnhancedCostCodeManager = () => {
               if (estimateData.length > 0) {
                 // Store pending data and show AddFileDialog for user to choose
                 setPendingUploadItems(processedData);
-                setPendingUploadFileName(fileName);
+                setPendingUploadFileName(file.name);
                 setShowAddFileDialog(true);
                 setLoading(false);
                 setLoadingProgress(0);
@@ -2188,7 +2192,7 @@ const EnhancedCostCodeManager = () => {
               // No existing data - proceed with normal save
               updateProject.mutate({
                 id: currentProject.id,
-                file_name: fileName,
+                file_name: file.name,
                 total_items: processedData.length
               });
               await saveItemsToDb(currentProject.id);
