@@ -29,8 +29,11 @@ export function normalizeActivityCode(code: string): string {
  *     the legacy memoizedLaborSummary code; e.g. when buildingAct was "0000").
  *   - Missing or "00" levelPrefix → flat building ACT, left-padded to 4 chars
  *     (e.g. "BA" → "00BA"). This matches the "no extractable level" fallback.
- *   - Otherwise → bldgSuffix + levelPrefix (building-first), guaranteed 4 chars
- *     because both inputs are pre-normalized to their padded widths.
+ *   - Otherwise → bldgSuffix (left-padded to 2) + levelPrefix (building-first),
+ *     guaranteed 4 chars. The pad matters: callers derive bldgSuffix by
+ *     stripping ALL leading zeros ("000A" → "A", "0009" → "9"), and the gate
+ *     admits length 1 as well as 2, so a single-char building id would
+ *     otherwise produce a 3-char ACT ("A01") and break the 4-char invariant.
  *
  * Invariant: bldgSuffix.length ≤ 2. Throws if violated. This is a regression
  * alarm for future callers that forget the strip-and-gate pattern; with all
@@ -52,5 +55,7 @@ export function composeMultitradeActivity(
   if (!levelPrefix || levelPrefix === '00') {
     return bldgSuffix.padStart(4, '0');
   }
-  return bldgSuffix + levelPrefix;
+  // padStart(2) keeps the building in the leading position for a 1-char id,
+  // so "A" + "01" is "0A01" rather than a 3-char "A01".
+  return bldgSuffix.padStart(2, '0') + levelPrefix;
 }
