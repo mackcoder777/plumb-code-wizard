@@ -1890,8 +1890,6 @@ const EnhancedCostCodeManager = () => {
                 console.log('=== PARSING COMPLETE ===');
                 console.log('Items:', items.length);
                 console.log('Total Hours:', totalHours.toFixed(2));
-                console.log('Expected: 1,568.43');
-                console.log('Match:', totalHours > 1560 && totalHours < 1580 ? 'YES ✓' : 'NO ✗');
                 
                 // Send items in chunks
                 const CHUNK_SIZE = 100;
