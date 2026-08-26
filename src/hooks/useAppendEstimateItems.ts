@@ -95,8 +95,8 @@ export const useAppendEstimateItems = () => {
       };
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['estimate-items', variables.projectId] });
-      queryClient.invalidateQueries({ queryKey: ['estimate-projects'] });
+      queryClient.invalidateQueries({ queryKey: ['estimate_items', variables.projectId] });
+      queryClient.invalidateQueries({ queryKey: ['estimate_projects'] });
     }
   });
 };
