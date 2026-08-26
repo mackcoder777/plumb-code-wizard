@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch supersedes the older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22 matches the version every gate below was verified against
+      # locally. npm cache is keyed off package-lock.json by setup-node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # npm ci, not npm install: it installs exactly the lockfile and fails
+      # loudly if package.json and the lockfile disagree. That check only
+      # became possible once the lockfile was reconciled -- react-markdown was
+      # declared but absent, so npm ci failed on main until then.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+# Deliberately NOT gated on lint.
+#
+# `eslint .` currently reports 226 problems (175 errors, 51 warnings) on main.
+# Adding it as a step would make CI red on its first run and stay red, which
+# trains everyone to ignore the X -- the opposite of what a gate is for.
+#
+# The count is a pre-existing condition, not a regression: it is identical on
+# every branch merged tonight, and each of those PRs verified parity against
+# main rather than letting it drift. Add the gate here once the count reaches
+# zero; until then parity is checked by hand per PR.
+#
+# Note that @typescript-eslint/no-unused-vars is "off" (eslint.config.js:23),
+# which is why an 18-line unused function survived in Index.tsx until #15.
+# Turning that rule on will raise the count before it lowers it.
