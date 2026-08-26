@@ -492,8 +492,6 @@ export const stampIds = <T extends { id: number | string }>(
 // Save estimate items in batches
 export const useSaveEstimateItems = () => {
 
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({ 
       projectId, 
@@ -857,8 +855,6 @@ export const useBatchUpdateMaterialCostCodes = () => {
 
 // Upsert mapping AND apply status in one operation - ensures auto-detected mappings get persisted
 export const useUpsertAndApplyMapping = () => {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({ 
       projectId, 
