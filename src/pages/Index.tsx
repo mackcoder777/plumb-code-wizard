@@ -64,6 +64,17 @@ import { CodeCleanupTab } from '@/components/tabs/CodeCleanupTab';
 import type { CleanupThresholds } from '@/utils/codeCleanupDetector';
 
 // COMPLETE Standard Cost Codes Database - Full 871 codes from Excel analysis
+// Shared frozen empty array for react-query destructuring defaults.
+//
+// `const { data: x = [] } = useQuery(...)` allocates a NEW array every render
+// whenever `data` is undefined. For a query gated `enabled: !!projectId`, data
+// stays undefined for as long as no project is selected, so the default fires
+// on every single render — giving any useMemo/useCallback that depends on it a
+// fresh identity forever. Three of the sites below feed the panel's
+// laborSummary prop, which closed a self-sustaining render loop (see the PR).
+// One shared reference makes the default identity-stable.
+const EMPTY_ARRAY: never[] = [];
+
 const STANDARD_COST_CODES = {
   'Field Labor': {
     'NONREIMBURSABLE': [
@@ -518,7 +529,7 @@ const EnhancedCostCodeManager = () => {
   const [pendingProjectId] = useState<string | null>(
     () => localStorage.getItem('lastSelectedProjectId')
   );
-  const { data: projects = [], isFetched: projectsFetched } = useEstimateProjects();
+  const { data: projects = EMPTY_ARRAY, isFetched: projectsFetched } = useEstimateProjects();
 
   // Persist selected project to localStorage
   useEffect(() => {
@@ -749,8 +760,8 @@ const EnhancedCostCodeManager = () => {
   }, [clampThresholds]);
   // ────────────────────────────────────────────────────────────────────
 
-  const { data: savedMappings = [], isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
-  const { data: savedItems = [], isLoading: itemsLoading, isFetched: itemsFetched } = useEstimateItems(activeProjectId || null);
+  const { data: savedMappings = EMPTY_ARRAY, isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
+  const { data: savedItems = EMPTY_ARRAY, isLoading: itemsLoading, isFetched: itemsFetched } = useEstimateItems(activeProjectId || null);
   const saveMapping = useSaveMapping();
   const verifyMappingMutation = useVerifyMapping();
   const batchSaveMappings = useBatchSaveMappings();
@@ -763,24 +774,24 @@ const EnhancedCostCodeManager = () => {
   const upsertAndApplyMapping = useUpsertAndApplyMapping();
   
   // Fetch cost codes from database for smart matching
-  const { data: dbCostCodes = [] } = useCostCodes();
+  const { data: dbCostCodes = EMPTY_ARRAY } = useCostCodes();
   
   // Fetch floor-to-section mappings for labor code section derivation
-  const { data: dbFloorMappings = [], isFetched: floorMappingsFetched } = useFloorSectionMappings(activeProjectId || null);
+  const { data: dbFloorMappings = EMPTY_ARRAY, isFetched: floorMappingsFetched } = useFloorSectionMappings(activeProjectId || null);
   
   // Fetch system-to-activity mappings for labor code activity segment
-  const { data: dbActivityMappings = [] } = useSystemActivityMappings(activeProjectId || null);
+  const { data: dbActivityMappings = EMPTY_ARRAY } = useSystemActivityMappings(activeProjectId || null);
   
   // Fetch category labor mappings for priority-based code assignment
-  const { data: dbCategoryMappings = [] } = useCategoryMappings(activeProjectId || null);
-  const { data: dbMaterialDescOverrides = [], isFetched: materialDescOverridesFetched } = useCategoryMaterialDescOverrides(activeProjectId || null);
-  const { data: dbItemNameOverrides = [] } = useCategoryItemNameOverrides(activeProjectId || null);
+  const { data: dbCategoryMappings = EMPTY_ARRAY } = useCategoryMappings(activeProjectId || null);
+  const { data: dbMaterialDescOverrides = EMPTY_ARRAY, isFetched: materialDescOverridesFetched } = useCategoryMaterialDescOverrides(activeProjectId || null);
+  const { data: dbItemNameOverrides = EMPTY_ARRAY } = useCategoryItemNameOverrides(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
   const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
   
   // Fetch per-cost-head activity overrides
-  const { data: costHeadActivityOverrides = [] } = useCostHeadActivityOverrides(activeProjectId || null);
+  const { data: costHeadActivityOverrides = EMPTY_ARRAY } = useCostHeadActivityOverrides(activeProjectId || null);
   const pruneStaleCostHeadOverrides = usePruneStaleCostHeadOverrides();
 
   // Centralized 4-step activity resolution helper
