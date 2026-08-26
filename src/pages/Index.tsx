@@ -1,7 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import BulkBuyoutTab from '@/components/tabs/BulkBuyoutTab';
-import * as XLSX from 'xlsx';
-import { MappingCombobox } from '@/components/MappingCombobox';
 import { MaterialMappingTab } from '@/components/tabs/MaterialMappingTab';
 import { SystemMappingTab } from '@/components/tabs/SystemMappingTab';
 import { PdfImportTab } from '@/components/tabs/PdfImportTab';
@@ -14,8 +12,6 @@ import { useBudgetSettings } from '@/hooks/useBudgetSettings';
 import SourceFileSummary from '@/components/SourceFileSummary';
 import { 
   useSystemMappings, 
-  useSaveMapping, 
-  useVerifyMapping,
   useBatchSaveMappings,
   useCreateProject,
   useUpdateProject,
@@ -23,31 +19,28 @@ import {
   useSaveEstimateItems,
   stampIds,
 
-  useBatchUpdateSystemCostCodes,
   useBatchUpdateSystemCostCodesSilent,
-  useUpdateAppliedStatus,
   useUpsertAndApplyMapping,
   useEstimateProjects,
   EstimateProject
 } from '@/hooks/useEstimateProjects';
-import { useFloorSectionMappings, getFloorMapping } from '@/hooks/useFloorSectionMappings';
-import { resolveFloorMappingStatic, ResolutionOptions } from '@/hooks/useBuildingSectionMappings';
+import { useFloorSectionMappings } from '@/hooks/useFloorSectionMappings';
+import { resolveFloorMappingStatic } from '@/hooks/useBuildingSectionMappings';
 import { useBuildingSectionMappings, resolveSectionStatic, detectBuildingsFromDrawings } from '@/hooks/useBuildingSectionMappings';
-import { normalizeActivityCode, composeMultitradeActivity } from '@/lib/utils';
-import { profileDataset, DatasetProfile, getProfileFromOverride, PatternOverride } from '@/utils/datasetProfiler';
+import { composeMultitradeActivity } from '@/lib/utils';
+import { profileDataset, DatasetProfile, getProfileFromOverride } from '@/utils/datasetProfiler';
 import { useSystemActivityMappings, getActivityFromSystem } from '@/hooks/useSystemActivityMappings';
 import { useCategoryMappings, getLaborCodeFromCategory } from '@/hooks/useCategoryMappings';
 import { useCategoryMaterialDescOverrides, getLaborCodeFromMaterialDesc } from '@/hooks/useCategoryMaterialDescOverrides';
 import { useCategoryItemNameOverrides, getLaborCodeFromItemName } from '@/hooks/useCategoryItemNameOverrides';
 import { useAuth } from '@/hooks/useAuth';
-import { useCostHeadActivityOverrides, shouldUseLevelActivity, CostHeadActivityOverride, usePruneStaleCostHeadOverrides } from '@/hooks/useCostHeadActivityOverrides';
+import { useCostHeadActivityOverrides, shouldUseLevelActivity, usePruneStaleCostHeadOverrides } from '@/hooks/useCostHeadActivityOverrides';
 import { Auth } from '@/components/Auth';
 import { useCostCodes } from '@/hooks/useCostCodes';
-import { findBestMatch, findMatchesForSystems } from '@/utils/smartCodeMatcher';
+import { findBestMatch } from '@/utils/smartCodeMatcher';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { ColumnConfigPanel } from '@/components/ColumnConfigPanel';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
-import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import AddFileDialog from '@/components/AddFileDialog';
 import { useAppendEstimateItems } from '@/hooks/useAppendEstimateItems';
@@ -475,32 +468,6 @@ const FLOOR_MAPPING_FALLBACK = {
 };
 
 // Level activity helpers for memoizedLaborSummary override awareness
-function deriveFloorLevelActivityForSummary(floor: string): string {
-  const lower = (floor || '').toLowerCase();
-  const dashIdx = lower.indexOf(' - ');
-  const floorPart = dashIdx > 0 ? lower.substring(dashIdx + 3).trim() : lower;
-  const clean = floorPart.replace(/\s*\(.*\)\s*$/, '').trim();
-  const levelMatch = clean.match(/(?:level|lvl|floor|l|f)\s*(\d+)/i);
-  if (levelMatch) return `00L${levelMatch[1]}`;
-  if (/basement|below\s*grade/.test(clean)) return '00LB';
-  if (/mezzanine|mezz/.test(clean)) return '00LM';
-  if (/^roof$/i.test(clean)) return '00RF';
-  if (/^crawl/i.test(clean)) return '00CS';
-  if (/^ug$/i.test(clean)) return '00UG';
-  return '0000';
-}
-
-function extractLevelPrefixForSummary(floorActivity: string): string {
-  const act = (floorActivity || '0000').toUpperCase().trim();
-  const levelMatch = act.match(/^0*L(\d+)$/);
-  if (levelMatch) return String(parseInt(levelMatch[1], 10)).padStart(2, '0');
-  if (/^0*RF$/.test(act)) return '0R';
-  if (/^0*UG$/.test(act)) return '0U';
-  if (/^0*LB$/.test(act)) return '0B';
-  if (/^0*LM$/.test(act)) return '0M';
-  return '00';
-}
-
 // Parses level prefix from a floor_pattern string like "Bldg A - Level 2"
 // Used when floor_section_mappings store activity_code as building ID only (no level info),
 // so the only source of level is the pattern text itself.
@@ -603,7 +570,6 @@ const EnhancedCostCodeManager = () => {
   const [browserDescSearch, setBrowserDescSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
-  const [editingSystem, setEditingSystem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
   
@@ -620,8 +586,6 @@ const EnhancedCostCodeManager = () => {
   const [itemsPerPage, setItemsPerPage] = useState(100);
   
   // Item type mapping state
-  const [enableItemTypeMappings, setEnableItemTypeMappings] = useState(false);
-  const [itemTypeMappings, setItemTypeMappings] = useState<Record<string, Record<string, { materialCode?: string; laborCode?: string }>>>({});
   const [appliedSystems, setAppliedSystems] = useState<Record<string, { appliedAt: Date; itemCount: number; appliedMaterialCode?: string; appliedLaborCode?: string }>>({});
   
   // Auto-suggestions state - stores the original auto-suggested codes per system
@@ -779,16 +743,12 @@ const EnhancedCostCodeManager = () => {
   // ────────────────────────────────────────────────────────────────────
 
   const { data: savedMappings = EMPTY_ARRAY, isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
-  const { data: savedItems = EMPTY_ARRAY, isLoading: itemsLoading, isFetched: itemsFetched } = useEstimateItems(activeProjectId || null);
-  const saveMapping = useSaveMapping();
-  const verifyMappingMutation = useVerifyMapping();
+  const { data: savedItems = EMPTY_ARRAY, isLoading: itemsLoading } = useEstimateItems(activeProjectId || null);
   const batchSaveMappings = useBatchSaveMappings();
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const saveEstimateItems = useSaveEstimateItems();
-  const batchUpdateSystemCostCodes = useBatchUpdateSystemCostCodes();
   const batchUpdateSilent = useBatchUpdateSystemCostCodesSilent();
-  const updateAppliedStatus = useUpdateAppliedStatus();
   const upsertAndApplyMapping = useUpsertAndApplyMapping();
   
   // Fetch cost codes from database for smart matching
@@ -806,7 +766,7 @@ const EnhancedCostCodeManager = () => {
   const { data: dbItemNameOverrides = EMPTY_ARRAY } = useCategoryItemNameOverrides(activeProjectId || null);
   
   // Fetch building-to-section mappings for drawing-based section resolution
-  const { mappings: dbBuildingMappings, autoPopulate: autoPopulateBuildings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
+  const { mappings: dbBuildingMappings, fetchMappings: refetchBuildingMappings } = useBuildingSectionMappings(activeProjectId || null);
   
   // Fetch per-cost-head activity overrides
   const { data: costHeadActivityOverrides = EMPTY_ARRAY } = useCostHeadActivityOverrides(activeProjectId || null);
@@ -1398,7 +1358,6 @@ const EnhancedCostCodeManager = () => {
         return baseItem;
       });
 
-      const appliedCount = transformedItems.filter(i => i.costCode).length;
       const preservedCount = savedItems.filter(i => i.cost_code).length;
       const newlyApplied = itemsNeedingPersist.length;
       console.log(`[Load] Loaded ${transformedItems.length} items, ${preservedCount} preserved from DB, ${newlyApplied} newly applied from mappings`);
@@ -1936,7 +1895,6 @@ const EnhancedCostCodeManager = () => {
         // Handle worker messages
         let processedData: any[] = [];
         let processedItemsCount = 0;
-        let expectedTotalRows = 0;
         const chunkStartTime = performance.now();
         
         worker.onmessage = async (event) => {
@@ -1995,8 +1953,6 @@ const EnhancedCostCodeManager = () => {
             
             processedData.push(...processedChunk);
             processedItemsCount += processedChunk.length;
-            expectedTotalRows = totalRows;
-            
             // Update progress
             setLoadingProgress(progress);
             setLoadingMessage(`Processing chunk ${chunkNumber} of ${totalChunks}... (${processedItemsCount.toLocaleString()} of ${totalRows.toLocaleString()} items)`);
@@ -2410,29 +2366,6 @@ const EnhancedCostCodeManager = () => {
 
   // Apply mapping to all items of a specific system (also marks as verified)
   // Now supports dual codes: materialCode and laborCode
-  const applyMappingToSystem = (system: string, materialCode?: string, laborCode?: string) => {
-    const systemLower = system.toLowerCase().trim();
-    
-    // Find ALL items in this system (not just ones without cost codes)
-    const systemItems = estimateData.filter(
-      item => item.system?.toLowerCase().trim() === systemLower
-    );
-    
-    if (systemItems.length === 0) {
-      showNotification(`No items found for system: ${system}`, 'error');
-      return;
-    }
-    
-    // Check if any items already have DIFFERENT codes assigned
-    const hasConflict = systemItems.some(
-      item => (laborCode && item.costCode && item.costCode !== laborCode) ||
-              (materialCode && item.materialCostCode && item.materialCostCode !== materialCode)
-    );
-    
-    // For now, apply directly (skip complex confirmation for dual codes)
-    executeApplyDualCodes(system, materialCode, laborCode, systemItems.length);
-  };
-
   // Execute the actual apply logic with BOTH material and labor codes
   // CRITICAL: Builds FULL cost codes per item with section from floor mappings
   const executeApplyDualCodes = (system: string, materialCode?: string, laborCode?: string, itemCount?: number) => {
@@ -2448,7 +2381,7 @@ const EnhancedCostCodeManager = () => {
     const itemUpdates: Array<{ row_number: number; cost_code?: string; material_cost_code?: string }> = [];
     
     // Update ALL items in this system with BOTH codes - build FULL code per item
-    const updated = estimateData.map((item, index) => {
+    const updated = estimateData.map((item) => {
       if (item.system?.toLowerCase().trim() === systemLower) {
         // Get section from floor mappings for THIS specific item's floor
         let section: string;
@@ -2587,116 +2520,8 @@ const EnhancedCostCodeManager = () => {
   };
 
   // Verify/confirm a system mapping
-  const verifyMapping = (system: string, costHead: string) => {
-    const systemLower = system.toLowerCase().trim();
-    setVerifiedSystems(prev => ({
-      ...prev,
-      [systemLower]: {
-        verifiedAt: new Date().toISOString(),
-        verifiedBy: 'user',
-        costHead: costHead
-      }
-    }));
-    
-    // Persist to database if project exists
-    if (currentProject?.id) {
-      verifyMappingMutation.mutate({
-        projectId: currentProject.id,
-        systemName: system,
-        isVerified: true
-      });
-    }
-    
-    showNotification(`Verified mapping for ${system} → ${costHead}`, 'success');
-  };
-
   // Unverify a system mapping
-  const unverifyMapping = (system: string) => {
-    const systemLower = system.toLowerCase().trim();
-    setVerifiedSystems(prev => {
-      const newVerified = { ...prev };
-      delete newVerified[systemLower];
-      return newVerified;
-    });
-    
-    // Persist to database if project exists
-    if (currentProject?.id) {
-      verifyMappingMutation.mutate({
-        projectId: currentProject.id,
-        systemName: system,
-        isVerified: false
-      });
-    }
-    
-    showNotification(`Removed verification for ${system}`, 'info');
-  };
-
   // Update custom mapping with audit trail
-  const updateMapping = (system, costHead, userName = 'user') => {
-    const systemLower = system.toLowerCase().trim();
-    const history = mappingHistory[systemLower] || [];
-    const currentMapping = customMappings[systemLower];
-    
-    // Get the original auto-suggestion (from state or generate fresh)
-    const originalAutoSuggested = systemAutoSuggestions[systemLower] || generateCostCode({ system }).costHead;
-
-    const newMappings = { ...customMappings };
-    const newHistory = { ...mappingHistory };
-
-    if (costHead && costHead !== 'none') {
-      // Extract laborCode from current mapping for history
-      const currentLaborCode = typeof currentMapping === 'object' ? currentMapping?.laborCode : currentMapping;
-      
-      newMappings[systemLower] = { laborCode: costHead };
-      newHistory[systemLower] = [
-        ...history,
-        {
-          timestamp: new Date().toISOString(),
-          user: userName,
-          from: currentLaborCode || originalAutoSuggested,
-          to: costHead,
-          reason: currentLaborCode ? 'Manual change' : 'Initial assignment'
-        }
-      ];
-      
-      // Persist to database if project exists (with auto-suggestion preserved)
-      if (currentProject?.id) {
-        saveMapping.mutate({
-          projectId: currentProject.id,
-          systemName: system,
-          costHead: `|${costHead}`, // Store as "|laborCode" format
-          previousCode: currentLaborCode,
-          autoSuggested: originalAutoSuggested
-        });
-      }
-      
-      // Store auto-suggestion locally if not already set
-      if (!systemAutoSuggestions[systemLower]) {
-        setSystemAutoSuggestions(prev => ({
-          ...prev,
-          [systemLower]: originalAutoSuggested
-        }));
-      }
-    } else {
-      const currentLaborCode = typeof currentMapping === 'object' ? currentMapping?.laborCode : currentMapping;
-      delete newMappings[systemLower];
-      newHistory[systemLower] = [
-        ...history,
-        {
-          timestamp: new Date().toISOString(),
-          user: userName,
-          from: currentLaborCode || originalAutoSuggested,
-          to: originalAutoSuggested,
-          reason: 'Reset to auto-detection'
-        }
-      ];
-    }
-
-    setCustomMappings(newMappings);
-    setMappingHistory(newHistory);
-    showNotification(`Updated mapping: ${system} → ${costHead === 'none' ? originalAutoSuggested : costHead}`, 'success');
-  };
-
   // Create project info for export - defined as a regular function (not a hook) since it's after conditional returns
   const getProjectInfo = (): ProjectInfo => ({
     jobNumber: currentProject?.name || 'Estimate',
@@ -2728,8 +2553,6 @@ const EnhancedCostCodeManager = () => {
   const getUniqueValues = (field) => {
     return [...new Set(estimateData.map(item => item[field]))].filter(Boolean).sort();
   };
-
-  const uniqueSystems = [...new Set(estimateData.map(item => item.system))].filter(Boolean).sort();
 
   // Filter cost codes for browser
   const getFilteredCodes = () => {
@@ -3231,7 +3054,6 @@ const EnhancedCostCodeManager = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {(() => {
-                      const totalPages = Math.ceil(filteredData.length / itemsPerPage);
                       const paginatedData = filteredData.slice(
                         (currentPage - 1) * itemsPerPage,
                         currentPage * itemsPerPage
