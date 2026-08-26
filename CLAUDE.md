@@ -600,6 +600,39 @@ estimateData.length > 0
 6. Format logging during export: emit the composed ACT format (building-first vs
    legacy) in the export audit log so any future regression is visible in
    shipped packets.
+OPEN QUESTIONS (not bugs — they need a decision, not a fix)
+
+Each of these is code that runs, or would run, but that nothing consumes.
+They are recorded rather than deleted because deleting the binding silences
+the warning and destroys the only evidence that the feature was intended.
+None can be resolved by reading the source; each needs someone to say
+whether the feature is meant to exist.
+
+Q1. Write-only state in Index.tsx — mappingHistory, verifiedSystems,
+    appliedSystems. All three have LIVE setters and no readers: something
+    writes them on every relevant action and nothing ever looks. Not
+    leftovers, or the setters would be dead too.
+    mappingHistory is the strongest case for "unfinished rather than dead":
+    mapping_history is a real table with a real audit purpose, and
+    useEstimateProjects.ts writes to it on mapping edits. The React state of
+    the same name is a separate, unread copy.
+    Resolve by deciding whether verification, applied-status and mapping
+    history are features; then either wire the readers or remove the writers.
+    Do NOT just delete the bindings — that hides the question.
+
+Q2. CodeSplittingPreview (FloorSectionMapping.tsx) — a complete component
+    with its own props interface, hooks and JSX ("Level Splitting Preview"),
+    never rendered anywhere. Its own header comment states the display
+    condition it never got wired to: "read-only, shown when overrides are
+    active".
+    Checked against CODE_CLEANUP_TAB_SPEC.md §10.5: it is NOT one of the
+    seven surfaces queued for deletion — those are all in
+    CodeHealthDashboard.tsx, JobWideConsolidation.tsx and
+    BudgetAdjustmentsPanel.tsx. So it is not old-surface cleanup; it is an
+    unfinished feature.
+    Resolve by deciding whether the preview is wanted. If yes, wire it to
+    the stated condition. If no, delete it as a unit.
+
 QC Checklist (run before AND after any change)
 sum(finalLaborSummary hours) == sum(adjustedLaborSummary hours) – check drift log
 No keys in result containing “__” (sentinels never become cost codes)
