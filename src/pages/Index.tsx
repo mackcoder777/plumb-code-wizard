@@ -744,7 +744,7 @@ const EnhancedCostCodeManager = () => {
   // ────────────────────────────────────────────────────────────────────
 
   const { data: savedMappings = EMPTY_ARRAY, isFetched: mappingsFetched } = useSystemMappings(activeProjectId || null);
-  const { data: savedItems = EMPTY_ARRAY, isLoading: itemsLoading } = useEstimateItems(activeProjectId || null);
+  const { data: savedItems = EMPTY_ARRAY, isLoading: itemsLoading, isError: itemsError, refetch: refetchItems } = useEstimateItems(activeProjectId || null);
   const batchSaveMappings = useBatchSaveMappings();
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
@@ -1406,7 +1406,14 @@ const EnhancedCostCodeManager = () => {
         }
       }
     }
-  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings, materialDescOverridesFetched]);
+  // floorMappingsFetched and mappingsFetched are READ by the guards above, so
+  // they belong in the deps. Before this, re-running after a deferral relied on
+  // dbFloorMappings/savedMappings changing reference when their queries
+  // resolved -- which holds only incidentally: React Query's structural
+  // sharing keeps the SAME reference when a refetch returns an identical
+  // result (e.g. two projects that both have zero floor mappings), and then a
+  // deferred effect would never re-run. Permanent blank screen, no error.
+  }, [savedItems, currentProject?.id, currentProject?.file_name, dbCategoryMappings, dbFloorMappings, dbBuildingMappings, dbActivityMappings, savedMappings, floorMappingsFetched, mappingsFetched, materialDescOverridesFetched]);
 
   // Targeted material description override recalculation — only recalc changed pairs
   useEffect(() => {
@@ -2911,6 +2918,69 @@ const EnhancedCostCodeManager = () => {
                   onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
                   className="hidden"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Estimates Tab -- empty/loading/error states.
+              estimateData is DERIVED state: the hydration effect fills it from
+              savedItems once the mapping queries settle. So "no content" has
+              four distinct causes, and each gets its own visible state below;
+              a blank area is never one of them. Deliberately NO timeout
+              fallback: if hydration ever stalls, the "Preparing" card stays on
+              screen naming the stall -- visible evidence, not a masked bug. */}
+          {activeTab === 'estimates' && estimateData.length === 0 && (
+            <div className="flex items-center justify-center py-24">
+              <div className="text-center max-w-md space-y-3">
+                {itemsLoading ? (
+                  <>
+                    <div className="mx-auto h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+                    <h3 className="text-lg font-semibold">Loading your estimate…</h3>
+                    <p className="text-sm text-muted-foreground">Fetching line items from the database.</p>
+                  </>
+                ) : itemsError ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-destructive">Couldn't load this project's items</h3>
+                    <p className="text-sm text-muted-foreground">
+                      The request failed. Your data is safe on the server — this screen just couldn't fetch it.
+                    </p>
+                    <button
+                      onClick={() => refetchItems()}
+                      className="mt-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : savedItems.length > 0 ? (
+                  <>
+                    <div className="mx-auto h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+                    <h3 className="text-lg font-semibold">Preparing {savedItems.length.toLocaleString()} items…</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Applying this project's saved mappings. If this never finishes, that is a bug worth
+                      reporting — the items are loaded and something upstream is stuck.
+                    </p>
+                  </>
+                ) : (currentProject && (currentProject.total_items ?? 0) > 0) ? (
+                  <>
+                    <h3 className="text-lg font-semibold text-destructive">
+                      This project says it has {currentProject.total_items?.toLocaleString()} items, but none arrived
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      The item fetch finished empty. Retry, and if it stays empty the save may not have completed.
+                    </p>
+                    <button
+                      onClick={() => refetchItems()}
+                      className="mt-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium"
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-semibold">No estimate loaded</h3>
+                    <p className="text-sm text-muted-foreground">Upload an estimate file on the Upload tab to get started.</p>
+                  </>
+                )}
               </div>
             </div>
           )}
