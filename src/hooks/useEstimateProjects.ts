@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { projectScopedStorageKeys } from '@/lib/projectTeardown';
 
 export interface EstimateProject {
   id: string;
@@ -228,8 +229,23 @@ export const useDeleteProject = () => {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, projectId) => {
       queryClient.invalidateQueries({ queryKey: ['estimate_projects'] });
+      // Server-side deletion cascades to every child table. Tear down the
+      // client-side references too, so nothing can rehydrate from a dead id:
+      // per-project query caches (items, mappings, budget settings, ...) —
+      // all such keys carry the project id as a key segment.
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey.includes(projectId),
+      });
+      // The budget_* localStorage mirror written by useBudgetSettings.
+      projectScopedStorageKeys(Object.keys(localStorage), projectId).forEach(
+        (k) => localStorage.removeItem(k)
+      );
+      // The restore pointer, if it still names the deleted project.
+      if (localStorage.getItem('lastSelectedProjectId') === projectId) {
+        localStorage.removeItem('lastSelectedProjectId');
+      }
     },
   });
 };

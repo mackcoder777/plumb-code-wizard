@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useCallback } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { isDeletedProjectWriteError } from '@/lib/projectTeardown';
 
 // All settings keys we persist
 const SETTINGS_KEYS = [
@@ -99,6 +100,17 @@ export function useBudgetSettings(projectId: string | undefined) {
               { onConflict: 'project_id,settings_key' }
             );
           if (error) {
+            if (isDeletedProjectWriteError(error)) {
+              // The debounced write raced a project delete: the project row is
+              // gone (this table's only FK is project_id), so there is nothing
+              // left to persist this setting against. Discard silently — a
+              // toast here reports a failure the user cannot act on and that
+              // has no consequence. Genuine save failures still toast below.
+              console.warn(`Discarded ${key} write for deleted project ${projectId}`);
+              localStorage.removeItem(`budget_${key}_${projectId}`);
+              queryClient.invalidateQueries({ queryKey });
+              return;
+            }
             console.error(`Failed to save setting ${key}:`, error);
             toast({ title: 'Failed to save setting', description: key, variant: 'destructive' });
             // Revert optimistic update

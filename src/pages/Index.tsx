@@ -495,8 +495,17 @@ const EnhancedCostCodeManager = () => {
   
   // Project state
   const [currentProject, setCurrentProject] = useState<EstimateProject | null>(null);
-  const [pendingProjectId] = useState<string | null>(
-    () => localStorage.getItem('lastSelectedProjectId')
+  // Consume-once restore token. This was a never-cleared state snapshot, and
+  // that caused zombie resurrection: deleting the current project set
+  // currentProject to null, which re-ran the restore effect while the
+  // projects cache still held the deleted row — re-selecting a project that
+  // no longer existed. Downstream, the thresholds seed effect then wrote
+  // project_budget_settings for the dead id (FK violation → "Failed to save
+  // setting" toast) and the header pill kept the dead project's name.
+  // The ref is nulled the first time the restore effect acts on it, and on
+  // any deliberate deselect, so restore happens at most once per page load.
+  const pendingProjectIdRef = useRef<string | null>(
+    localStorage.getItem('lastSelectedProjectId')
   );
   const { data: projects = EMPTY_ARRAY, isFetched: projectsFetched } = useEstimateProjects();
 
@@ -521,8 +530,14 @@ const EnhancedCostCodeManager = () => {
     // it is `enabled` only once auth resolves, so `projectsFetched` cannot be
     // true for a list fetched before the session attached.
     if (authLoading || !user) return;
-    const lastId = pendingProjectId || localStorage.getItem('lastSelectedProjectId');
+    const lastId = pendingProjectIdRef.current;
     if (!lastId) return;
+    // Consume the token BEFORE acting. Whatever happens next (restore or
+    // clear), this effect must never restore a second time: re-running on a
+    // later null currentProject — e.g. right after a project delete, against
+    // a projects cache that hasn't refetched yet — is exactly the zombie
+    // resurrection this ref exists to prevent.
+    pendingProjectIdRef.current = null;
     const match = projects.find(p => p.id === lastId);
     if (match) {
       console.log('[Restore] Auto-selecting project from localStorage:', match.name);
@@ -531,7 +546,7 @@ const EnhancedCostCodeManager = () => {
       console.log('[Restore] Stored project id not owned by user, clearing:', lastId);
       localStorage.removeItem('lastSelectedProjectId');
     }
-  }, [projects, projectsFetched, currentProject, pendingProjectId, authLoading, user]);
+  }, [projects, projectsFetched, currentProject, authLoading, user]);
 
 
   
@@ -2785,12 +2800,19 @@ const EnhancedCostCodeManager = () => {
           onSelectProject={(project) => {
             setCurrentProject(project);
             if (!project) {
+              // A deliberate deselect (project deleted, or none chosen) must
+              // also kill the restore token, or the restore effect would
+              // re-select from a stale cache on its next run.
+              pendingProjectIdRef.current = null;
               localStorage.removeItem('lastSelectedProjectId');
               // Clear data when no project selected
               setEstimateData([]);
               setFilteredData([]);
               setCustomMappings({});
               setVerifiedSystems({});
+              // The header pill is gated on fileName — without this it kept
+              // rendering the deleted project's banner.
+              setFileName('');
             }
           }}
           onNewProject={() => {
