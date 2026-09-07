@@ -26,7 +26,20 @@ export default tseslint.config(
       // As warnings they are a distinct, countable backlog. Promote to "error"
       // once the count reaches zero, at which point lint can also join the CI
       // gate (see .github/workflows/ci.yml).
-      "@typescript-eslint/no-unused-vars": "warn",
+      // "warn" not "error" while the backlog is worked down; promote once the
+      // count reaches zero, at which point lint can also join the CI gate.
+      // The ignore patterns encode an existing convention rather than fighting
+      // it: a leading underscore marks a binding that is deliberately unused
+      // (a positional placeholder in a destructure, a signature that must keep
+      // an argument it does not read). caughtErrors: "none" covers
+      // catch (error) blocks that discard the binding -- rewriting those to a
+      // bare catch would be churn for no signal.
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrors: "none",
+        destructuredArrayIgnorePattern: "^_",
+      }],
     },
   },
 );
