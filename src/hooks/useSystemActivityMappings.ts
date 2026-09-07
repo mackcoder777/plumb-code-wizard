@@ -12,38 +12,48 @@ export interface SystemActivityMapping {
   updated_at: string;
 }
 
-// Common activity code suggestions
+// Activity code options, transcribed from CLAUDE.md §7 (Tier 1).
+//
+// An ACT segment is a floor/level code (00L1, 00UG, ...), never a cost head.
+// An earlier version of this list offered cost heads (DWTR, STRM, SNWV, ...)
+// here, so a PM who pressed Auto-Suggest All and saved would have produced
+// codes like "B2 STRM WATR" where the format requires "B2 00L1 WATR" --
+// a SEC/ACT/HEAD conflation, which is the thing the cost-code format exists
+// to prevent. Surveyed before fixing: system_activity_mappings held zero
+// rows, so no stored data ever carried the wrong shape.
 export const ACTIVITY_CODE_SUGGESTIONS = [
-  { code: '0000', label: 'Default/General' },
-  { code: 'DWTR', label: 'Domestic Water' },
-  { code: 'SNWV', label: 'Sanitary / Waste / Vent' },
-  { code: 'STRM', label: 'Storm Drain' },
-  { code: 'GRWV', label: 'Grease Waste' },
-  { code: 'NGAS', label: 'Natural Gas' },
-  { code: 'COND', label: 'Condensate' },
-  { code: 'RCLM', label: 'Reclaimed Water' },
-  { code: 'FIRE', label: 'Fire Protection' },
-  { code: 'DEMO', label: 'Demolition' },
+  { code: '0000', label: 'Default' },
+  { code: '00L1', label: 'Level 1' },
+  { code: '00L2', label: 'Level 2' },
+  { code: '00L3', label: 'Level 3' },
+  { code: '00UG', label: 'Underground' },
+  { code: '00RF', label: 'Roof' },
+  { code: '00CS', label: 'Crawl Space' },
+  { code: '00LB', label: 'Basement' },
+  { code: '00MZ', label: 'Mezzanine' },
+  { code: '00ST', label: 'Site' },
 ];
 
-// Auto-suggest activity code based on system name keywords
+// Auto-suggest an ACTIVITY code from a system name.
+//
+// Deliberately narrow. A system name usually says nothing about which floor
+// its items are on -- that is what the Floor column and the floor/section
+// mappings resolve. The one inference the Tier 1 docs ground is below-grade:
+// "BG"-prefixed systems (BG Waste, BG Storm Drn, ...) and names saying
+// below grade / underground describe work that is underground by definition,
+// and §5/§7 map Underground to 00UG. Everything else returns null: no
+// suggestion, the PM decides. The previous version of this function returned
+// COST HEADS (DWTR, STRM, ...) -- see the note on ACTIVITY_CODE_SUGGESTIONS.
 export const suggestActivityCode = (systemName: string): string | null => {
-  const lower = systemName.toLowerCase();
+  const lower = systemName.toLowerCase().trim();
 
-  if (lower.includes('cold water') || lower.includes('dcw') || lower.includes('cw '))  return 'DWTR';
-  if (lower.includes('hot water')  || lower.includes('dhw') || lower.includes('hw '))  return 'DWTR';
-  if (lower.includes('storm')      || lower.includes('roof drain'))                    return 'STRM';
-  if (lower.includes('sanitary')   || (lower.includes('waste') && !lower.includes('grease'))) return 'SNWV';
-  if (lower.includes('grease')     || lower.includes('gwv'))                           return 'GRWV';
-  if (lower.includes('vent')       && !lower.includes('prevent'))                      return 'SNWV';
-  if (lower.includes('natural gas')|| lower.includes('gas ') || lower.includes('ngas'))return 'NGAS';
-  if (lower.includes('condensate') || lower.includes('cond'))                          return 'COND';
-  if (lower.includes('reclaim')    || lower.includes('recycled') || lower.includes('rw ')) return 'RCLM';
-  if (lower.includes('fire')       || lower.includes('sprinkler'))                     return 'FIRE';
-  if (lower.includes('demo'))                                                           return 'DEMO';
-  if (lower.includes('overflow')   || lower.includes('od '))                           return 'STRM';
-  if (lower.includes('bg waste')   || lower.includes('below grade'))                   return 'SNWV';
-  if (lower.includes('domestic')   || lower.includes('potable'))                       return 'DWTR';
+  if (
+    lower.startsWith('bg ') || lower.startsWith('bg.') ||
+    lower.includes('below grade') || lower.includes('underground') ||
+    lower.includes('u/g')
+  ) {
+    return '00UG';
+  }
 
   return null;
 };
