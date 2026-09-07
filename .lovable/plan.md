@@ -1,54 +1,64 @@
-# Repair the two malformed storm-drain mappings
+# Blank Estimates screen on the published app
 
-## Step 1 result (already run, read-only)
+## What you're seeing
 
-Both preconditions from `docs/repair-corrupt-cost-heads.sql` hold:
+The project header says "Estimate 9/7/2026 — 1944 items", but the area under the
+tabs is completely empty. That count comes from the project record; the line items
+themselves are fetched separately and had not arrived (or never arrived) in the
+screen's memory when the screenshot was taken.
 
-| project | system | current value | proposed | materialCode present |
-| --- | --- | --- | --- | --- |
-| Estimate 8/25/2026 | bg storm drn | `{"laborCode":"STRM"}` | `STRM` | none |
-| Estimate 8/25/2026 | overflow drn. | `{"laborCode":"STRM"}` | `STRM` | none |
+The Estimates tab is the only tab with no "nothing here yet" state. Every other tab
+(Labor Mapping, Material Mapping, Budget Builder) shows a friendly placeholder card
+when no items are loaded. The Estimates tab renders only when items are present and
+otherwise renders nothing at all — which is exactly a blank page. So whatever the
+underlying cause, the blank screen is guaranteed to look like a broken app rather
+than a state you can act on.
 
-Exactly 2 rows. Both propose a plain `STRM`. Neither carries a `materialCode`, so
-the `material|labor` pipe form does not apply and nothing is discarded by the
-update. Step 2's broader shape sweep returns the same 2 rows and nothing else —
-no array-shaped, padded, or empty values anywhere in `system_mappings`.
+Two things can leave the items unloaded, and they need different fixes. Which one it
+is has not been confirmed yet, so confirming comes first.
 
-## What to do
+## Step 1 — Confirm the cause (no code changes)
 
-Run the step 3 update from `docs/repair-corrupt-cost-heads.sql` verbatim, with
-its three guards intact:
+- Check whether the published site is running an older build than the editor
+  preview. The same account and project load correctly in the preview, so a stale
+  published build is the leading candidate. If so, the fix is to publish the current
+  version.
+- If the published build is current, sign in on the published site as the same user
+  and capture the browser console. The item load prints progress lines; the specific
+  line that appears (or the absence of all of them) tells us whether the fetch was
+  blocked, returned zero rows, or was deferred waiting on mapping data.
 
-- `jsonb_typeof(...) = 'object'` — never touches a plain string cost head
-- `->> 'laborCode' IS NOT NULL` — never writes NULL over a real value
-- `btrim(...) <> ''` — never writes an empty or padded value
+Nothing below assumes an answer to Step 1; it is worth doing either way.
 
-Expected result: 2 rows updated. Anything else means stop and re-survey.
+## Step 2 — Never show a blank screen again
 
-Then re-run the step 4 confirmation, which must return 0 rows, and the banner in
-the app clears on next load.
+Give the Estimates tab the same treatment the other tabs already have:
 
-## Scope
+- While the items are still being fetched: a "Loading your estimate…" state in the
+  content area (today there is only a small floating pill at the top of the window,
+  easy to miss).
+- When the fetch has finished and there are still no items, but the project claims a
+  non-zero count: a clear message saying the items could not be loaded, with a Retry
+  button that refetches.
+- When the project genuinely has no items: the same "Upload an estimate file first"
+  placeholder the other tabs use.
 
-- Data only. No code changes — PR #6 already removed the producer and PR #7
-  already made the banner report-only, both of which are on main.
-- The 14 rows holding a bare `STRM` are untouched. `STRM` is a legitimate cost
-  head for storm drain and overflow; those rows are not corrupt.
-- Republishing to clear the stale published bundle is separate from this repair
-  and can follow once the Lovable API is healthy.
+## Step 3 — Surface a load failure instead of swallowing it
 
-## Technical detail
+If the item fetch errors, the screen currently falls back to the empty state with no
+message. Show the failure as a toast and in the retry card so it is visible and
+reportable.
 
-```sql
-UPDATE system_mappings
-SET cost_head = btrim(cost_head::jsonb ->> 'laborCode'),
-    updated_at = now()
-WHERE cost_head LIKE '{%'
-  AND jsonb_typeof(cost_head::jsonb) = 'object'
-  AND cost_head::jsonb ->> 'laborCode' IS NOT NULL
-  AND btrim(cost_head::jsonb ->> 'laborCode') <> '';
-```
+## Technical notes
 
-Affects `system_mappings` rows `30b90609-f7f2-47e2-aee6-84a4ef8e1042` and
-`a61880f9-68ad-4ce1-8c04-cfd9f2892a1a`, both in project
-`cba6b129-fbd7-4b3d-a673-90b4f23263a1`.
+- `src/pages/Index.tsx:2919` — `{activeTab === 'estimates' && estimateData.length > 0 && (...)}`
+  has no else branch. Add the three-way state (loading / error-or-empty-with-retry /
+  no-data placeholder) using `itemsLoading` from line 747 and the project's own item
+  count.
+- `useEstimateItems` (`src/hooks/useEstimateProjects.ts:412`) already exposes query
+  state; surface `isError`/`error` and `refetch` alongside `isLoading` to Index.
+- The hydration effect at `Index.tsx:1153` defers on `floorMappingsFetched`,
+  `mappingsFetched`, and `materialDescOverridesFetched`. If Step 1 shows a permanent
+  deferral, the fix belongs there instead — add a timeout fallback so a never-resolving
+  dependency cannot strand the screen forever.
+- No database or business-logic changes; presentation and query-state plumbing only.
